@@ -43,8 +43,27 @@ define intended game semantics.
   choosing a legal action.
 - `RandomPolicy`: seeded legal-choice baseline, also preferring `Hu`;
   useful for coverage and replay, not playing strength.
+- `HeuristicPolicy`: deterministic native policy that ranks post-discard hands
+  by shanten, then ukeire, with a discard-win fan tie-break at tenpai, and
+  applies conservative peng and kong gates. It reads only `Decision`, uses no
+  RNG, and has no logical checkpoint state; any internal analysis cache is
+  discardable without changing later decisions.
+- `MissingOnlyPolicy`: missing-suit-only ablation. It makes exactly the
+  `FirstLegalPolicy` choice at every decision except the missing-suit
+  declaration, where it uses the `HeuristicPolicy` fewest-tile rule (fewest own
+  tiles after the exchange, lowest suit index on a tie). `MissingOnlyPolicy`
+  and `HeuristicPolicy` share exchange selection and the missing-suit rule, so
+  comparing the ablation with `FirstLegalPolicy` isolates the value of a
+  non-arbitrary suit declaration, while comparing it with `HeuristicPolicy`
+  measures the remaining
+  heuristic play logic, including discard ranking and the peng/kong gates. It
+  is stateless.
 
-`Runner::random(seed)` initializes a separate RNG stream for each seat.
+`Runner::random(seed)` initializes a separate RNG stream for each seat. There is
+no heuristic or missing-only runner shortcut: build `HeuristicPolicy::new()` or
+`MissingOnlyPolicy::new()` values and pass them to `Runner::new`. The main
+simulation CLI still offers only `--policy first|random`; the heuristic and
+missing-only policies are library and A/B-example options for now.
 
 ### Runner API
 
@@ -88,9 +107,15 @@ whole measured wall clock, including game creation.
 `Game::clone` restores the authoritative position only: wall and draw order,
 pending decision, public history, and settlement state. Anything a stateful
 policy keeps on its own, such as `RandomPolicy`'s RNG position, is *not* in the
-game. A checkpoint is therefore complete only for stateless policies
-(`FirstLegalPolicy` and custom stateless policies) or when the policy state is
-cloned as well.
+game. A checkpoint is therefore complete for stateless policies
+(`FirstLegalPolicy`, `HeuristicPolicy`, and custom stateless policies) or when
+the policy state is cloned as well.
+
+`HeuristicPolicy` is stateless in the checkpoint sense: its hand-analysis caches
+are internal memoization with no logical effect, so they can be discarded and
+rebuilt at any point, and a resumed game makes the same decisions with cold or
+warm caches. Continuing a heuristic run therefore needs only `Game::clone` and
+fresh `HeuristicPolicy::new()` values.
 
 The decision surface is enough to advance a checkpoint with a stateless
 policy:
@@ -207,16 +232,33 @@ rates.
 
 ### Policy A/B comparison example
 
-`examples/policy_ab.rs` runs a balanced 2A2B comparison with `FirstLegalPolicy`
-as A and `RandomPolicy` as B. Every game seed is played six times with A in
+`examples/policy_ab.rs` runs a balanced 2A2B comparison. By default A is
+`FirstLegalPolicy` and B is `RandomPolicy`, which reproduces the original
+behavior; `--a` and `--b` select `first`, `random`, `heuristic`, or
+`missing-only` for each side. Every game seed is played six times with A in
 seats `[0,1] [0,2] [0,3] [1,2] [1,3] [2,3]` and B in the remaining seats, each
-placement using fresh policies and a fresh `Runner`. B's per-seat RNG stream is
-derived with `policy::random_seat_seed(game_seed ^ policy_seed, seat)`. The
-example validates this comparison workflow; it is not a policy-strength result.
+placement using fresh policies and a fresh `Runner`. Each seat running
+`RandomPolicy` (on either side) starts from
+`policy::random_seat_seed(game_seed ^ policy_seed, seat)`; deterministic styles
+ignore that stream.
 
 ```text
 cargo run --release --example policy_ab -- \
   --seeds 1,2,3,4 --policy-seed 0 --decision-limit 10000 --out ab-demo
+
+# Heuristic policy as A against the deterministic baseline:
+cargo run --release --example policy_ab -- \
+  --seeds 1,2,3,4 --policy-seed 0 --decision-limit 10000 --out ab-heuristic \
+  --a heuristic --b first
+
+# Missing-suit-only ablation as B against the baseline, and as A against the
+# heuristic:
+cargo run --release --example policy_ab -- \
+  --seeds 1,2 --policy-seed 0 --decision-limit 10000 --out ab-missing-vs-first \
+  --a first --b missing-only
+cargo run --release --example policy_ab -- \
+  --seeds 1,2 --policy-seed 0 --decision-limit 10000 --out ab-missing-vs-heuristic \
+  --a missing-only --b heuristic
 ```
 
 | Argument | Meaning |
@@ -225,7 +267,15 @@ cargo run --release --example policy_ab -- \
 | `--policy-seed S` | `u64` seed for the per-seat random policy streams. |
 | `--decision-limit N` | Positive per-game decision limit passed to the runner. |
 | `--out DIR` | Output directory; it must not already exist. |
+| `--a STYLE` | Policy in the two A seats: `first`, `random`, `heuristic`, or `missing-only`. Default `first`. |
+| `--b STYLE` | Policy in the two remaining seats: `first`, `random`, `heuristic`, or `missing-only`. Default `random`. |
 | `-h`, `--help` | Print usage and exit. |
+
+`--a` and `--b` are optional and independent, so `--a heuristic --b random` or
+`--a first --b heuristic` work as well. The selection is recorded in `run.txt`
+and `summary.txt`. Deterministic styles ignore the policy seed but still receive
+their seat's derived stream seed. The example validates this comparison
+workflow; it is not a policy-strength result.
 
 `--out` uses a single `create_dir`, so an existing directory is refused rather
 than overwritten, and its parent directory must already exist (for example,
@@ -235,18 +285,21 @@ Artifacts are written to the fresh output directory:
 
 - `run.txt`: simulator revision and dirty status, toolchain, the debug-quoted
   argv (one quoted element per argument, so paths with spaces stay
-  unambiguous), policy names, policy seed and stream derivation, game seeds,
-  decision limit, and placements. Revision, dirty status, and toolchain are
-  collected with `git`/`rustc` against the source tree that built the example
-  (`CARGO_MANIFEST_DIR`), not the caller's working directory; unavailable
-  metadata is recorded as `unknown` with a warning.
+  unambiguous), the selected policy names for A and B, policy seed and stream
+  derivation, game seeds, decision limit, and placements. Revision, dirty
+  status, and toolchain are collected with `git`/`rustc` against the source tree
+  that built the example (`CARGO_MANIFEST_DIR`), not the caller's working
+  directory; unavailable metadata is recorded as `unknown` with a warning.
 - `games.tsv`: one tab-separated record per completed game (`seed`,
   `a_seat0`/`a_seat1`, four zero-sum scores by seat, end reason, decision
   count). Records are flushed as games finish, so a failed run keeps its
   completed records.
-- `summary.txt`: `A_mean`, `B_mean`, `Delta`, the sample standard error over
-  seed blocks (`SE`, unavailable for one seed), and each seed's `D`. The
-  summary is recomputed from the persisted `games.tsv` records after all games.
+- `summary.txt`: `A_mean`, `B_mean`, `Delta = A_mean - B_mean` (positive
+  favors A), the sample standard error over seed blocks (`SE`, unavailable for
+  one seed), and each seed's `D`. The summary is recomputed from the persisted
+  `games.tsv` records after all games. In both missing-only examples above, a
+  negative `Delta` favors the policy upgrade in B; the ablation itself appears
+  on different sides of the two comparisons.
 
 An illegal action, decision-limit exhaustion, missing terminal result, output
 error, or failed consistency check exits non-zero without writing a summary;
@@ -261,5 +314,9 @@ population-level precision.
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) -
   navigation map of the current implemented architecture.
 - [`docs/baseline-rules.md`](docs/baseline-rules.md) - intended fixed game rules.
-- [`docs/validation.md`](docs/validation.md) - recorded validation coverage
-  and historical native CPU measurements, not a current performance promise.
+- [`docs/validation.md`](docs/validation.md) - validation index and historical
+  native CPU measurements, not a current performance promise.
+- [`docs/studies/shanten-ukeire.md`](docs/studies/shanten-ukeire.md) - heuristic
+  implementation coverage, exploratory A/B results, and timing conditions.
+- [`docs/studies/missing-only-ablation.md`](docs/studies/missing-only-ablation.md) -
+  48,000-game missing-suit ablation with methods, results, and provenance.

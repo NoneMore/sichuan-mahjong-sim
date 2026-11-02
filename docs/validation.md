@@ -152,3 +152,15 @@ All measured runs matched these non-timing outputs exactly, before and after:
 | Terminal score totals | `[51528, 14913, -15135, -51306]` | `[24503, 12683, -10925, -26261]` |
 | Wins by seat | `[6505, 6401, 6285, 5961]` | `[3432, 3306, 3115, 3006]` |
 | Aggregate score sum | 0 | 0 |
+
+## Shanten-and-ukeire policy implementation milestone
+
+See the [shanten/ukeire implementation study](studies/shanten-ukeire.md) for
+validation coverage, exploratory 24-game A/B comparisons, historical release
+timings, reproduction instructions, and limitations.
+
+## Missing-suit ablation: 1000x A/B study (2026-11-02)
+
+See the [missing-suit ablation study](studies/missing-only-ablation.md) for the
+48,000-game experimental setup, per-seed uncertainty convention, scores,
+reproduction commands, and artifact provenance.

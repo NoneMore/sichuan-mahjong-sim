@@ -17,9 +17,9 @@ Pure `eval` and `rules` helpers supply facts, not competing state owners.
 | Hand evaluation | [`eval.rs`](../../src/eval.rs) | Winning shapes and waiting tiles |
 | Fixed-rule helpers | [`rules.rs`](../../src/rules.rs) | Legality and settlement facts used by `Game` |
 | Authoritative game | [`game.rs`](../../src/game.rs), [`game/tests.rs`](../../src/game/tests.rs) | Decisions, stage progression, claims, settlement, and invariants |
-| Policies | [`policy.rs`](../../src/policy.rs) | `Policy` trait and legal baseline choices |
+| Policies | [`policy.rs`](../../src/policy.rs), [`policy/heuristic.rs`](../../src/policy/heuristic.rs), [`policy/missing_only.rs`](../../src/policy/missing_only.rs), [`policy/analysis.rs`](../../src/policy/analysis.rs) | `Policy` trait, legal baselines, deterministic shanten/ukeire `HeuristicPolicy`, and the `MissingOnlyPolicy` ablation that delegates to `FirstLegalPolicy` except for the shared missing-suit rule; exact target-deficit analysis remains private |
 | Execution | [`runner.rs`](../../src/runner.rs), [`main.rs`](../../src/main.rs) | Driving games, aggregating results, and the native CLI |
-| Native policy comparison | [`examples/policy_ab.rs`](../../examples/policy_ab.rs) | Standalone balanced 2A2B comparison using fresh policies and runner per game; no new game rules or library API |
+| Native policy comparison | [`examples/policy_ab.rs`](../../examples/policy_ab.rs) | Standalone balanced 2A2B comparison with selectable A/B policies and fresh policies and runner per game; no new game rules or library API |
 
 Public modules and exports are declared in [`src/lib.rs`](../../src/lib.rs).
 
@@ -55,7 +55,9 @@ policy-facing API. See [the game implementation](../../src/game.rs).
 
 Cloning `Game` preserves the authoritative position and RNG, **not** the
 state held by policies. To continue exactly with stateful policies such as
-`RandomPolicy`, checkpoint their state as well. The
+`RandomPolicy`, checkpoint their state as well. `HeuristicPolicy` has no logical
+history or RNG: its private analysis memoization may be discarded when resuming,
+so fresh instances reproduce continuation from a cloned game. The
 [README checkpoint examples](../../README.md) cover construction and replay.
 
 ## Test navigation
@@ -64,8 +66,22 @@ state held by policies. To continue exactly with stateful policies such as
   decisions, rejection atomicity, and cloned-game replay.
 - [`tests/execution.rs`](../../tests/execution.rs): runner and CLI behavior,
   seeded replay, checkpoint continuation, and score balance.
-- [`examples/policy_ab.rs`](../../examples/policy_ab.rs): local comparison tests
-  for seed-block aggregation, balanced placements, replay, and failure handling.
+- [`tests/heuristic_policy.rs`](../../tests/heuristic_policy.rs): deterministic
+  heuristic legality, seeded replay, and continuation with fresh policies.
+- [`tests/missing_only_policy.rs`](../../tests/missing_only_policy.rs): every
+  decision of the missing-suit-only ablation against its reference policy
+  (`HeuristicPolicy` for the declaration, `FirstLegalPolicy` otherwise),
+  legality, seeded replay, and continuation with fresh policies.
+- [`src/policy/analysis/tests.rs`](../../src/policy/analysis/tests.rs),
+  [`src/policy/heuristic/tests.rs`](../../src/policy/heuristic/tests.rs), and
+  [`src/policy/heuristic/tests/calls.rs`](../../src/policy/heuristic/tests/calls.rs):
+  independent target oracle, draw/discard normalization, public ownership,
+  discard ranking, and peng/kong gates.
+- [`src/policy/missing_only/tests.rs`](../../src/policy/missing_only/tests.rs):
+  focused missing-suit, fallback, exchange, turn, and `Hu` cases for the
+  ablation.
+- [`examples/policy_ab/tests.rs`](../../examples/policy_ab/tests.rs): A/B example
+  tests for seed-block aggregation, balanced placements, replay, and failure handling.
 - [`tests/settlement_matrix.rs`](../../tests/settlement_matrix.rs):
   payment-category combinations.
 - [`tests/state_stress.rs`](../../tests/state_stress.rs):
