@@ -11,45 +11,21 @@ each tile kind. There are no honors, flowers, winds, or dragons.
 
 ## Baseline semantics in brief
 
-The normative rule document is [`docs/baseline-rules.md`](docs/baseline-rules.md).
-The most important fixed choices are:
+The intended game rules are defined in
+[`docs/baseline-rules.md`](docs/baseline-rules.md). In particular:
 
-- **Exchange and missing suit.** The game publishes a random giving direction
-  (clockwise, counter-clockwise, or opposite) before anyone selects. All four
-  players submit three tiles of one suit; the game applies the exchange only
-  after all four submissions. Each player then permanently chooses a missing
-  suit. A player holding missing-suit tiles must discard one of them, and may
-  not peng, kong, or win until the concealed hand is clear of that suit.
-- **Claims.** Hu outranks kong, which outranks peng. Multiple Hu claims on one
-  discard all win and are paid separately by the discarder. There is no chi.
-- **Turn flow.** A normal turn draws, optionally declares kongs, discards, and
-  resolves claims. A peng claimant discards without drawing. Kong replacement
-  tiles come from the tail of the wall. A robbed added kong is cancelled and
-  not paid.
-- **Opening turn.** The dealer holds 14 tiles and acts first. The opening turn
-  is **not discard-only**: the dealer may discard, declare an ordinary
-  concealed kong, or Hu when the baseline shape and missing-suit conditions
-  allow it. An opening Hu uses ordinary self-draw scoring; there is no
-  heaven-hand bonus.
-- **Ending.** A player who wins leaves the hand. The hand ends when only one
-  active player remains or when a required draw finds an empty wall. Wall
-  exhaustion applies flower-pig payments (16 points per non-pig player), big
-  call payments based on maximum hypothetical discard-win fan for tenpai
-  players, and refunds of kong income to the original payers where required.
-- **Scoring.** Fan items are summed and then capped once at **5**. Points paid
-  equal the capped fan total: **there are no exponential multipliers and no
-  `2^n` scoring**. The fixed fan table is base win +1, pure one suit +2, seven
-  pairs +2, all pungs +1, each root +1, and at most one event bonus +1
-  (self-draw, after-kong, kong-discard, or robbing-kong). A win that satisfies
-  both seven pairs and a standard decomposition is scored as seven pairs.
-- **Not implemented.** Chi, call transfer, heaven/earth-hand bonuses,
-  bottom-of-the-sea bonuses, 血流成河, honors/flowers, local fan variants,
-  dealer rotation, wind rounds, match-level scoring, and configurable rules are
-  outside this baseline. See section 8 of the rule document.
+- Four players exchange three tiles simultaneously, then choose a missing
+  suit. Missing-suit restrictions apply to discards, claims, and wins.
+- Hu takes priority over kong and peng; multiple players may win on one
+  discard. There is no chi. Kong draws and robbed added kongs have distinct
+  settlement behavior.
+- The dealer acts first without drawing and may make any legal opening
+  action, including an ordinary self-draw Hu or concealed kong.
+- Scoring uses additive fan capped at **5**, not exponential multipliers.
+  Terminal net scores are zero-sum; wall exhaustion can trigger flower-pig,
+  big-call, and kong-income refund payments.
 
-An execution result is the **terminal net score per seat**. The fixed rules are
-zero-sum, including kong refunds and wall-exhaustion penalties.
-
+See the rules document for exact conditions, fan items, and excluded variants.
 ## Architecture
 
 The simulator is one Rust crate with an authoritative `Game`, a `Runner`
@@ -62,22 +38,14 @@ define intended game semantics.
 
 ### Policies
 
-- `FirstLegalPolicy`: deterministic legal baseline. It prefers `Hu`; otherwise
-  it uses the first legal action supplied by the game. For exchange it chooses
-  the eligible suit with the fewest own tiles (lowest suit index on a tie) and
-  passes that suit's three lowest tiles.
-- `RandomPolicy`: seeded random legal policy. It prefers `Hu` to increase win
-  coverage, and otherwise samples uniformly from the legal actions, or from
-  the eligible exchange tiles. It is intended for coverage and reproducibility,
-  not playing strength.
+- `FirstLegalPolicy`: deterministic baseline, preferring `Hu` and otherwise
+  choosing a legal action.
+- `RandomPolicy`: seeded legal-choice baseline, also preferring `Hu`;
+  useful for coverage and replay, not playing strength.
 
-`Runner::random(seed)` derives one independent policy stream per seat with
-`policy::random_seat_seed`. "Independent" means each seat owns a separate RNG
-object with its own state; it does not claim statistical independence of the
-derived seeds. Constructing a fresh runner with the same seed and driving the
-same game from the start reproduces the same decisions. Rebuilding a runner
-from a seed is a replay from the beginning, not the restoration of a mid-game
-policy checkpoint.
+`Runner::random(seed)` initializes a separate RNG stream for each seat.
+It replays from initial streams; it does not restore mid-game policy state
+(see **Continuation and checkpoints**).
 
 ### Runner API
 
@@ -188,9 +156,9 @@ let policies = checkpoint_policies.map(|policy| Box::new(policy) as Box<dyn Poli
 let resumed = Runner::new(policies).run_game(&mut checkpoint)?;
 ```
 
-Within one runner, policy streams continue across games, so
-`run_batch(first_seed, n)` is the same as `n` consecutive `run_new` calls on
-that runner. A fresh runner resets the streams to their seeded positions.
+Within one runner, policy streams continue across games; a fresh runner
+restarts them. Game and policy randomness have separate states, which does
+not imply statistical independence of the derived seeds.
 
 ## Running
 
@@ -199,7 +167,7 @@ toolchain:
 
 ```text
 cargo build --release
-cargo test
+cargo test --all-targets
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
@@ -239,35 +207,14 @@ Measurements are single-threaded and include game construction in the batch
 wall time. There is intentionally no performance threshold in the project;
 record the command, seed, policy, and observed rates when comparing builds.
 
-### Reproducibility
-
-For a fixed build, the same rules seed, policy seed, and policy sequence
-reproduce the same terminal scores and decisions. A batch with the same first
-seed and game count reproduces the same games in the same order. Random policy
-streams continue across games in one runner, so a batch is the continuous
-stream; a fresh runner restarts every stream from its seed. Reusing a runner
-with a different game seed keeps the policy streams at their current position
-instead of restarting them.
-
-The policy RNG is independent of the game's shuffle and settlement randomness
-because it is a separate RNG object with separate state. That is a statement
-about state ownership, not a statistical claim that one shared CLI `--seed`
-produces uncorrelated game and policy randomness.
-
 ## Limitations
 
-- This is a fixed research baseline, not a universal Sichuan rules engine.
-  Local rules that differ on fan, timing, claims, or settlement are not
-  supported.
-- Fan is summed and capped at 5. It is not an exponential multiplier system.
-- The policies are legal baselines, not search or evaluation engines. No
-  strategy budget, lookahead, neural network, GPU, Python binding, parallel
-  batch execution, undo, or copy-on-write search is included.
-- There is no code for training trajectories or reward shaping. Those belong to
-  a research layer above the authoritative game.
-- Performance is not promised before measurement. The repository provides the
-  measurement path, not a benchmark target.
-
+This is a fixed research baseline, not a configurable local-rules engine.
+The included policies are legality baselines, not strategic search; there
+are no training, Python, GPU, or parallel batch components. See
+[baseline exclusions](docs/baseline-rules.md) for gameplay scope.
+Performance is measured rather than guaranteed; consult the
+[validation record](docs/validation.md) for historical observations.
 ## Documentation
 
 - [`docs/governance.md`](docs/governance.md) - shared conventions for
@@ -277,6 +224,3 @@ produces uncorrelated game and policy randomness.
 - [`docs/baseline-rules.md`](docs/baseline-rules.md) - intended fixed game rules.
 - [`docs/validation.md`](docs/validation.md) - recorded validation coverage
   and historical native CPU measurements, not a current performance promise.
-- [`docs/history/`](docs/history/README.md) - archived initial design,
-  implementation plan, and integration coordination documents; historical
-  context, not current implementation specifications.

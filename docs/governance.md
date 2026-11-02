@@ -29,17 +29,14 @@ with genuinely agent-specific guidance kept separate.
 | Fixed game semantics | [Baseline rules](baseline-rules.md) |
 | Current implementation | Relevant `src/` code, `tests/`, and executable evidence |
 | Component boundaries | [Current architecture](architecture/overview.md), then code |
-| Initial design rationale | [Historical initial design](history/xzd-rust-simulator-design-revised.md) |
 | Past test coverage and measurements | [Validation](validation.md) |
 | Proposed change intent | `specs/active/<change>/`, when present |
 | Consequential decision history | `docs/adr/`, when present |
 
-The [historical implementation plan](history/implementation-plan.md) and
-[historical integration contract](history/integration-contract.md) record
-initial work and coordination, not current instructions or API contracts.
-These and the [initial design](history/xzd-rust-simulator-design-revised.md)
-are retained under [history](history/README.md) for context. Read only the
-material relevant to the task; reading order does not confer authority.
+Initial design and delivery-coordination documents were removed from the
+working tree. Git history retains them, but they impose no current API,
+file-ownership, or development restrictions. Reading order does not confer
+authority.
 
 ## Architecture knowledge
 
@@ -77,13 +74,14 @@ This guide adds no direct-push or PR approval rules.
 
 Use `docs/adr/` only when an architectural decision's alternatives and
 rationale would be costly to reconstruct. Record context, choice, trade-offs,
-and consequences; routine fixes need no ADR. The existing initial design
-remains historical context and need not be split into ADRs.
+and consequences; routine fixes need no ADR. Do not retroactively turn
+initial implementation plans into ADRs.
 
 ADRs preserve **why**, not a second registry of current architecture. Reflect
 implemented outcomes in [current architecture](architecture/overview.md)
-without copying the historical rationale. When an ADR fully or partially supersedes an
-older one, the **new** ADR identifies the old decision and affected scope;
+without copying historical rationale. When an ADR fully or partially
+supersedes an older one, the **new** ADR identifies the old decision and
+its affected scope;
 do not edit the old ADR to point forward. Older ADRs may move to
 `docs/adr/archive/` while remaining available as history.
 
@@ -91,9 +89,7 @@ do not edit the old ADR to point forward. Older ADRs may move to
 
 - Update current rules, architecture, or public API explanations when the
   implementation affects them; update active Change materials when their
-  intent changes. Historical plans and integration agreements need not be
-  rewritten to describe later implementations. Unrelated work needs no
-  documentation sweep.
+  intent changes. Unrelated work needs no documentation sweep.
 - For Game or rule changes, test affected legality, transitions, settlement,
   and applicable invariants: hidden-information isolation, tile conservation,
   zero-sum scores, seeded replay, and clone/continuation. For Policy/Runner
