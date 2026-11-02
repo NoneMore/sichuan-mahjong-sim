@@ -205,6 +205,55 @@ Measurements are single-threaded and include game construction in the batch
 wall time. When comparing builds, record the command, seed, policy, and observed
 rates.
 
+### Policy A/B comparison example
+
+`examples/policy_ab.rs` runs a balanced 2A2B comparison with `FirstLegalPolicy`
+as A and `RandomPolicy` as B. Every game seed is played six times with A in
+seats `[0,1] [0,2] [0,3] [1,2] [1,3] [2,3]` and B in the remaining seats, each
+placement using fresh policies and a fresh `Runner`. B's per-seat RNG stream is
+derived with `policy::random_seat_seed(game_seed ^ policy_seed, seat)`. The
+example validates this comparison workflow; it is not a policy-strength result.
+
+```text
+cargo run --release --example policy_ab -- \
+  --seeds 1,2,3,4 --policy-seed 0 --decision-limit 10000 --out ab-demo
+```
+
+| Argument | Meaning |
+|---|---|
+| `--seeds LIST` | Comma-separated, nonempty, distinct `u64` game seeds. |
+| `--policy-seed S` | `u64` seed for the per-seat random policy streams. |
+| `--decision-limit N` | Positive per-game decision limit passed to the runner. |
+| `--out DIR` | Output directory; it must not already exist. |
+| `-h`, `--help` | Print usage and exit. |
+
+`--out` uses a single `create_dir`, so an existing directory is refused rather
+than overwritten, and its parent directory must already exist (for example,
+create `runs/` before using `--out runs/ab-demo`).
+
+Artifacts are written to the fresh output directory:
+
+- `run.txt`: simulator revision and dirty status, toolchain, the debug-quoted
+  argv (one quoted element per argument, so paths with spaces stay
+  unambiguous), policy names, policy seed and stream derivation, game seeds,
+  decision limit, and placements. Revision, dirty status, and toolchain are
+  collected with `git`/`rustc` against the source tree that built the example
+  (`CARGO_MANIFEST_DIR`), not the caller's working directory; unavailable
+  metadata is recorded as `unknown` with a warning.
+- `games.tsv`: one tab-separated record per completed game (`seed`,
+  `a_seat0`/`a_seat1`, four zero-sum scores by seat, end reason, decision
+  count). Records are flushed as games finish, so a failed run keeps its
+  completed records.
+- `summary.txt`: `A_mean`, `B_mean`, `Delta`, the sample standard error over
+  seed blocks (`SE`, unavailable for one seed), and each seed's `D`. The
+  summary is recomputed from the persisted `games.tsv` records after all games.
+
+An illegal action, decision-limit exhaustion, missing terminal result, output
+error, or failed consistency check exits non-zero without writing a summary;
+completed records remain for diagnosis. `SE` uses the seed block as the
+sampling unit and describes variation among the provided seeds, not
+population-level precision.
+
 ## Documentation
 
 - [`docs/governance.md`](docs/governance.md) - shared conventions for
