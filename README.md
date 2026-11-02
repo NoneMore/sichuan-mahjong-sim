@@ -54,8 +54,8 @@ define intended game semantics.
   tiles after the exchange, lowest suit index on a tie). `MissingOnlyPolicy`
   and `HeuristicPolicy` share exchange selection and the missing-suit rule, so
   comparing the ablation with `FirstLegalPolicy` isolates the value of a
-  non-arbitrary suit
-  declaration, while comparing it with `HeuristicPolicy` measures the remaining
+  non-arbitrary suit declaration, while comparing it with `HeuristicPolicy`
+  measures the remaining
   heuristic play logic, including discard ranking and the peng/kong gates. It
   is stateless.
 
@@ -314,5 +314,9 @@ population-level precision.
 - [`docs/architecture/overview.md`](docs/architecture/overview.md) -
   navigation map of the current implemented architecture.
 - [`docs/baseline-rules.md`](docs/baseline-rules.md) - intended fixed game rules.
-- [`docs/validation.md`](docs/validation.md) - recorded validation coverage
-  and historical native CPU measurements, not a current performance promise.
+- [`docs/validation.md`](docs/validation.md) - validation index and historical
+  native CPU measurements, not a current performance promise.
+- [`docs/studies/shanten-ukeire.md`](docs/studies/shanten-ukeire.md) - heuristic
+  implementation coverage, exploratory A/B results, and timing conditions.
+- [`docs/studies/missing-only-ablation.md`](docs/studies/missing-only-ablation.md) -
+  48,000-game missing-suit ablation with methods, results, and provenance.
