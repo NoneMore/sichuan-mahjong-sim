@@ -259,6 +259,8 @@ Let `F` be the capped fan total of a winner.
   from the discarder. The discarder pays each winner separately; there is no
   splitting or shared cap.
 
+Win payments are settled when the Hu is resolved.
+
 ### 6.3 Kong payments
 
 - Concealed kong: each active opponent pays 2.
