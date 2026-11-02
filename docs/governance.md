@@ -33,11 +33,6 @@ with genuinely agent-specific guidance kept separate.
 | Proposed change intent | `specs/active/<change>/`, when present |
 | Consequential decision history | `docs/adr/`, when present |
 
-Initial design and delivery-coordination documents were removed from the
-working tree. Git history retains them, but they impose no current API,
-file-ownership, or development restrictions. Reading order does not confer
-authority.
-
 ## Architecture knowledge
 
 [Current architecture](architecture/overview.md) maps implemented components,
@@ -74,8 +69,7 @@ This guide adds no direct-push or PR approval rules.
 
 Use `docs/adr/` only when an architectural decision's alternatives and
 rationale would be costly to reconstruct. Record context, choice, trade-offs,
-and consequences; routine fixes need no ADR. Do not retroactively turn
-initial implementation plans into ADRs.
+and consequences; routine fixes need no ADR.
 
 ADRs preserve **why**, not a second registry of current architecture. Reflect
 implemented outcomes in [current architecture](architecture/overview.md)
