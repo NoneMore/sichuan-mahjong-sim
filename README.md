@@ -288,6 +288,8 @@ produces uncorrelated game and policy randomness.
 
 ## Documentation
 
+- [`docs/governance.md`](docs/governance.md) - shared project governance conventions
+  for contributors and coding agents.
 - [`docs/validation.md`](docs/validation.md) - validation coverage and measured native CPU baseline.
 - [`docs/baseline-rules.md`](docs/baseline-rules.md) - normative fixed rules.
 - [`docs/integration-contract.md`](docs/integration-contract.md) - Game/Runner
