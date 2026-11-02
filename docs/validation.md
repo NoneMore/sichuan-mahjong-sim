@@ -152,3 +152,26 @@ All measured runs matched these non-timing outputs exactly, before and after:
 | Terminal score totals | `[51528, 14913, -15135, -51306]` | `[24503, 12683, -10925, -26261]` |
 | Wins by seat | `[6505, 6401, 6285, 5961]` | `[3432, 3306, 3115, 3006]` |
 | Aggregate score sum | 0 | 0 |
+
+## Shanten-and-ukeire policy implementation milestone
+
+`HeuristicPolicy` and selectable policies in the existing A/B example are
+implemented without changing fixed rules or the `Game`/`Policy`/`Runner`
+contracts. All **178 tests** pass in debug and release (125 library, 6 CLI,
+17 integration, 30 A/B example); formatting, all-target Clippy with warnings
+denied, and warning-free rustdoc also pass.
+
+The [archived implementation report](../specs/archive/shanten-ukeire-policy/implementation.md)
+records coverage, source fingerprints, environment, reproduction commands,
+retained A/B artifacts, and separate release timing. On the fixed development
+seeds `1,2,3,4` (six balanced placements each), heuristic had `A_mean = 2.1875`
+and `Delta = 4.375` against both baselines, with seed-block SE 1.266329 against
+first and 0.800391 against random. All games completed with zero-sum scores.
+The separate post-cleanup 24-game timing workloads observed about 226-236
+games/sec and 143 microseconds per heuristic decision, including short-circuit
+choices.
+
+These are descriptive results from four convenience seed blocks and single,
+roughly 0.1-second timing runs. They establish neither a confirmatory strength
+claim nor acceptable numerical speed; see the report's limitations. The main
+CLI and A/B artifact schema remain unchanged.

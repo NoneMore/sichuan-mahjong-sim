@@ -5,7 +5,7 @@
 //! choice. They never receive a `&Game`, another concealed hand, or the wall
 //! order.
 //!
-//! Two baseline policies are provided:
+//! Two legal baselines plus one analysis policy are provided:
 //!
 //! - [`FirstLegalPolicy`] is deterministic. It always prefers `Hu` and
 //!   otherwise takes the first action listed as legal by the game. Exchange
@@ -14,9 +14,17 @@
 //! - [`RandomPolicy`] owns its own seedable RNG. It always prefers `Hu` (to
 //!   exercise wins), and otherwise samples uniformly from the listed legal
 //!   actions or from the eligible exchange tiles.
+//! - [`HeuristicPolicy`] is deterministic and ranks legal post-discard hands by
+//!   exact target-deficit shanten, then unseen improving copies, then a tenpai
+//!   fan tie-break. Its analysis is private and local to each decision.
 //!
-//! Neither policy reads privileged game state; neither policy is a search or
-//! evaluation engine.
+//! No policy reads privileged game state; none is a search or evaluation
+//! engine in the rollout sense.
+
+mod analysis;
+mod heuristic;
+
+pub use heuristic::HeuristicPolicy;
 
 use crate::game::{Decision, LegalActions};
 use crate::{Action, Hand, Seat, Suit, Tile};

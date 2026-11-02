@@ -23,21 +23,29 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
 
-use sichuan_mahjong_sim::policy::{random_seat_seed, FirstLegalPolicy, Policy, RandomPolicy};
+use sichuan_mahjong_sim::policy::{
+    random_seat_seed, FirstLegalPolicy, HeuristicPolicy, Policy, RandomPolicy,
+};
 use sichuan_mahjong_sim::runner::{FinishReason, RunReport, Runner};
 use sichuan_mahjong_sim::{Seat, PLAYER_COUNT};
 
 const USAGE: &str = "\
-Usage: policy_ab --seeds LIST --policy-seed S --decision-limit N --out DIR
+Usage: policy_ab --seeds LIST --policy-seed S --decision-limit N --out DIR \
+                 [--a STYLE] [--b STYLE]
 
-Runs balanced 2A2B games (FirstLegalPolicy as A, RandomPolicy as B) over an
-explicit seed list and writes reproducible artifacts to a fresh directory.
+Runs balanced 2A2B games over an explicit seed list and writes reproducible
+artifacts to a fresh directory. A defaults to FirstLegalPolicy and B to
+RandomPolicy.
 
 Options:
   --seeds LIST       Comma-separated, nonempty, distinct u64 game seeds.
   --policy-seed S    u64 seed for the per-seat random policy streams.
   --decision-limit N Positive per-game decision limit.
   --out DIR          Output directory; it must not already exist.
+  --a STYLE          Policy in the two A seats: first, random, or heuristic.
+                     Default first.
+  --b STYLE          Policy in the two remaining B seats: first, random, or
+                     heuristic. Default random.
   -h, --help         Print this help and exit; arguments after it are ignored.
 ";
 
@@ -59,37 +67,59 @@ const fn seat(index: usize) -> Seat {
     }
 }
 
-/// One of the two policies under comparison.
+/// One of the policies under comparison.
 ///
-/// The command line exposes the initial A/B choice only; tests use the same
-/// builders to compare identical policies or to inject a rejecting policy.
+/// The command line exposes the A/B choice; tests use the same builders to
+/// compare identical policies or to inject a rejecting policy.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Style {
     First,
     Random,
+    Heuristic,
     #[cfg(test)]
     Rejecting,
 }
 
 impl Style {
+    /// Command-line name, also written to the run record.
     fn name(self) -> &'static str {
         match self {
             Style::First => "first",
             Style::Random => "random",
+            Style::Heuristic => "heuristic",
             #[cfg(test)]
             Style::Rejecting => "rejecting",
         }
     }
 
     /// Builds a fresh policy. `stream_seed` is the seat's derived policy seed;
-    /// deterministic policies ignore it.
+    /// deterministic policies ignore it. `HeuristicPolicy` is deterministic and
+    /// has no logical checkpoint state: any internal analysis cache it may keep
+    /// is discardable and never changes later choices, so a fresh instance is a
+    /// valid continuation of an existing heuristic seat.
     fn build(self, stream_seed: u64) -> Box<dyn Policy> {
         match self {
             Style::First => Box::new(FirstLegalPolicy::new()),
             Style::Random => Box::new(RandomPolicy::new(stream_seed)),
+            Style::Heuristic => Box::new(HeuristicPolicy::new()),
             #[cfg(test)]
             Style::Rejecting => Box::new(RejectingPolicy),
         }
+    }
+}
+
+/// Parses one policy style name from the command line.
+///
+/// Like the main CLI's `--policy`, the name is matched case-insensitively; the
+/// recorded name is always the canonical lowercase form.
+fn parse_style(value: &str) -> Result<Style, String> {
+    match value.to_ascii_lowercase().as_str() {
+        "first" => Ok(Style::First),
+        "random" => Ok(Style::Random),
+        "heuristic" => Ok(Style::Heuristic),
+        _ => Err(format!(
+            "invalid policy style '{value}': expected first, random, or heuristic"
+        )),
     }
 }
 
@@ -155,8 +185,9 @@ enum Command {
 
 /// Parses arguments after the executable name.
 ///
-/// All four run inputs are required; there are no implicit defaults. `-h` /
-/// `--help` short-circuits and ignores later arguments, matching the main CLI.
+/// The four run inputs are required. The A/B styles are optional and default to
+/// the historical `first`-versus-`random` comparison. `-h` / `--help`
+/// short-circuits and ignores later arguments, matching the main CLI.
 fn parse_args<I>(args: I) -> Result<Command, String>
 where
     I: IntoIterator<Item = String>,
@@ -165,6 +196,8 @@ where
     let mut policy_seed = None;
     let mut decision_limit = None;
     let mut out = None;
+    let mut style_a = None;
+    let mut style_b = None;
     let mut arguments = args.into_iter();
 
     while let Some(argument) = arguments.next() {
@@ -216,6 +249,24 @@ where
                     .ok_or_else(|| "--out requires a value".to_owned())?;
                 out = Some(PathBuf::from(value));
             }
+            "--a" => {
+                if style_a.is_some() {
+                    return Err("duplicate --a".to_owned());
+                }
+                let value = arguments
+                    .next()
+                    .ok_or_else(|| "--a requires a value".to_owned())?;
+                style_a = Some(parse_style(&value)?);
+            }
+            "--b" => {
+                if style_b.is_some() {
+                    return Err("duplicate --b".to_owned());
+                }
+                let value = arguments
+                    .next()
+                    .ok_or_else(|| "--b requires a value".to_owned())?;
+                style_b = Some(parse_style(&value)?);
+            }
             other => return Err(format!("unexpected argument '{other}'")),
         }
     }
@@ -226,8 +277,8 @@ where
             policy_seed: policy_seed.ok_or_else(|| "--policy-seed is required".to_owned())?,
             decision_limit: decision_limit
                 .ok_or_else(|| "--decision-limit is required".to_owned())?,
-            style_a: Style::First,
-            style_b: Style::Random,
+            style_a: style_a.unwrap_or(Style::First),
+            style_b: style_b.unwrap_or(Style::Random),
         },
         out: out.ok_or_else(|| "--out is required".to_owned())?,
     }))
@@ -977,6 +1028,137 @@ mod tests {
     }
 
     #[test]
+    fn policy_selection_defaults_to_first_versus_random() {
+        let args = |values: &[&str]| {
+            values
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect::<Vec<_>>()
+        };
+        let base = [
+            "--seeds",
+            "1",
+            "--policy-seed",
+            "3",
+            "--decision-limit",
+            "50",
+            "--out",
+            "run",
+        ];
+        let defaults = parse_args(args(&base)).unwrap();
+        let Command::Run(defaults) = defaults else {
+            panic!("expected a run command");
+        };
+        assert_eq!(defaults.plan.style_a, Style::First);
+        assert_eq!(defaults.plan.style_b, Style::Random);
+
+        // Selection is independent of argument order.
+        let mut explicit = base.to_vec();
+        explicit.extend_from_slice(&["--a", "heuristic", "--b", "first"]);
+        let Command::Run(options) = parse_args(args(&explicit)).unwrap() else {
+            panic!("expected a run command");
+        };
+        assert_eq!(options.plan.style_a, Style::Heuristic);
+        assert_eq!(options.plan.style_b, Style::First);
+        assert_eq!(options.plan.seeds, vec![1]);
+    }
+
+    #[test]
+    fn every_policy_style_parses_and_round_trips_through_its_name() {
+        for style in [Style::First, Style::Random, Style::Heuristic] {
+            assert_eq!(parse_style(style.name()).unwrap(), style);
+        }
+        assert_eq!(Style::First.name(), "first");
+        assert_eq!(Style::Heuristic.name(), "heuristic");
+
+        let args = |values: &[&str]| {
+            values
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect::<Vec<_>>()
+        };
+        for style in ["first", "random", "heuristic"] {
+            let parsed = parse_args(args(&[
+                "--seeds",
+                "1",
+                "--policy-seed",
+                "0",
+                "--decision-limit",
+                "10",
+                "--out",
+                "run",
+                "--a",
+                style,
+                "--b",
+                style,
+            ]));
+            assert!(parsed.is_ok(), "--a/--b {style} should parse: {parsed:?}");
+        }
+
+        assert!(parse_style("greedy").is_err());
+        assert!(parse_style("").is_err());
+        assert_eq!(parse_style("Heuristic").unwrap(), Style::Heuristic);
+        // Supply every required run input so these cannot pass merely because
+        // unrelated required options are missing.
+        let invalid = |extra: &[&str]| {
+            let mut arguments = args(&[
+                "--seeds",
+                "1",
+                "--policy-seed",
+                "0",
+                "--decision-limit",
+                "10",
+                "--out",
+                "run",
+            ]);
+            arguments.extend(args(extra));
+            parse_args(arguments).unwrap_err()
+        };
+        assert_eq!(invalid(&["--a"]), "--a requires a value");
+        assert_eq!(invalid(&["--b"]), "--b requires a value");
+        for option in ["--a", "--b"] {
+            assert!(invalid(&[option, "greedy"]).contains("invalid policy style"));
+            assert_eq!(
+                invalid(&[option, "first", option, "random"]),
+                format!("duplicate {option}")
+            );
+        }
+    }
+
+    #[test]
+    fn run_record_names_the_selected_policies() {
+        let plan = plan(vec![1], Style::Heuristic, Style::First);
+        let metadata = Metadata {
+            revision: "abc".to_owned(),
+            dirty: Some(false),
+            toolchain: "rustc test".to_owned(),
+            warnings: Vec::new(),
+        };
+        let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata);
+        assert!(text.contains("policy A: heuristic\n"), "{text}");
+        assert!(text.contains("policy B: first\n"), "{text}");
+        assert!(!text.contains("policy A: first"), "{text}");
+
+        let summary = summary_text(
+            &plan,
+            &Summary {
+                seeds: 1,
+                games: A_PAIRS.len(),
+                a_mean: 0.0,
+                b_mean: 0.0,
+                delta: 0.0,
+                se: None,
+                per_seed: vec![SeedContrast {
+                    seed: 1,
+                    contrast: 0.0,
+                }],
+            },
+        );
+        assert!(summary.contains("policy A: heuristic"), "{summary}");
+        assert!(summary.contains("policy B: first"), "{summary}");
+    }
+
+    #[test]
     fn small_corpus_produces_six_placements_per_seed_and_recomputes_the_summary() {
         let plan = default_plan(vec![1, 2]);
         let mut output = Vec::new();
@@ -1250,6 +1432,64 @@ mod tests {
                 "line should be rejected: {line}"
             );
         }
+    }
+
+    #[test]
+    fn heuristic_games_are_legal_and_cover_all_six_placements() {
+        let plan = plan(vec![7], Style::Heuristic, Style::First);
+        assert_eq!(A_PAIRS.len(), 6);
+        let mut output = Vec::new();
+        run_plan(&plan, &mut output).expect("heuristic corpus runs");
+
+        let records = parse_records(&plan, &String::from_utf8(output).unwrap())
+            .expect("heuristic records parse");
+        assert_eq!(records.len(), A_PAIRS.len());
+        for record in &records {
+            assert_eq!(
+                record
+                    .scores
+                    .iter()
+                    .map(|score| i64::from(*score))
+                    .sum::<i64>(),
+                0
+            );
+            assert!(record.decisions > 0);
+            assert!(record.decisions <= plan.decision_limit);
+        }
+        let summary = summarize(&plan, &records).expect("heuristic summary recomputes");
+        assert_eq!(summary.games, A_PAIRS.len());
+        assert_eq!(summary.seeds, 1);
+    }
+
+    #[test]
+    fn heuristic_decisions_replay_from_the_same_seed() {
+        let first = play_with(31, A_PAIRS[3], Style::Heuristic, Style::Random, 5, LIMIT)
+            .expect("heuristic game runs");
+        let second = play_with(31, A_PAIRS[3], Style::Heuristic, Style::Random, 5, LIMIT)
+            .expect("heuristic game replays");
+        assert_eq!(first.scores, second.scores);
+        assert_eq!(first.decisions, second.decisions);
+        assert_eq!(first.end_reason, second.end_reason);
+        assert_eq!(first.trace, second.trace);
+        assert!(!first.trace.is_empty());
+    }
+
+    #[test]
+    fn heuristic_against_itself_has_zero_seed_contrasts() {
+        // All four seats use the same deterministic policy, so the balanced A/B
+        // labels must cancel exactly over the six placements.
+        let plan = plan(vec![4], Style::Heuristic, Style::Heuristic);
+        let mut output = Vec::new();
+        run_plan(&plan, &mut output).expect("heuristic self-comparison runs");
+        let records = parse_records(&plan, &String::from_utf8(output).unwrap())
+            .expect("self-comparison records parse");
+        let summary = summarize(&plan, &records).unwrap();
+        for entry in &summary.per_seed {
+            approx(entry.contrast, 0.0);
+        }
+        approx(summary.delta, 0.0);
+        approx(summary.a_mean, 0.0);
+        approx(summary.b_mean, 0.0);
     }
 
     #[test]
