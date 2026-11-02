@@ -19,6 +19,7 @@ Pure `eval` and `rules` helpers supply facts, not competing state owners.
 | Authoritative game | [`game.rs`](../../src/game.rs), [`game/tests.rs`](../../src/game/tests.rs) | Decisions, stage progression, claims, settlement, and invariants |
 | Policies | [`policy.rs`](../../src/policy.rs) | `Policy` trait and legal baseline choices |
 | Execution | [`runner.rs`](../../src/runner.rs), [`main.rs`](../../src/main.rs) | Driving games, aggregating results, and the native CLI |
+| Native policy comparison | [`examples/policy_ab.rs`](../../examples/policy_ab.rs) | Standalone balanced 2A2B comparison using fresh policies and runner per game; no new game rules or library API |
 
 Public modules and exports are declared in [`src/lib.rs`](../../src/lib.rs).
 
@@ -63,6 +64,8 @@ state held by policies. To continue exactly with stateful policies such as
   decisions, rejection atomicity, and cloned-game replay.
 - [`tests/execution.rs`](../../tests/execution.rs): runner and CLI behavior,
   seeded replay, checkpoint continuation, and score balance.
+- [`examples/policy_ab.rs`](../../examples/policy_ab.rs): local comparison tests
+  for seed-block aggregation, balanced placements, replay, and failure handling.
 - [`tests/settlement_matrix.rs`](../../tests/settlement_matrix.rs):
   payment-category combinations.
 - [`tests/state_stress.rs`](../../tests/state_stress.rs):
