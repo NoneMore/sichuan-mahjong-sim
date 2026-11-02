@@ -192,6 +192,18 @@ fn assert_valid(game: &Game) {
     game.debug_validate().expect("game invariants");
 }
 
+/// Reads (and thereby re-reads) the pending action list as an owned vector.
+fn pending_actions(game: &mut Game) -> Vec<Action> {
+    match game
+        .next_decision()
+        .expect("pending decision")
+        .legal_actions
+    {
+        LegalActions::Actions(actions) => actions.to_vec(),
+        LegalActions::Exchange { .. } => panic!("expected an action list"),
+    }
+}
+
 #[test]
 fn exchange_is_collected_atomically_and_follows_the_public_direction() {
     let mut game = Game::new(7);
@@ -1310,6 +1322,316 @@ fn clone_during_partial_exchange_replays_identically() {
     assert_eq!(format!("{original:?}"), format!("{fork:?}"));
     assert!(matches!(original.stage, Stage::Missing));
     assert_valid(&original);
+}
+
+/// A self-draw winning hand that also leaves a waiting hand: the Discard
+/// action must arm the passed-Hu lock, so the same seat cannot claim the tile
+/// its own discard would have given it.
+#[test]
+fn discarding_a_winning_hand_arms_the_passed_hu_lock() {
+    let mut game = blank_game();
+    let mut winner = vec![w(1), w(2), w(3), w(7), w(7)];
+    winner.extend(tong_run());
+    game.hands[0] = hand(&winner);
+    game.hands[1] = hand(&[
+        w(4),
+        w(5),
+        w(6),
+        w(8),
+        w(9),
+        w(9),
+        t(1),
+        t(2),
+        t(3),
+        t(4),
+        t(5),
+        t(6),
+        t(9),
+    ]);
+    game.stage = Stage::Action {
+        seat: S0,
+        kind: ActionKind::AfterDraw(DrawKind::Normal),
+    };
+    refresh_wall(&mut game);
+
+    let actions = pending_actions(&mut game);
+    assert!(actions.contains(&Action::Hu), "the hand is already winning");
+    assert_eq!(actions.last(), Some(&Action::Pass));
+
+    submit_specific(&mut game, S0, Action::Discard(w(1)));
+    assert!(
+        game.pass_lock[0],
+        "discarding while Hu is available locks the next Hu"
+    );
+    assert!(!game.pass_lock[1] && !game.pass_lock[2] && !game.pass_lock[3]);
+    assert_eq!(game.pending.expect("seat 1 turn").seat, seat(1));
+    assert_valid(&game);
+
+    // Seat 1 draws, then discards the 4W that would complete seat 0's 234W plus
+    // 77W pair. The lock turns that would-be win into an automatic Pass.
+    let actions = pending_actions(&mut game);
+    assert_eq!(game.pending.expect("seat 1 turn").seat, seat(1));
+    assert!(actions.contains(&Action::Discard(w(4))));
+    submit_specific(&mut game, seat(1), Action::Discard(w(4)));
+
+    assert_eq!(
+        game.pending.expect("seat 2 turn").seat,
+        seat(2),
+        "the locked seat must never re-enter the response stage"
+    );
+    assert!(game.winners.iter().all(|&won| !won));
+    let discard = game.discards.last().expect("discard record");
+    assert_eq!(discard.tile, w(4));
+    assert_eq!(discard.winners, [false; PLAYER_COUNT]);
+    assert_eq!(discard.meld_claim, None);
+    assert_valid(&game);
+}
+
+/// The follow-up of a two-stage response keeps the seat pending for its lower
+/// claims only: the stale Hu action is rejected without changing any state.
+#[test]
+fn a_follow_up_response_rejects_the_stale_hu_action() {
+    let mut game = peng_and_hu_setup();
+    submit_specific(&mut game, S0, Action::Discard(w(5)));
+    assert_eq!(
+        pending_actions(&mut game),
+        [Action::Hu, Action::Peng, Action::Pass]
+    );
+    submit_specific(&mut game, seat(1), Action::Pass);
+
+    let follow_up = pending_actions(&mut game);
+    assert_eq!(follow_up, [Action::Peng, Action::Pass]);
+    assert_eq!(game.pending.expect("follow-up").seat, seat(1));
+
+    let before = format!("{game:?}");
+    let error = game.submit(seat(1), Action::Hu).expect_err("Hu is stale");
+    assert_eq!(
+        error,
+        GameError::IllegalAction {
+            seat: seat(1),
+            action: Action::Hu,
+        }
+    );
+    assert_eq!(before, format!("{game:?}"), "a rejected Hu changes nothing");
+    assert!(game.pass_lock[1]);
+    assert_eq!(game.discards.len(), 1);
+    assert_eq!(game.discards[0].meld_claim, None);
+    assert!(game.winners.iter().all(|&won| !won));
+
+    // Re-reading the pending decision is idempotent and keeps the same options.
+    assert_eq!(pending_actions(&mut game), follow_up);
+
+    submit_specific(&mut game, seat(1), Action::Peng);
+    assert_eq!(game.melds[1][0].kind(), MeldKind::Peng);
+    assert_eq!(game.discards[0].meld_claim, Some(seat(1)));
+    assert_valid(&game);
+}
+
+/// Two seats pending in the same discard response have different option sets:
+/// seat 1 may only peng, seat 2 may only Hu. A stale action from the previous
+/// seat must be rejected without panicking, leaking into the next seat's list,
+/// or changing the collected state.
+#[test]
+fn response_options_do_not_leak_between_seats() {
+    let mut game = blank_game();
+    game.hands[0] = hand(&[
+        w(5),
+        w(7),
+        w(8),
+        w(1),
+        w(2),
+        w(3),
+        t(1),
+        t(2),
+        t(3),
+        t(4),
+        t(5),
+        t(6),
+        t(8),
+        t(9),
+    ]);
+    game.hands[1] = hand(&[
+        w(5),
+        w(5),
+        w(6),
+        w(7),
+        w(8),
+        w(9),
+        w(2),
+        t(5),
+        t(6),
+        t(7),
+        t(8),
+        t(9),
+        t(9),
+    ]);
+    game.hands[2] = hand(&[
+        w(1),
+        w(1),
+        w(3),
+        w(4),
+        t(1),
+        t(2),
+        t(3),
+        t(4),
+        t(5),
+        t(6),
+        t(7),
+        t(8),
+        t(9),
+    ]);
+    game.stage = Stage::Action {
+        seat: S0,
+        kind: ActionKind::AfterDraw(DrawKind::Normal),
+    };
+    refresh_wall(&mut game);
+
+    submit_specific(&mut game, S0, Action::Discard(w(5)));
+    assert_eq!(
+        pending_actions(&mut game),
+        [Action::Peng, Action::Pass],
+        "seat 1 can only peng the discard"
+    );
+    submit_specific(&mut game, seat(1), Action::Peng);
+    assert_eq!(
+        game.discards[0].meld_claim, None,
+        "claims are applied only after collection"
+    );
+
+    assert_eq!(
+        pending_actions(&mut game),
+        [Action::Hu, Action::Pass],
+        "seat 2 can only win on the discard"
+    );
+    assert_eq!(game.pending.expect("seat 2 response").seat, seat(2));
+
+    let before = format!("{game:?}");
+    let error = game
+        .submit(seat(2), Action::Peng)
+        .expect_err("seat 2 cannot peng");
+    assert_eq!(
+        error,
+        GameError::IllegalAction {
+            seat: seat(2),
+            action: Action::Peng,
+        }
+    );
+    assert_eq!(before, format!("{game:?}"), "a stale claim changes nothing");
+    assert_eq!(pending_actions(&mut game), [Action::Hu, Action::Pass]);
+
+    submit_specific(&mut game, seat(2), Action::Hu);
+    assert!(game.winners[2]);
+    assert_eq!(game.win_info[2].expect("winner metadata").payer, Some(S0));
+    assert_eq!(
+        game.melds[1].len(),
+        0,
+        "the earlier peng choice is not applied"
+    );
+    assert_eq!(
+        game.hands[1].total(),
+        14,
+        "only the next normal draw touched seat 1"
+    );
+    let discard = game.discards.last().expect("discard record");
+    assert_eq!(discard.winners, [false, false, true, false]);
+    assert_eq!(discard.meld_claim, None);
+    assert_valid(&game);
+}
+
+/// The pending action list keeps the documented pipeline order and reuses one
+/// buffer: a Pass that removes the Hu slot repopulates the same allocation.
+/// Pointer assertions intentionally bind this regression to allocation reuse.
+#[test]
+fn legal_action_buffer_is_reused_in_pipeline_order() {
+    let mut game = blank_game();
+    game.melds[0] = vec![Meld::peng(w(9), seat(1))];
+    // 111W + 123W + 789W + 99T with the fourth 9W in hand for an added kong and
+    // all four 1W for a concealed kong.
+    game.hands[0] = hand(&[
+        w(1),
+        w(1),
+        w(1),
+        w(1),
+        w(2),
+        w(3),
+        w(7),
+        w(8),
+        w(9),
+        t(9),
+        t(9),
+    ]);
+    game.stage = Stage::Action {
+        seat: S0,
+        kind: ActionKind::AfterDraw(DrawKind::Normal),
+    };
+    refresh_wall(&mut game);
+
+    let expected = vec![
+        Action::Hu,
+        Action::ConcealedKong(w(1)),
+        Action::AddedKong(w(9)),
+        Action::Discard(w(1)),
+        Action::Discard(w(2)),
+        Action::Discard(w(3)),
+        Action::Discard(w(7)),
+        Action::Discard(w(8)),
+        Action::Discard(w(9)),
+        Action::Discard(t(9)),
+        Action::Pass,
+    ];
+    assert_eq!(pending_actions(&mut game), expected);
+
+    let capacity = game.legal_actions.capacity();
+    let buffer = game.legal_actions.as_ptr();
+    assert!(capacity >= expected.len());
+
+    submit_specific(&mut game, S0, Action::Pass);
+    assert!(game.pass_lock[0]);
+    let expected_reduced = expected[1..expected.len() - 1].to_vec();
+    assert_eq!(pending_actions(&mut game), expected_reduced);
+    assert_eq!(
+        game.legal_actions.capacity(),
+        capacity,
+        "the decision buffer is reused across decisions"
+    );
+    assert_eq!(
+        game.legal_actions.as_ptr(),
+        buffer,
+        "repopulating the list must not reallocate"
+    );
+
+    // A response collection round also runs through the same buffer.
+    submit_specific(&mut game, S0, Action::Discard(w(1)));
+    assert_eq!(game.pending.expect("seat 1 turn").seat, seat(1));
+    assert_eq!(game.legal_actions.capacity(), capacity);
+    assert_valid(&game);
+}
+
+#[test]
+fn missing_suit_actions_keep_suit_order_in_the_shared_buffer() {
+    let mut game = Game::new(7);
+    let initial_capacity = game.legal_actions.capacity();
+    complete_exchange(&mut game);
+    assert!(matches!(game.stage, Stage::Missing));
+    assert_eq!(game.missing, [None; PLAYER_COUNT]);
+    assert_eq!(game.legal_actions.capacity(), initial_capacity);
+
+    let expected = vec![
+        Action::ChooseMissing(Suit::Wan),
+        Action::ChooseMissing(Suit::Tong),
+        Action::ChooseMissing(Suit::Tiao),
+    ];
+    assert_eq!(pending_actions(&mut game), expected);
+    let capacity = game.legal_actions.capacity();
+    let buffer = game.legal_actions.as_ptr();
+
+    submit_specific(&mut game, S0, Action::ChooseMissing(Suit::Tong));
+    assert_eq!(game.missing_choices[0], Some(Suit::Tong));
+    assert_eq!(game.pending.expect("seat 1 missing choice").seat, seat(1));
+    assert_eq!(pending_actions(&mut game), expected);
+    assert_eq!(game.legal_actions.capacity(), capacity);
+    assert_eq!(game.legal_actions.as_ptr(), buffer);
+    assert_valid(&game);
 }
 
 /// Tampering tests below mutate metadata only (never tiles or scores), so each
