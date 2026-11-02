@@ -559,13 +559,17 @@ impl Game {
                 if !matches!(stage, Stage::Action { .. } | Stage::Response(_)) {
                     return Err(GameError::IllegalAction { seat, action });
                 }
+                // Extract the Hu offer from the validated action list before the
+                // buffer is cleared: it is exactly the state that arms the
+                // passed-Hu lock, so the win shape is not recomputed on apply.
+                let offers_hu = self.legal_actions.contains(&Action::Hu);
                 self.pending = None;
                 self.legal_actions.clear();
                 match stage {
                     Stage::Action {
                         seat: current,
                         kind,
-                    } => self.apply_turn_action(current, kind, action),
+                    } => self.apply_turn_action(current, kind, offers_hu, action),
                     Stage::Response(response) => self.apply_response_action(response, seat, action),
                     Stage::Exchange | Stage::Missing | Stage::Ended => unreachable!(),
                 }
@@ -836,8 +840,9 @@ impl Game {
                 }
                 Stage::Missing => {
                     if let Some(seat) = self.first_missing_pending() {
-                        self.legal_actions =
-                            Suit::ALL.into_iter().map(Action::ChooseMissing).collect();
+                        self.legal_actions.clear();
+                        self.legal_actions
+                            .extend(Suit::ALL.into_iter().map(Action::ChooseMissing));
                         self.pending = Some(PendingDecision {
                             seat,
                             kind: PendingKind::Missing,
@@ -853,15 +858,20 @@ impl Game {
                 }
                 Stage::Response(response) => {
                     if let Some(seat) = Self::response_next_pending(&response) {
-                        let actions = self.response_options(&response, seat);
-                        if actions.is_empty() {
+                        let pass_locked = self.pass_lock[seat.index()];
+                        Self::response_options(
+                            &response,
+                            seat,
+                            pass_locked,
+                            &mut self.legal_actions,
+                        );
+                        if self.legal_actions.is_empty() {
                             let mut updated = response;
                             updated.pending[seat.index()] = false;
                             updated.choices[seat.index()] = Some(Action::Pass);
                             self.stage = Stage::Response(updated);
                             continue;
                         }
-                        self.legal_actions = actions;
                         self.pending = Some(PendingDecision {
                             seat,
                             kind: PendingKind::Actions,
@@ -921,49 +931,57 @@ impl Game {
     }
 
     fn pending_turn_action(&mut self, seat: Seat, kind: ActionKind) {
-        let hand = self.hands[seat.index()];
-        let melds = &self.melds[seat.index()];
-        let missing = self.missing[seat.index()].expect("missing suit declared before play");
-        let mut actions = Vec::with_capacity(24);
-
+        // The list is rebuilt in the shared decision buffer, keeping the
+        // pipeline order Hu, concealed kongs, added kongs, discards, Pass.
         let can_hu = self.can_self_hu(seat, kind) && !self.pass_lock[seat.index()];
+        let wall_open = self.wall_remaining() > 0;
+        let Self {
+            legal_actions,
+            hands,
+            melds,
+            missing,
+            ..
+        } = self;
+        let hand = hands[seat.index()];
+        let melds = &melds[seat.index()];
+        let missing = missing[seat.index()].expect("missing suit declared before play");
+
+        legal_actions.clear();
+
         if can_hu {
-            actions.push(Action::Hu);
+            legal_actions.push(Action::Hu);
         }
 
-        if kind != ActionKind::AfterPeng && self.wall_remaining() > 0 {
+        if kind != ActionKind::AfterPeng && wall_open {
             for tile in Tile::ALL {
                 if rules::can_concealed_kong(&hand, melds, missing, tile) {
-                    actions.push(Action::ConcealedKong(tile));
+                    legal_actions.push(Action::ConcealedKong(tile));
                 }
             }
             for tile in Tile::ALL {
                 if rules::can_added_kong(&hand, melds, missing, tile) {
-                    actions.push(Action::AddedKong(tile));
+                    legal_actions.push(Action::AddedKong(tile));
                 }
             }
         }
 
         for tile in Tile::ALL {
             if rules::can_discard(&hand, missing, tile) {
-                actions.push(Action::Discard(tile));
+                legal_actions.push(Action::Discard(tile));
             }
         }
 
         if can_hu {
-            actions.push(Action::Pass);
+            legal_actions.push(Action::Pass);
         }
 
-        debug_assert!(
-            !actions.is_empty(),
-            "an active turn must have at least one legal action"
-        );
-        if actions.is_empty() {
+        let empty = legal_actions.is_empty();
+        debug_assert!(!empty, "an active turn must have at least one legal action");
+        if empty {
             self.end_hand(EndReason::WallExhausted);
             return;
         }
 
-        self.legal_actions = actions;
         self.pending = Some(PendingDecision {
             seat,
             kind: PendingKind::Actions,
@@ -999,10 +1017,11 @@ impl Game {
         rules::can_hu(&hand, &self.melds[seat.index()], missing)
     }
 
-    fn apply_turn_action(&mut self, seat: Seat, kind: ActionKind, action: Action) {
+    fn apply_turn_action(&mut self, seat: Seat, kind: ActionKind, offers_hu: bool, action: Action) {
         let index = seat.index();
-        let could_hu = self.can_self_hu(seat, kind) && !self.pass_lock[index];
-        if could_hu && action != Action::Hu {
+        // `offers_hu` is the Hu slot taken from the pending action list, so the
+        // passed-Hu lock is armed without recomputing the winning shape.
+        if offers_hu && action != Action::Hu {
             self.pass_lock[index] = true;
         }
 
@@ -1102,24 +1121,32 @@ impl Game {
             .find(|seat| response.pending[seat.index()])
     }
 
-    fn response_options(&self, response: &ResponseStage, seat: Seat) -> Vec<Action> {
+    /// Fills `out` with the response options of `seat`, highest claim first.
+    ///
+    /// The buffer and the passed-Hu flag are passed explicitly (instead of
+    /// borrowing the game) so the pending decision can reuse `legal_actions`.
+    fn response_options(
+        response: &ResponseStage,
+        seat: Seat,
+        pass_locked: bool,
+        out: &mut Vec<Action>,
+    ) {
         let index = seat.index();
-        let mut actions = Vec::with_capacity(4);
-        if response.hu_eligible[index] && !response.hu_declined[index] && !self.pass_lock[index] {
-            actions.push(Action::Hu);
+        out.clear();
+        if response.hu_eligible[index] && !response.hu_declined[index] && !pass_locked {
+            out.push(Action::Hu);
         }
         if !response.robbing {
             if response.can_peng[index] {
-                actions.push(Action::Peng);
+                out.push(Action::Peng);
             }
             if response.can_open_kong[index] {
-                actions.push(Action::OpenKong);
+                out.push(Action::OpenKong);
             }
         }
-        if !actions.is_empty() {
-            actions.push(Action::Pass);
+        if !out.is_empty() {
+            out.push(Action::Pass);
         }
-        actions
     }
 
     fn apply_response_action(&mut self, mut response: ResponseStage, seat: Seat, action: Action) {
