@@ -72,15 +72,16 @@ so fresh instances reproduce continuation from a cloned game. The
   decision of the missing-suit-only ablation against its reference policy
   (`HeuristicPolicy` for the declaration, `FirstLegalPolicy` otherwise),
   legality, seeded replay, and continuation with fresh policies.
-- [`src/policy/analysis/tests.rs`](../../src/policy/analysis/tests.rs) and
-  [`src/policy/heuristic/tests.rs`](../../src/policy/heuristic/tests.rs): independent
-  winning-target oracle, draw/discard normalization, availability ownership,
-  candidate ranking, and call gates.
+- [`src/policy/analysis/tests.rs`](../../src/policy/analysis/tests.rs),
+  [`src/policy/heuristic/tests.rs`](../../src/policy/heuristic/tests.rs), and
+  [`src/policy/heuristic/tests/calls.rs`](../../src/policy/heuristic/tests/calls.rs):
+  independent target oracle, draw/discard normalization, public ownership,
+  discard ranking, and peng/kong gates.
 - [`src/policy/missing_only/tests.rs`](../../src/policy/missing_only/tests.rs):
   focused missing-suit, fallback, exchange, turn, and `Hu` cases for the
   ablation.
-- [`examples/policy_ab.rs`](../../examples/policy_ab.rs): local comparison tests
-  for seed-block aggregation, balanced placements, replay, and failure handling.
+- [`examples/policy_ab/tests.rs`](../../examples/policy_ab/tests.rs): A/B example
+  tests for seed-block aggregation, balanced placements, replay, and failure handling.
 - [`tests/settlement_matrix.rs`](../../tests/settlement_matrix.rs):
   payment-category combinations.
 - [`tests/state_stress.rs`](../../tests/state_stress.rs):
