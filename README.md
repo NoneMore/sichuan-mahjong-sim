@@ -26,6 +26,7 @@ The intended game rules are defined in
   big-call, and kong-income refund payments.
 
 See the rules document for exact conditions, fan items, and excluded variants.
+
 ## Architecture
 
 The simulator is one Rust crate with an authoritative `Game`, a `Runner`
@@ -215,6 +216,7 @@ are no training, Python, GPU, or parallel batch components. See
 [baseline exclusions](docs/baseline-rules.md) for gameplay scope.
 Performance is measured rather than guaranteed; consult the
 [validation record](docs/validation.md) for historical observations.
+
 ## Documentation
 
 - [`docs/governance.md`](docs/governance.md) - shared conventions for
