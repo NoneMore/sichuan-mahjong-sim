@@ -16,7 +16,7 @@
 //! records. Any failed game, output error, or consistency failure stops the run
 //! with a nonzero exit and no summary.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, Write};
@@ -234,16 +234,20 @@ where
 }
 
 /// Parses and validates a comma-separated seed list.
+///
+/// The returned order is the input order. Only membership is hashed, so a long
+/// seed list is validated in linear rather than quadratic time.
 fn parse_seeds(value: &str) -> Result<Vec<u64>, String> {
     if value.trim().is_empty() {
         return Err("--seeds requires at least one game seed".to_owned());
     }
     let mut seeds = Vec::new();
+    let mut seen = HashSet::new();
     for field in value.split(',') {
         let seed = field.trim().parse::<u64>().map_err(|_| {
             format!("invalid game seed '{field}': expected an unsigned 64-bit integer")
         })?;
-        if seeds.contains(&seed) {
+        if !seen.insert(seed) {
             return Err(format!("duplicate game seed {seed}"));
         }
         seeds.push(seed);
@@ -341,8 +345,11 @@ fn execute(plan: &Plan, out: &Path, invocation: &[String]) -> Result<Summary, St
 
 /// Plays every planned placement in fixed order and writes each record as its
 /// game finishes.
-fn run_plan(plan: &Plan, out: &mut dyn Write) -> Result<Vec<Record>, String> {
-    let mut records = Vec::with_capacity(plan.seeds.len() * A_PAIRS.len());
+///
+/// Only the persisted rows are produced here; the summary is later recomputed
+/// from the written file, which is the sole statistics input.
+fn run_plan(plan: &Plan, out: &mut dyn Write) -> Result<(), String> {
+    let index = SeedIndex::new(plan);
     for &seed in &plan.seeds {
         for pair in A_PAIRS {
             let report = play_with(
@@ -368,7 +375,7 @@ fn run_plan(plan: &Plan, out: &mut dyn Write) -> Result<Vec<Record>, String> {
                 end_reason: report.end_reason,
                 decisions: report.decisions,
             };
-            validate_record(plan, &record).map_err(|error| {
+            validate_record(&index, &record).map_err(|error| {
                 format!(
                     "seed {seed} placement [{}, {}]: {error}",
                     pair[0].index(),
@@ -389,10 +396,9 @@ fn run_plan(plan: &Plan, out: &mut dyn Write) -> Result<Vec<Record>, String> {
                     pair[1].index()
                 )
             })?;
-            records.push(record);
         }
     }
-    Ok(records)
+    Ok(())
 }
 
 /// Plays one fresh game with fresh seat policies and a fresh runner.
@@ -430,9 +436,37 @@ fn play_with(
         .map_err(|error| error.to_string())
 }
 
+/// Read-only seed lookup for one phase of a run.
+///
+/// Validation, parsing, and aggregation build this once from the plan instead
+/// of rescanning `plan.seeds` for every record, which would be quadratic in the
+/// number of seeds. Nothing is cached on `Plan`, so the plan stays the only
+/// source of truth for the requested seed order.
+struct SeedIndex<'a> {
+    plan: &'a Plan,
+    positions: HashMap<u64, usize>,
+}
+
+impl<'a> SeedIndex<'a> {
+    fn new(plan: &'a Plan) -> Self {
+        let positions = plan
+            .seeds
+            .iter()
+            .enumerate()
+            .map(|(index, seed)| (*seed, index))
+            .collect();
+        Self { plan, positions }
+    }
+
+    /// Position of `seed` in the plan's requested seed order.
+    fn position(&self, seed: u64) -> Option<usize> {
+        self.positions.get(&seed).copied()
+    }
+}
+
 /// Rejects a record that does not belong to the fixed plan or is malformed.
-fn validate_record(plan: &Plan, record: &Record) -> Result<(), String> {
-    if !plan.seeds.contains(&record.seed) {
+fn validate_record(index: &SeedIndex<'_>, record: &Record) -> Result<(), String> {
+    if index.position(record.seed).is_none() {
         return Err(format!("seed {} is not a planned game seed", record.seed));
     }
     if pair_index(record.pair).is_none() {
@@ -452,10 +486,10 @@ fn validate_record(plan: &Plan, record: &Record) -> Result<(), String> {
     if record.decisions == 0 {
         return Err("decision count must be positive".to_owned());
     }
-    if record.decisions > plan.decision_limit {
+    if record.decisions > index.plan.decision_limit {
         return Err(format!(
             "decision count {} exceeds the configured limit {}",
-            record.decisions, plan.decision_limit
+            record.decisions, index.plan.decision_limit
         ));
     }
     Ok(())
@@ -476,6 +510,7 @@ fn summarize(plan: &Plan, records: &[Record]) -> Result<Summary, String> {
     if plan.seeds.is_empty() {
         return Err("the comparison requires at least one game seed".to_owned());
     }
+    let index = SeedIndex::new(plan);
     let mut seen = HashSet::new();
     let mut per_seed_sums = vec![0.0; plan.seeds.len()];
     let mut per_seed_counts = vec![0usize; plan.seeds.len()];
@@ -483,7 +518,7 @@ fn summarize(plan: &Plan, records: &[Record]) -> Result<Summary, String> {
     let mut b_total = 0.0;
 
     for record in records {
-        validate_record(plan, record)?;
+        validate_record(&index, record)?;
         let pair_index = pair_index(record.pair).expect("validated placement");
         if !seen.insert((record.seed, pair_index)) {
             return Err(format!(
@@ -493,11 +528,7 @@ fn summarize(plan: &Plan, records: &[Record]) -> Result<Summary, String> {
                 record.pair[1].index()
             ));
         }
-        let seed_index = plan
-            .seeds
-            .iter()
-            .position(|seed| *seed == record.seed)
-            .expect("validated seed");
+        let seed_index = index.position(record.seed).expect("validated seed");
         let (a, b) = placement_means(record);
         per_seed_sums[seed_index] += a - b;
         per_seed_counts[seed_index] += 1;
@@ -607,14 +638,15 @@ fn read_records(plan: &Plan, path: &Path) -> Result<Vec<Record>, String> {
 
 /// Parses the `games.tsv` payload, skipping blank lines and `#` comments.
 fn parse_records(plan: &Plan, text: &str) -> Result<Vec<Record>, String> {
+    let index = SeedIndex::new(plan);
     let mut records = Vec::new();
-    for (index, line) in text.lines().enumerate() {
+    for (line_number, line) in text.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        let record = parse_record(plan, line)
-            .map_err(|error| format!("records line {}: {error}", index + 1))?;
+        let record = parse_record(&index, line)
+            .map_err(|error| format!("records line {}: {error}", line_number + 1))?;
         records.push(record);
     }
     Ok(records)
@@ -624,7 +656,7 @@ fn parse_records(plan: &Plan, text: &str) -> Result<Vec<Record>, String> {
 ///
 /// Numeric fields are parsed at their target width (`u64` seed/decision count,
 /// `i32` scores), so out-of-range values are rejected instead of narrowed.
-fn parse_record(plan: &Plan, line: &str) -> Result<Record, String> {
+fn parse_record(index: &SeedIndex<'_>, line: &str) -> Result<Record, String> {
     let fields: Vec<&str> = line.split('\t').collect();
     if fields.len() != 9 {
         return Err(format!(
@@ -657,7 +689,7 @@ fn parse_record(plan: &Plan, line: &str) -> Result<Record, String> {
         end_reason,
         decisions,
     };
-    validate_record(plan, &record)?;
+    validate_record(index, &record)?;
     Ok(record)
 }
 
@@ -948,7 +980,10 @@ mod tests {
     fn small_corpus_produces_six_placements_per_seed_and_recomputes_the_summary() {
         let plan = default_plan(vec![1, 2]);
         let mut output = Vec::new();
-        let records = run_plan(&plan, &mut output).expect("seed corpus runs");
+        run_plan(&plan, &mut output).expect("seed corpus runs");
+
+        let records = parse_records(&plan, &String::from_utf8(output).unwrap())
+            .expect("persisted records parse");
         assert_eq!(records.len(), 2 * A_PAIRS.len());
         for seed in &plan.seeds {
             assert_eq!(
@@ -968,12 +1003,81 @@ mod tests {
             assert!(record.decisions > 0);
         }
 
-        let persisted = parse_records(&plan, &String::from_utf8(output).unwrap()).unwrap();
-        assert_eq!(persisted, records);
+        // The summary is computed from the persisted records alone.
+        let summary = summarize(&plan, &records).expect("summary recomputes");
+        assert_eq!(summary.seeds, 2);
+        assert_eq!(summary.games, 2 * A_PAIRS.len());
+    }
+
+    #[test]
+    fn seed_parsing_preserves_input_order_and_full_u64_values() {
         assert_eq!(
-            summarize(&plan, &persisted).unwrap(),
-            summarize(&plan, &records).unwrap()
+            parse_seeds(" 18446744073709551615 , 0 ,7, 42 ").unwrap(),
+            vec![u64::MAX, 0, 7, 42]
         );
+
+        // A duplicate stays detectable when it appears late in a long list.
+        let late = format!("1,2,3,4,5,6,7,8,9,{},{} ", u64::MAX, u64::MAX);
+        let error = parse_seeds(&late).unwrap_err();
+        assert!(
+            error.contains(&format!("duplicate game seed {}", u64::MAX)),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn extreme_u64_seeds_round_trip_through_records() {
+        let plan = default_plan(vec![u64::MAX, 0]);
+        let record = fixture_record(u64::MAX, 0, 5);
+        let text = format!("{}\n", format_record(&record));
+        assert_eq!(parse_records(&plan, &text).unwrap(), vec![record]);
+    }
+
+    #[test]
+    fn unsorted_records_map_to_the_requested_seed_order() {
+        // Descending seeds with the u64 extremes: neither sorted nor grouped.
+        let seeds = vec![u64::MAX, 9_000_000_000_000_000_000, 3, 0];
+        let plan = default_plan(seeds.clone());
+        let mut records = Vec::new();
+        for (seed_index, seed) in seeds.iter().enumerate() {
+            for pair_index in 0..A_PAIRS.len() {
+                records.push(fixture_record(*seed, pair_index, seed_index as i32 + 1));
+            }
+        }
+        // Group by placement instead of seed so blocks arrive interleaved.
+        records.sort_by_key(|record| pair_index(record.pair).expect("fixture placement"));
+
+        let summary = summarize(&plan, &records).unwrap();
+        assert_eq!(summary.games, seeds.len() * A_PAIRS.len());
+        for (index, entry) in summary.per_seed.iter().enumerate() {
+            assert_eq!(entry.seed, seeds[index]);
+            approx(entry.contrast, 2.0 * (index as f64 + 1.0));
+        }
+        approx(summary.delta, 2.0 * (1.0 + 2.0 + 3.0 + 4.0) / 4.0);
+    }
+
+    #[test]
+    fn large_fixture_aggregates_in_the_requested_seed_order() {
+        let seeds: Vec<u64> = (0..256u64)
+            .map(|index| u64::MAX - index * 1_000_003)
+            .collect();
+        let plan = default_plan(seeds.clone());
+        let mut records = Vec::new();
+        for (seed_index, seed) in seeds.iter().enumerate() {
+            let x = (seed_index as i32 % 5) + 1;
+            for pair_index in 0..A_PAIRS.len() {
+                records.push(fixture_record(*seed, pair_index, x));
+            }
+        }
+        records.sort_by_key(|record| (record.scores[0], record.seed));
+
+        let summary = summarize(&plan, &records).unwrap();
+        assert_eq!(summary.seeds, seeds.len());
+        assert_eq!(summary.games, seeds.len() * A_PAIRS.len());
+        for (index, entry) in summary.per_seed.iter().enumerate() {
+            assert_eq!(entry.seed, seeds[index]);
+            approx(entry.contrast, 2.0 * (((index as i32 % 5) + 1) as f64));
+        }
     }
 
     #[test]
@@ -1021,7 +1125,9 @@ mod tests {
     fn first_legal_against_itself_has_zero_seed_contrasts() {
         let plan = plan(vec![1, 2], Style::First, Style::First);
         let mut output = Vec::new();
-        let records = run_plan(&plan, &mut output).expect("self-comparison runs");
+        run_plan(&plan, &mut output).expect("self-comparison runs");
+        let records = parse_records(&plan, &String::from_utf8(output).unwrap())
+            .expect("self-comparison records parse");
         let summary = summarize(&plan, &records).unwrap();
 
         for entry in &summary.per_seed {
