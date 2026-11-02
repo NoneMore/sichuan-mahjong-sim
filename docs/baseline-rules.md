@@ -1,10 +1,11 @@
 # Baseline rules
 
-This document fixes the rule set implemented by the crate: the pure
-foundation, the authoritative `Game`, and the native execution layer. It is
-the reference for game, policy, and runner behaviour. The rules are a
-self-contained Sichuan mahjong ("blood battle", 血战到底) baseline; they are not
-a generic rules DSL and do not attempt to cover local variants.
+This document defines the **intended fixed gameplay and settlement rules**
+for this Sichuan mahjong ("blood battle", 血战到底) baseline. It is normative
+for game semantics, not evidence that a particular implementation or API
+already behaves as described. See [governance](governance.md) for that
+distinction. The baseline does not cover local variants or policy/runner
+implementation details.
 
 Normative key words: **must**, **may**, and **illegal** describe engine
 behaviour. A "player" is one of four seats.
@@ -56,7 +57,6 @@ behaviour. A "player" is one of four seats.
 - A player may not peng, kong, or win while holding any missing-suit tile.
 - A meld may never contain a missing-suit tile. This applies even after the
   player's concealed missing-suit tiles have been cleared.
-- These restrictions are checked by the `rules::can_*` helpers.
 
 ## 4. Turn structure and claims
 
@@ -345,10 +345,6 @@ refund is paid back to the original payers according to the recorded kong
 ledger; it is not a payment to the other players in general. A player who won,
 or who is a non-flower-pig tenpai player, keeps their kong income.
 
-`rules::must_refund_kong_income` exposes the condition. The `Game` layer must
-retain the per-payment kong ledger because a total alone cannot identify the
-refund recipients.
-
 ## 8. Explicitly not implemented
 
 The baseline does not include:
@@ -363,70 +359,3 @@ The baseline does not include:
   variants beyond the single event bonus above;
 - dealer rotation, wind rounds, or match-level scoring;
 - configurable rule sets.
-
-## 9. Public API map
-
-The crate exposes pure foundation APIs, the authoritative single-game `Game`,
-and the native execution layer.
-
-Foundation:
-
-- `Tile`: checked 27-tile value, `from_index`, `from_suit_rank`, `suit`, `rank`.
-- `Suit`: `Wan`, `Tong`, `Tiao`.
-- `Seat`: checked `0..=3`, clockwise/opposite helpers, `DEALER`.
-- `Hand`: counted concealed hand with checked add/remove, iteration, suit
-  queries, and atomic batch mutation. Declared melds are not stored in `Hand`.
-- `Meld` / `MeldKind`: peng, open kong, added kong, concealed kong.
-- `Action`: `Exchange`, `ChooseMissing`, `Discard`, `Peng`, `OpenKong`,
-  `ConcealedKong`, `AddedKong`, `Hu`, `Pass`.
-- `ExchangeDirection`: `Clockwise`, `CounterClockwise`, `Opposite`, with
-  `recipient` and `donor`.
-- `eval::is_winning(hand, meld_count)`: pure shape check, no missing-suit
-  context.
-- `eval::is_seven_pairs(hand)`, `eval::is_standard_winning(hand, meld_count)`,
-  `eval::win_shape(hand, meld_count)`.
-- `eval::waiting_tiles(hand, melds)` and `eval::is_tenpai(hand, melds)`: shape
-  waits, respecting tiles exhausted by the player's own melds.
-- `rules::is_valid_exchange`, `rules::can_exchange_suit`.
-- `rules::can_discard`, `rules::can_peng`, `rules::can_open_kong`,
-  `rules::can_concealed_kong`, `rules::can_added_kong`, `rules::can_hu`.
-- `rules::has_missing_suit_tiles`, `rules::is_pure_suit`,
-  `rules::is_all_pungs`, `rules::root_count`.
-- `rules::win_fan` / `FanBreakdown`: itemized fan and cap.
-- `rules::win_payment`, `rules::kong_payment`: per-payer and total points.
-- `rules::max_discard_win_fan`, `rules::settle_wall_exhaustion`,
-  `rules::must_refund_kong_income`: end-of-wall facts.
-
-Game:
-
-- `Game::new(seed)` shuffles the complete wall, chooses the exchange direction,
-  deals 14/13/13/13, and enters the exchange stage.
-- `Game::next_decision()` automatically advances until a player choice is
-  needed and returns a borrowed `Decision`; repeated calls while pending are
-  idempotent.
-- `Game::submit(seat, action)` accepts only the pending seat's cached legal
-  action. Rejected submissions leave all authoritative state unchanged.
-- `Game::result()` returns terminal `GameResult { scores, winners, end_reason }`.
-- `Game` implements `Clone` (including RNG and staged private choices), `Debug`,
-  `debug_tile_counts`, and `debug_validate`. Debug helpers are diagnostics, not
-  policy inputs.
-- `Decision` contains the seat, a hidden-information-safe `Observation`, and
-  `LegalActions::Exchange { eligible_suits }` or `LegalActions::Actions`.
-  `Observation` exposes the deciding player's own hand and melds, public player
-  views, the ordered discard history, missing-suit declarations, exchange
-  direction, wall count, scores, response source, and decision stage. It never
-  exposes another concealed hand, wall order, or staged private choices.
-  `PlayerView::concealed_count` is the physical concealed tile count, not a
-  14-tile scoring hand; discard and robbing winners report one tile fewer and
-  are completed from the discard history.
-
-Execution:
-
-- `policy::{Policy, FirstLegalPolicy, RandomPolicy}` chooses from a `Decision`.
-- `runner::{Runner, RunReport, BatchReport, FinishReason, RunnerError}` drives
-  new or supplied games without understanding mahjong rules.
-
-The game layer maintains legal tile counts, applies exchange selections
-atomically, tracks the wall head/tail, collects and arbitrates simultaneous
-claims, tracks the passed-Hu lock, tracks active players, and records the
-per-payer kong ledger required for refunds.
