@@ -1,0 +1,13 @@
+[package]
+name = "sichuan-mahjong-sim"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Deterministic Sichuan mahjong (blood battle) simulator core"
+publish = false
+
+[lib]
+name = "sichuan_mahjong_sim"
+path = "src/lib.rs"
+
+[dependencies]
