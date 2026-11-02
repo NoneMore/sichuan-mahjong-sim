@@ -260,8 +260,8 @@ fn small_corpus_produces_six_placements_per_seed_and_recomputes_the_summary() {
     let mut output = Vec::new();
     run_plan(&plan, &mut output).expect("seed corpus runs");
 
-    let records = parse_records(&plan, &String::from_utf8(output).unwrap())
-        .expect("persisted records parse");
+    let records =
+        parse_records(&plan, &String::from_utf8(output).unwrap()).expect("persisted records parse");
     assert_eq!(records.len(), 2 * A_PAIRS.len());
     for seed in &plan.seeds {
         assert_eq!(
@@ -584,8 +584,8 @@ fn heuristic_games_are_legal_and_cover_all_six_placements() {
     let mut output = Vec::new();
     run_plan(&plan, &mut output).expect("heuristic corpus runs");
 
-    let records = parse_records(&plan, &String::from_utf8(output).unwrap())
-        .expect("heuristic records parse");
+    let records =
+        parse_records(&plan, &String::from_utf8(output).unwrap()).expect("heuristic records parse");
     assert_eq!(records.len(), A_PAIRS.len());
     for record in &records {
         assert_eq!(
