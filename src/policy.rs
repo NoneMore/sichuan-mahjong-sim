@@ -5,7 +5,8 @@
 //! choice. They never receive a `&Game`, another concealed hand, or the wall
 //! order.
 //!
-//! Two legal baselines plus one analysis policy are provided:
+//! Two legal baselines, an analysis policy, and a missing-suit ablation are
+//! provided:
 //!
 //! - [`FirstLegalPolicy`] is deterministic. It always prefers `Hu` and
 //!   otherwise takes the first action listed as legal by the game. Exchange
@@ -17,14 +18,19 @@
 //! - [`HeuristicPolicy`] is deterministic and ranks legal post-discard hands by
 //!   exact target-deficit shanten, then unseen improving copies, then a tenpai
 //!   fan tie-break. Its analysis is private and local to each decision.
+//! - [`MissingOnlyPolicy`] is the missing-suit-only ablation: it uses exactly
+//!   the [`FirstLegalPolicy`] choice everywhere except the missing-suit
+//!   declaration, where it uses the [`HeuristicPolicy`] fewest-tile rule.
 //!
 //! No policy reads privileged game state; none is a search or evaluation
 //! engine in the rollout sense.
 
 mod analysis;
 mod heuristic;
+mod missing_only;
 
 pub use heuristic::HeuristicPolicy;
+pub use missing_only::MissingOnlyPolicy;
 
 use crate::game::{Decision, LegalActions};
 use crate::{Action, Hand, Seat, Suit, Tile};

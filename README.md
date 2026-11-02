@@ -48,12 +48,22 @@ define intended game semantics.
   applies conservative peng and kong gates. It reads only `Decision`, uses no
   RNG, and has no logical checkpoint state; any internal analysis cache is
   discardable without changing later decisions.
+- `MissingOnlyPolicy`: missing-suit-only ablation. It makes exactly the
+  `FirstLegalPolicy` choice at every decision except the missing-suit
+  declaration, where it uses the `HeuristicPolicy` fewest-tile rule (fewest own
+  tiles after the exchange, lowest suit index on a tie). `MissingOnlyPolicy`
+  and `HeuristicPolicy` share exchange selection and the missing-suit rule, so
+  comparing the ablation with `FirstLegalPolicy` isolates the value of a
+  non-arbitrary suit
+  declaration, while comparing it with `HeuristicPolicy` measures the remaining
+  heuristic play logic, including discard ranking and the peng/kong gates. It
+  is stateless.
 
 `Runner::random(seed)` initializes a separate RNG stream for each seat. There is
-no heuristic runner shortcut: build `HeuristicPolicy::new()` values and pass
-them to `Runner::new`. The main simulation CLI still offers only
-`--policy first|random`; the heuristic policy is a library and A/B-example
-option for now.
+no heuristic or missing-only runner shortcut: build `HeuristicPolicy::new()` or
+`MissingOnlyPolicy::new()` values and pass them to `Runner::new`. The main
+simulation CLI still offers only `--policy first|random`; the heuristic and
+missing-only policies are library and A/B-example options for now.
 
 ### Runner API
 
@@ -224,8 +234,8 @@ rates.
 
 `examples/policy_ab.rs` runs a balanced 2A2B comparison. By default A is
 `FirstLegalPolicy` and B is `RandomPolicy`, which reproduces the original
-behavior; `--a` and `--b` select `first`, `random`, or `heuristic` for each
-side. Every game seed is played six times with A in
+behavior; `--a` and `--b` select `first`, `random`, `heuristic`, or
+`missing-only` for each side. Every game seed is played six times with A in
 seats `[0,1] [0,2] [0,3] [1,2] [1,3] [2,3]` and B in the remaining seats, each
 placement using fresh policies and a fresh `Runner`. Each seat running
 `RandomPolicy` (on either side) starts from
@@ -240,6 +250,15 @@ cargo run --release --example policy_ab -- \
 cargo run --release --example policy_ab -- \
   --seeds 1,2,3,4 --policy-seed 0 --decision-limit 10000 --out ab-heuristic \
   --a heuristic --b first
+
+# Missing-suit-only ablation as B against the baseline, and as A against the
+# heuristic:
+cargo run --release --example policy_ab -- \
+  --seeds 1,2 --policy-seed 0 --decision-limit 10000 --out ab-missing-vs-first \
+  --a first --b missing-only
+cargo run --release --example policy_ab -- \
+  --seeds 1,2 --policy-seed 0 --decision-limit 10000 --out ab-missing-vs-heuristic \
+  --a missing-only --b heuristic
 ```
 
 | Argument | Meaning |
@@ -248,8 +267,8 @@ cargo run --release --example policy_ab -- \
 | `--policy-seed S` | `u64` seed for the per-seat random policy streams. |
 | `--decision-limit N` | Positive per-game decision limit passed to the runner. |
 | `--out DIR` | Output directory; it must not already exist. |
-| `--a STYLE` | Policy in the two A seats: `first`, `random`, or `heuristic`. Default `first`. |
-| `--b STYLE` | Policy in the two remaining seats: `first`, `random`, or `heuristic`. Default `random`. |
+| `--a STYLE` | Policy in the two A seats: `first`, `random`, `heuristic`, or `missing-only`. Default `first`. |
+| `--b STYLE` | Policy in the two remaining seats: `first`, `random`, `heuristic`, or `missing-only`. Default `random`. |
 | `-h`, `--help` | Print usage and exit. |
 
 `--a` and `--b` are optional and independent, so `--a heuristic --b random` or
@@ -275,9 +294,12 @@ Artifacts are written to the fresh output directory:
   `a_seat0`/`a_seat1`, four zero-sum scores by seat, end reason, decision
   count). Records are flushed as games finish, so a failed run keeps its
   completed records.
-- `summary.txt`: `A_mean`, `B_mean`, `Delta`, the sample standard error over
-  seed blocks (`SE`, unavailable for one seed), and each seed's `D`. The
-  summary is recomputed from the persisted `games.tsv` records after all games.
+- `summary.txt`: `A_mean`, `B_mean`, `Delta = A_mean - B_mean` (positive
+  favors A), the sample standard error over seed blocks (`SE`, unavailable for
+  one seed), and each seed's `D`. The summary is recomputed from the persisted
+  `games.tsv` records after all games. In both missing-only examples above, a
+  negative `Delta` favors the policy upgrade in B; the ablation itself appears
+  on different sides of the two comparisons.
 
 An illegal action, decision-limit exhaustion, missing terminal result, output
 error, or failed consistency check exits non-zero without writing a summary;

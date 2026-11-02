@@ -75,7 +75,12 @@ impl Policy for HeuristicPolicy {
 }
 
 /// Fewest-tile suit in the post-exchange hand, lowest suit index on a tie.
-fn choose_missing_suit(hand: &Hand, actions: &[Action]) -> Action {
+///
+/// Shared with [`super::MissingOnlyPolicy`], which uses exactly this rule for
+/// the missing-suit declaration and the deterministic baseline for every other
+/// decision. Falls back to the first legal action when the computed suit is not
+/// offered, which keeps the helper total for impossible legal lists.
+pub(super) fn choose_missing_suit(hand: &Hand, actions: &[Action]) -> Action {
     let mut best_suit = Suit::ALL[0];
     let mut best_count = usize::MAX;
     for suit in Suit::ALL {

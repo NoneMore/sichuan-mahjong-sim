@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
 
 use sichuan_mahjong_sim::policy::{
-    random_seat_seed, FirstLegalPolicy, HeuristicPolicy, Policy, RandomPolicy,
+    random_seat_seed, FirstLegalPolicy, HeuristicPolicy, MissingOnlyPolicy, Policy, RandomPolicy,
 };
 use sichuan_mahjong_sim::runner::{FinishReason, RunReport, Runner};
 use sichuan_mahjong_sim::{Seat, PLAYER_COUNT};
@@ -42,10 +42,10 @@ Options:
   --policy-seed S    u64 seed for the per-seat random policy streams.
   --decision-limit N Positive per-game decision limit.
   --out DIR          Output directory; it must not already exist.
-  --a STYLE          Policy in the two A seats: first, random, or heuristic.
-                     Default first.
-  --b STYLE          Policy in the two remaining B seats: first, random, or
-                     heuristic. Default random.
+  --a STYLE          Policy in the two A seats: first, random, heuristic, or
+                     missing-only. Default first.
+  --b STYLE          Policy in the two remaining B seats: first, random,
+                     heuristic, or missing-only. Default random.
   -h, --help         Print this help and exit; arguments after it are ignored.
 ";
 
@@ -76,6 +76,7 @@ enum Style {
     First,
     Random,
     Heuristic,
+    MissingOnly,
     #[cfg(test)]
     Rejecting,
 }
@@ -87,6 +88,7 @@ impl Style {
             Style::First => "first",
             Style::Random => "random",
             Style::Heuristic => "heuristic",
+            Style::MissingOnly => "missing-only",
             #[cfg(test)]
             Style::Rejecting => "rejecting",
         }
@@ -96,12 +98,14 @@ impl Style {
     /// deterministic policies ignore it. `HeuristicPolicy` is deterministic and
     /// has no logical checkpoint state: any internal analysis cache it may keep
     /// is discardable and never changes later choices, so a fresh instance is a
-    /// valid continuation of an existing heuristic seat.
+    /// valid continuation of an existing heuristic seat. `MissingOnlyPolicy` is
+    /// stateless for the same reason.
     fn build(self, stream_seed: u64) -> Box<dyn Policy> {
         match self {
             Style::First => Box::new(FirstLegalPolicy::new()),
             Style::Random => Box::new(RandomPolicy::new(stream_seed)),
             Style::Heuristic => Box::new(HeuristicPolicy::new()),
+            Style::MissingOnly => Box::new(MissingOnlyPolicy::new()),
             #[cfg(test)]
             Style::Rejecting => Box::new(RejectingPolicy),
         }
@@ -117,8 +121,9 @@ fn parse_style(value: &str) -> Result<Style, String> {
         "first" => Ok(Style::First),
         "random" => Ok(Style::Random),
         "heuristic" => Ok(Style::Heuristic),
+        "missing-only" => Ok(Style::MissingOnly),
         _ => Err(format!(
-            "invalid policy style '{value}': expected first, random, or heuristic"
+            "invalid policy style '{value}': expected first, random, heuristic, or missing-only"
         )),
     }
 }
@@ -1065,11 +1070,17 @@ mod tests {
 
     #[test]
     fn every_policy_style_parses_and_round_trips_through_its_name() {
-        for style in [Style::First, Style::Random, Style::Heuristic] {
+        for style in [
+            Style::First,
+            Style::Random,
+            Style::Heuristic,
+            Style::MissingOnly,
+        ] {
             assert_eq!(parse_style(style.name()).unwrap(), style);
         }
         assert_eq!(Style::First.name(), "first");
         assert_eq!(Style::Heuristic.name(), "heuristic");
+        assert_eq!(Style::MissingOnly.name(), "missing-only");
 
         let args = |values: &[&str]| {
             values
@@ -1077,7 +1088,7 @@ mod tests {
                 .map(|value| (*value).to_owned())
                 .collect::<Vec<_>>()
         };
-        for style in ["first", "random", "heuristic"] {
+        for style in ["first", "random", "heuristic", "missing-only"] {
             let parsed = parse_args(args(&[
                 "--seeds",
                 "1",
@@ -1098,6 +1109,8 @@ mod tests {
         assert!(parse_style("greedy").is_err());
         assert!(parse_style("").is_err());
         assert_eq!(parse_style("Heuristic").unwrap(), Style::Heuristic);
+        assert_eq!(parse_style("MISSING-ONLY").unwrap(), Style::MissingOnly);
+        assert!(parse_style("missing_only").is_err());
         // Supply every required run input so these cannot pass merely because
         // unrelated required options are missing.
         let invalid = |extra: &[&str]| {
@@ -1430,6 +1443,53 @@ mod tests {
             assert!(
                 parse_records(&strict, line).is_err(),
                 "line should be rejected: {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn missing_only_orientations_run_and_record_the_selected_policies() {
+        // The two experiment orientations requested for the ablation: the
+        // ablation against the baseline it delegates to, and against the
+        // heuristic whose missing-suit rule it borrows.
+        for (style_a, style_b) in [
+            (Style::First, Style::MissingOnly),
+            (Style::MissingOnly, Style::Heuristic),
+        ] {
+            let plan = plan(vec![7], style_a, style_b);
+            let mut output = Vec::new();
+            run_plan(&plan, &mut output).expect("missing-only corpus runs");
+
+            let records = parse_records(&plan, &String::from_utf8(output).unwrap())
+                .expect("missing-only records parse");
+            assert_eq!(records.len(), A_PAIRS.len());
+            for record in &records {
+                assert_eq!(
+                    record
+                        .scores
+                        .iter()
+                        .map(|score| i64::from(*score))
+                        .sum::<i64>(),
+                    0
+                );
+                assert!(record.decisions > 0);
+                assert!(record.decisions <= plan.decision_limit);
+            }
+
+            let metadata = Metadata {
+                revision: "abc".to_owned(),
+                dirty: Some(false),
+                toolchain: "rustc test".to_owned(),
+                warnings: Vec::new(),
+            };
+            let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata);
+            assert!(
+                text.contains(&format!("policy A: {}\n", style_a.name())),
+                "{text}"
+            );
+            assert!(
+                text.contains(&format!("policy B: {}\n", style_b.name())),
+                "{text}"
             );
         }
     }

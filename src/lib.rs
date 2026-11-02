@@ -24,7 +24,7 @@ pub use game::{
     Decision, DecisionStage, DiscardInfo, EndReason, Game, GameError, GameResult, LegalActions,
     Observation, PlayerView, ResponseView,
 };
-pub use policy::{FirstLegalPolicy, HeuristicPolicy, Policy, RandomPolicy};
+pub use policy::{FirstLegalPolicy, HeuristicPolicy, MissingOnlyPolicy, Policy, RandomPolicy};
 pub use runner::{BatchReport, DecisionRecord, FinishReason, RunReport, Runner, RunnerError};
 
 pub use action::{Action, ExchangeDirection, Meld, MeldError, MeldKind};
