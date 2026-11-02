@@ -97,8 +97,6 @@ policy streams between games. It printed each game's seed, scores, winners,
 finish reason, decision count, and complete `RunReport.trace`, excluding timings.
 The two 512-game outputs compared byte-for-byte equal (SHA-256
 `6006f8a9392cc135af4c86eef22124ef70d28c901c58b2fa3c7559f562d9ff90`).
-The harness and generated outputs were temporary validation artifacts, not new
-project dependencies or APIs.
 
 ### Measurement conditions
 

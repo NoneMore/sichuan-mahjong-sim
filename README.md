@@ -45,8 +45,6 @@ define intended game semantics.
   useful for coverage and replay, not playing strength.
 
 `Runner::random(seed)` initializes a separate RNG stream for each seat.
-It replays from initial streams; it does not restore mid-game policy state
-(see **Continuation and checkpoints**).
 
 ### Runner API
 
@@ -157,9 +155,9 @@ let policies = checkpoint_policies.map(|policy| Box::new(policy) as Box<dyn Poli
 let resumed = Runner::new(policies).run_game(&mut checkpoint)?;
 ```
 
-Within one runner, policy streams continue across games; a fresh runner
-restarts them. Game and policy randomness have separate states, which does
-not imply statistical independence of the derived seeds.
+Policy RNG state continues across games in the same runner; a fresh runner
+starts from its initial seeds. Separate game and policy RNG state does not
+establish statistical independence between their seed-derived sequences.
 
 ## Running
 
@@ -193,8 +191,7 @@ The CLI deliberately has a single `--seed` with two roles: it seeds the game
 sequence and, for `--policy random`, the policy streams. The library API sets
 them independently by choosing the game seed passed to `Game::new` (or
 `run_new`/`run_batch`) and the policy seed passed to `Runner::random` or to
-explicitly constructed `RandomPolicy` values. There is no separate
-`--policy-seed` flag.
+explicitly constructed `RandomPolicy` values.
 
 Unknown arguments, missing values, malformed numbers, an unknown policy, and
 `--games 0` are rejected with a non-zero exit status. `-h`/`--help` short-
@@ -205,17 +202,8 @@ per seat, win counts, total decisions, separate rules/policy timings, and
 `games/sec` plus `decisions/sec`.
 
 Measurements are single-threaded and include game construction in the batch
-wall time. There is intentionally no performance threshold in the project;
-record the command, seed, policy, and observed rates when comparing builds.
-
-## Limitations
-
-This is a fixed research baseline, not a configurable local-rules engine.
-The included policies are legality baselines, not strategic search; there
-are no training, Python, GPU, or parallel batch components. See
-[baseline exclusions](docs/baseline-rules.md) for gameplay scope.
-Performance is measured rather than guaranteed; consult the
-[validation record](docs/validation.md) for historical observations.
+wall time. When comparing builds, record the command, seed, policy, and observed
+rates.
 
 ## Documentation
 

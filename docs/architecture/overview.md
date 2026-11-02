@@ -1,9 +1,8 @@
 # Current architecture
 
-This is a navigation map of the **implemented** architecture, not a parallel
-API specification. Source code is evidence of current behavior; the
-[governance guide](../governance.md) explains document authority, and
-[baseline rules](../baseline-rules.md) define intended gameplay.
+This page maps implemented component responsibilities, information boundaries,
+and code locations. The [baseline rules](../baseline-rules.md) define intended
+gameplay.
 
 ## Responsibilities and code navigation
 
@@ -15,7 +14,7 @@ Pure `eval` and `rules` helpers supply facts, not competing state owners.
 | Area | Code | Responsibility |
 | --- | --- | --- |
 | Types and actions | [`tile.rs`](../../src/tile.rs), [`hand.rs`](../../src/hand.rs), [`seat.rs`](../../src/seat.rs), [`action.rs`](../../src/action.rs) | Tiles, counted hands, seats, actions, and melds |
-| Hand evaluation | [`eval.rs`](../../src/eval.rs) | Winning shapes and waiting tiles, not strategy search |
+| Hand evaluation | [`eval.rs`](../../src/eval.rs) | Winning shapes and waiting tiles |
 | Fixed-rule helpers | [`rules.rs`](../../src/rules.rs) | Legality and settlement facts used by `Game` |
 | Authoritative game | [`game.rs`](../../src/game.rs), [`game/tests.rs`](../../src/game/tests.rs) | Decisions, stage progression, claims, settlement, and invariants |
 | Policies | [`policy.rs`](../../src/policy.rs) | `Policy` trait and legal baseline choices |
@@ -44,9 +43,12 @@ Policies do not receive `Game` or its privileged diagnostics.
 
 Physical tiles are counted once, including a discard claimed by multiple
 winners: the single discard record owns that tile, while winning-shape
-evaluation may use a virtual copy. `Game::debug_validate` checks ownership
-and score invariants; it is not a policy-facing API. See
-[the game implementation](../../src/game.rs).
+evaluation may use a virtual copy. `PlayerView::concealed_count` reports only
+physical concealed tiles: a discard or robbing winner has `13 - 3 * melds`
+tiles rather than the `14 - 3 * melds` of a self-draw winner. The winning tile
+is recovered from the referenced discard record for scoring.
+`Game::debug_validate` checks ownership and score invariants; it is not a
+policy-facing API. See [the game implementation](../../src/game.rs).
 
 ## Reproducibility boundary
 
@@ -67,5 +69,4 @@ state held by policies. To continue exactly with stateful policies such as
   seeded transitions, tile conservation, and zero-sum settlement.
 - [`src/game/tests.rs`](../../src/game/tests.rs): focused state and rule cases.
 
-These are test entry points, not a claim of exhaustive correctness.
 Build and test commands live in the [README](../../README.md).

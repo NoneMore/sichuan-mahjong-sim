@@ -148,15 +148,6 @@ discarded or robbed added-kong tile is counted exactly once:
   physical tile in the discard history. A self-draw winning tile stays in the
   winner's concealed hand.
 
-The public view reports this ownership choice directly. The
-`PlayerView::concealed_count` field is the physical size of the seat's
-concealed hand, not a scoring-hand size. A discard or robbing winner shows one
-concealed tile fewer than a self-draw winner (`13 - 3 * melds` instead of
-`14 - 3 * melds`); that is the ownership record, not a missing tile. Scoring
-reconstructs the complete winning hand from the winner's association with the
-discard record, and no virtual tile is inserted into the hand or counted by
-the view.
-
 ### 4.5 Peng
 
 A peng claim takes the discarded tile plus two matching tiles from the
@@ -221,11 +212,6 @@ count as sets.
 - A win is legal only when the player holds no missing-suit tiles in the
   concealed hand or any meld.
 
-Pure evaluation lives in `eval::is_winning`, `eval::is_seven_pairs`,
-`eval::is_standard_winning`, and `eval::win_shape`. Those functions take the
-concealed hand plus a meld count. Missing-suit legality is applied separately by
-`rules::can_hu`.
-
 ## 6. Fan and payments
 
 ### 6.1 Fan table
@@ -273,8 +259,7 @@ Let `F` be the capped fan total of a winner.
   from the discarder. The discarder pays each winner separately; there is no
   splitting or shared cap.
 
-`rules::win_payment` exposes these facts. A win is settled immediately; the
-winner then leaves the hand.
+Win payments are settled when the Hu is resolved.
 
 ### 6.3 Kong payments
 
@@ -330,12 +315,6 @@ Only players who have not won and are not flower pigs participate.
   over all of that player's legal waits, scored as a plain discard win (no event
   bonus).
 - Tenpai participants do not pay each other.
-
-`rules::max_discard_win_fan` computes the shape-based maximum. The `Game`
-layer excludes missing-suit waits before using it, and derives the tenpai flag
-from whether any such legal wait remains, so the recorded tenpai state and
-maximum fan always agree. `rules::settle_wall_exhaustion` returns the
-flower-pig and big-call transfers.
 
 ### 7.4 Kong-income refund (退税)
 
