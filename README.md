@@ -156,7 +156,8 @@ let resumed = Runner::new(policies).run_game(&mut checkpoint)?;
 ```
 
 Policy RNG state continues across games in the same runner; a fresh runner
-starts from its initial seeds.
+starts from its initial seeds. Separate game and policy RNG state does not
+establish statistical independence between their seed-derived sequences.
 
 ## Running
 
