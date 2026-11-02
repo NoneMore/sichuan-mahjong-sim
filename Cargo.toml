@@ -11,3 +11,9 @@ name = "sichuan_mahjong_sim"
 path = "src/lib.rs"
 
 [dependencies]
+
+# One-off experiment tooling only: `examples/policy_ab.rs` exchanges JSON with
+# an external Python worker. The library itself has no runtime dependencies.
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

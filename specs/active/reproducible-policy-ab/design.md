@@ -1,8 +1,9 @@
 # Reproducible policy A/B experiment
 
-This Change proposes the first mixed-policy experiment; it does not describe
-implemented experiment tooling. The simulator's [fixed rules](../../../docs/baseline-rules.md)
-and `Game` remain unchanged.
+This Change defines the first mixed-policy experiment. This document describes
+experiment intent; the [experiment guide](../../../experiments/policy_ab/README.md)
+describes the implemented tooling. The simulator's
+[fixed rules](../../../docs/baseline-rules.md) and `Game` remain unchanged.
 
 ## Question and scope
 

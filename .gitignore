@@ -1,4 +1,8 @@
 /target/
 
+# Generated experiment outputs and Python bytecode are not source evidence.
+/experiments/policy_ab/runs/
+/experiments/policy_ab/__pycache__/
+
 # Local agent configuration and runtime state are never published.
 /.pi/

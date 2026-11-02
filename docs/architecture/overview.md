@@ -20,6 +20,7 @@ Pure `eval` and `rules` helpers supply facts, not competing state owners.
 | Authoritative game | [`game.rs`](../../src/game.rs), [`game/tests.rs`](../../src/game/tests.rs) | Decisions, stage progression, claims, settlement, and invariants |
 | Policies | [`policy.rs`](../../src/policy.rs) | `Policy` trait and legal baseline choices |
 | Execution | [`runner.rs`](../../src/runner.rs), [`main.rs`](../../src/main.rs) | Driving games, aggregating results, and the native CLI |
+| Optional policy experiment | [`policy_ab.rs`](../../examples/policy_ab.rs), [`experiment guide`](../../experiments/policy_ab/README.md) | Fallible external-heuristic orchestration and seed-block analysis, separate from the library and native CLI |
 
 Public modules and exports are declared in [`src/lib.rs`](../../src/lib.rs).
 
@@ -54,6 +55,22 @@ Cloning `Game` preserves the authoritative position and RNG, **not** the
 state held by policies. To continue exactly with stateful policies such as
 `RandomPolicy`, checkpoint their state as well. The
 [README checkpoint examples](../../README.md) cover construction and replay.
+
+## Optional experiment boundary
+
+The `policy_ab` Cargo example also uses `next_decision` / `submit` directly,
+without changing `Game`, `Policy`, or `Runner`. It sends only the acting
+player's hand, missing suit, and complete legal candidates to a long-lived
+Python worker importing the original ninone heuristic. Stable candidate IDs
+map responses back to Rust actions; `Game` remains authoritative for legality
+and settlement. JSON support is a development-only dependency, and the
+external Python repository is not a simulator runtime dependency.
+
+The Python experiment tooling owns seed sampling, pilot/main separation,
+reproducibility evidence, complete six-placement validation, and whole-seed
+block bootstrap analysis. This is one experiment, not a general cross-language
+policy interface. See the [experiment guide](../../experiments/policy_ab/README.md)
+for the operational contract and verification commands.
 
 ## Test navigation
 

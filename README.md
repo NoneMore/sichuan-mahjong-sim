@@ -48,6 +48,17 @@ define intended game semantics.
 It replays from initial streams; it does not restore mid-game policy state
 (see **Continuation and checkpoints**).
 
+### Reproducible policy A/B experiment
+
+The optional [`experiments/policy_ab`](experiments/policy_ab/README.md) tooling
+compares the imported ninone heuristic with `FirstLegalPolicy` in balanced
+2A2B tables. A separate Rust example drives the public decision interface;
+a long-lived Python worker is an experiment-only dependency, not part of the
+simulator library or its native CLI. The workflow separates pilot and main
+samples, records replay evidence, and analyzes whole seed blocks rather than
+individual seats or placements. See the experiment guide for setup, checks,
+and limitations.
+
 ### Runner API
 
 ```rust
@@ -163,8 +174,9 @@ not imply statistical independence of the derived seeds.
 
 ## Running
 
-The crate has no runtime dependencies. Build and test with the stable Rust
-toolchain:
+The library and native CLI have no runtime dependencies. The optional A/B
+experiment uses development-only JSON dependencies and an external Python
+worker. Build and test with the stable Rust toolchain:
 
 ```text
 cargo build --release
@@ -212,7 +224,9 @@ record the command, seed, policy, and observed rates when comparing builds.
 
 This is a fixed research baseline, not a configurable local-rules engine.
 The included policies are legality baselines, not strategic search; there
-are no training, Python, GPU, or parallel batch components. See
+are no training, GPU, or parallel batch components. The optional external
+Python heuristic is confined to the one-off A/B experiment, not the core
+policy API. See
 [baseline exclusions](docs/baseline-rules.md) for gameplay scope.
 Performance is measured rather than guaranteed; consult the
 [validation record](docs/validation.md) for historical observations.
