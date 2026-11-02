@@ -22,6 +22,14 @@ fn hand(tiles: &[Tile]) -> Hand {
     Hand::from_tiles(tiles).expect("legal hand")
 }
 
+fn suit_hand(wan: &[u8], tong: &[u8], tiao: &[u8]) -> Hand {
+    let mut tiles = Vec::new();
+    for (suit, ranks) in [(Suit::Wan, wan), (Suit::Tong, tong), (Suit::Tiao, tiao)] {
+        tiles.extend(ranks.iter().map(|&rank| tile(suit, rank)));
+    }
+    hand(&tiles)
+}
+
 fn view<'a>(seat: Seat, own_hand: &Hand, missing: Option<Suit>) -> [PlayerView<'a>; PLAYER_COUNT] {
     std::array::from_fn(|index| {
         let view_seat = Seat::new(index).expect("seat index");
@@ -100,21 +108,7 @@ fn missing_suit_actions() -> [Action; 3] {
 fn missing_suit_matches_the_heuristic_fewest_tile_rule() {
     // Tong holds the fewest tiles, so the heuristic rule must win even though
     // Wan is listed first and the baseline would take it.
-    let hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-    ]);
+    let hand = suit_hand(&[1, 2, 3, 4], &[1, 2, 3], &[1, 2, 3, 4, 5, 6]);
     let actions = missing_suit_actions();
     let decision = decision(&hand, DecisionStage::MissingSuit, &actions);
 
@@ -129,21 +123,7 @@ fn missing_suit_tie_uses_the_lowest_suit_index_like_the_heuristic() {
     // Wan and Tong tie on two tiles; Tiao is larger. Both policies must pick
     // Wan, regardless of the legal list order. The baseline would instead
     // pick the first listed action, Tiao, from the reversed list below.
-    let hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-        tile(Suit::Tiao, 7),
-        tile(Suit::Tiao, 8),
-        tile(Suit::Tiao, 9),
-    ]);
+    let hand = suit_hand(&[1, 2], &[1, 2], &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
     // Reverse the legal list so the assertion cannot pass by list order alone.
     let actions = [
         Action::ChooseMissing(Suit::Tiao),
@@ -161,21 +141,7 @@ fn missing_suit_tie_uses_the_lowest_suit_index_like_the_heuristic() {
 fn missing_suit_falls_back_to_the_first_legal_action_like_the_heuristic() {
     // Wan is the fewest-tile suit but is not offered, so both analysis policies
     // fall back to the first legal action.
-    let hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-        tile(Suit::Tiao, 7),
-    ]);
+    let hand = suit_hand(&[1, 2], &[1, 2, 3, 4], &[1, 2, 3, 4, 5, 6, 7]);
     let actions = [
         Action::ChooseMissing(Suit::Tiao),
         Action::ChooseMissing(Suit::Tong),
@@ -191,21 +157,7 @@ fn missing_suit_falls_back_to_the_first_legal_action_like_the_heuristic() {
 #[test]
 fn exchange_and_turn_decisions_keep_the_baseline_choice() {
     // Exchange: fewest-tile eligible suit, lowest three tiles, as the baseline.
-    let exchange_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-    ]);
+    let exchange_hand = suit_hand(&[1, 2, 3], &[1, 2, 3, 4], &[1, 2, 3, 4, 5, 6]);
     let exchange = exchange_decision(&exchange_hand, [true, true, true]);
     let (first_exchange, _) = references(&exchange);
     assert_eq!(
@@ -221,22 +173,7 @@ fn exchange_and_turn_decisions_keep_the_baseline_choice() {
     // Turn: three complete sets, a Tiao 7/8 partial run, a Tiao 9 pair, and a
     // loose Tong 9. The baseline takes the first listed discard (the Tiao 9 that
     // keeps the hand 1-shanten); the heuristic keeps the tenpai Tong 9 discard.
-    let turn_hand = hand(&[
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 6),
-        tile(Suit::Tong, 9),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 7),
-        tile(Suit::Tiao, 8),
-        tile(Suit::Tiao, 9),
-        tile(Suit::Tiao, 9),
-    ]);
+    let turn_hand = suit_hand(&[], &[1, 2, 3, 4, 5, 6, 9], &[1, 2, 3, 7, 8, 9, 9]);
     let turn_actions = [
         Action::Discard(tile(Suit::Tiao, 9)),
         Action::Discard(tile(Suit::Tiao, 8)),
@@ -267,22 +204,7 @@ fn exchange_and_turn_decisions_keep_the_baseline_choice() {
 
 #[test]
 fn a_legal_hu_is_preferred_before_any_analysis() {
-    let hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 7),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tiao, 7),
-    ]);
+    let hand = suit_hand(&[1, 2, 3, 7, 7], &[1, 2, 3, 7, 7], &[1, 2, 3, 7]);
     let actions = [
         Action::Discard(tile(Suit::Tiao, 7)),
         Action::Hu,

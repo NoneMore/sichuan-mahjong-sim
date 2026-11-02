@@ -22,6 +22,14 @@ fn hand(tiles: &[Tile]) -> Hand {
     Hand::from_tiles(tiles).expect("legal hand")
 }
 
+fn suit_hand(wan: &[u8], tong: &[u8], tiao: &[u8]) -> Hand {
+    let mut tiles = Vec::new();
+    for (suit, ranks) in [(Suit::Wan, wan), (Suit::Tong, tong), (Suit::Tiao, tiao)] {
+        tiles.extend(ranks.iter().map(|&rank| tile(suit, rank)));
+    }
+    hand(&tiles)
+}
+
 fn view<'a>(
     seat: Seat,
     own_hand: &Hand,
@@ -185,21 +193,7 @@ fn public_ownership_counts_each_physical_tile_once() {
 
 #[test]
 fn exchange_matches_the_baseline_and_missing_suit_uses_fewest_tiles() {
-    let exchange_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-    ]);
+    let exchange_hand = suit_hand(&[1, 2, 3], &[1, 2, 3, 4], &[1, 2, 3, 4, 5, 6]);
     let mut policy = HeuristicPolicy::new();
     let exchange = Decision {
         seat: Seat::DEALER,
@@ -228,21 +222,7 @@ fn exchange_matches_the_baseline_and_missing_suit_uses_fewest_tiles() {
         Action::ChooseMissing(Suit::Tong),
         Action::ChooseMissing(Suit::Tiao),
     ];
-    let missing_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-    ]);
+    let missing_hand = suit_hand(&[1, 2, 3, 4], &[1, 2, 3], &[1, 2, 3, 4, 5, 6]);
     let missing = decision(
         &missing_hand,
         &[],
@@ -255,21 +235,7 @@ fn exchange_matches_the_baseline_and_missing_suit_uses_fewest_tiles() {
     assert_eq!(policy.choose(&missing), Action::ChooseMissing(Suit::Tong));
 
     // Tie on count: Wan wins over Tong because of fixed suit order.
-    let tie_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-        tile(Suit::Tiao, 7),
-        tile(Suit::Tiao, 8),
-        tile(Suit::Tiao, 9),
-    ]);
+    let tie_hand = suit_hand(&[1, 2], &[1, 2], &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
     let tie = decision(
         &tie_hand,
         &[],
@@ -285,22 +251,7 @@ fn exchange_matches_the_baseline_and_missing_suit_uses_fewest_tiles() {
 #[test]
 fn hu_and_sole_actions_short_circuit_analysis() {
     let mut policy = HeuristicPolicy::new();
-    let impossible = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 7),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 7),
-        tile(Suit::Wan, 2),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let impossible = suit_hand(&[1, 4, 7, 2, 9, 9], &[1, 4, 7, 2], &[1, 4, 7, 2]);
 
     let hu_actions = [Action::Hu, Action::Discard(tile(Suit::Wan, 2))];
     let hu = decision(
@@ -365,22 +316,7 @@ fn hu_and_sole_actions_short_circuit_analysis() {
 
 #[test]
 fn forced_missing_suit_discard_uses_fixed_tile_order() {
-    let hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Tiao, 3),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 5),
-        tile(Suit::Tiao, 6),
-    ]);
+    let hand = suit_hand(&[1, 2, 3, 4], &[1, 2, 3, 4], &[1, 2, 3, 4, 5, 6]);
     // Deliberately list the legal forced discards out of tile order; the
     // policy must use fixed tile order, not the supplied list order.
     let actions = [
@@ -637,21 +573,7 @@ fn peng_must_strictly_lower_shanten() {
 
     // Pass is already tenpai. The peng leaves the same distance but more
     // unseen improving copies, which is explicitly insufficient.
-    let tenpai = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let tenpai = suit_hand(&[1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 9], &[], &[]);
     let claim = tile(Suit::Wan, 9);
     let discards = [discard_info(source, claim, None, [false; 4])];
     let public = public_of(&discards, &[]);
@@ -681,21 +603,7 @@ fn peng_must_strictly_lower_shanten() {
     assert_eq!(HeuristicPolicy::new().choose(&choice), Action::Pass);
 
     // A peng that creates a set strictly lowers shanten and is accepted.
-    let open = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tong, 8),
-        tile(Suit::Tong, 9),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-        tile(Suit::Wan, 9),
-    ]);
+    let open = suit_hand(&[1, 1, 2, 3, 4, 5, 6, 9], &[7, 8, 9, 5, 5], &[]);
     let claim = tile(Suit::Wan, 1);
     let discards = [discard_info(source, claim, None, [false; 4])];
     let public = public_of(&discards, &[]);
@@ -728,21 +636,7 @@ fn peng_must_strictly_lower_shanten() {
 fn peng_cannot_use_the_seven_pairs_route_after_a_meld() {
     let missing = Suit::Tiao;
     let source = Seat::new(1).expect("seat");
-    let six_pairs = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 6),
-        tile(Suit::Tong, 6),
-        tile(Suit::Wan, 7),
-    ]);
+    let six_pairs = suit_hand(&[1, 1, 7], &[2, 2, 3, 3, 4, 4, 5, 5, 6, 6], &[]);
     let claim = tile(Suit::Wan, 1);
     let discards = [discard_info(source, claim, None, [false; 4])];
     let public = public_of(&discards, &[]);
@@ -776,22 +670,7 @@ fn peng_cannot_use_the_seven_pairs_route_after_a_meld() {
 #[test]
 fn concealed_kong_gate_rejects_equal_shanten_with_less_ukeire() {
     let missing = Suit::Tiao;
-    let kong_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let kong_hand = suit_hand(&[1, 1, 1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9], &[], &[]);
     let kong_tile = tile(Suit::Wan, 1);
     let public = [0u8; TILE_KINDS];
 
@@ -831,22 +710,7 @@ fn concealed_kong_gate_rejects_equal_shanten_with_less_ukeire() {
 #[test]
 fn eligible_kong_is_preferred_on_equal_progress() {
     let missing = Suit::Tiao;
-    let kong_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tong, 8),
-        tile(Suit::Tong, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let kong_hand = suit_hand(&[1, 1, 1, 1, 2, 3, 4, 9], &[1, 2, 3, 7, 8, 9], &[]);
     let kong_tile = tile(Suit::Wan, 1);
     let discard_tile = tile(Suit::Wan, 4);
     let public = [0u8; TILE_KINDS];
@@ -889,21 +753,7 @@ fn eligible_kong_is_preferred_on_equal_progress() {
 fn open_kong_gate_rejects_equal_shanten_with_less_ukeire() {
     let missing = Suit::Tiao;
     let source = Seat::new(1).expect("seat");
-    let hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let hand = suit_hand(&[1, 1, 1, 2, 3, 4, 5, 6, 9, 9], &[1, 2, 3], &[]);
     let claim = tile(Suit::Wan, 1);
     let discards = [discard_info(source, claim, None, [false; 4])];
     let public = public_of(&discards, &[]);
@@ -1089,22 +939,7 @@ fn hypothetical_meld_positions_conserve_physical_ownership() {
     let public = public_of(&discards, &[]);
 
     // Concealed kong on a turn.
-    let turn_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tong, 8),
-        tile(Suit::Tong, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let turn_hand = suit_hand(&[1, 1, 1, 1, 2, 3, 4, 9], &[1, 2, 3, 7, 8, 9], &[]);
     let (_, concealed, _, concealed_public) = kong_position(
         Action::ConcealedKong(tile(Suit::Wan, 1)),
         &turn_hand,
@@ -1120,19 +955,7 @@ fn hypothetical_meld_positions_conserve_physical_ownership() {
     // Added kong on a turn: the existing peng is already public ownership.
     let melds = [Meld::peng(tile(Suit::Wan, 2), source)];
     let public_with_peng = public_of(&discards, &melds);
-    let added_hand = hand(&[
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-        tile(Suit::Wan, 9),
-    ]);
+    let added_hand = suit_hand(&[2, 3, 4, 5, 6, 7, 8, 9, 9], &[5, 5], &[]);
     let (_, after_added, _, added_public) = kong_position(
         Action::AddedKong(tile(Suit::Wan, 2)),
         &added_hand,
@@ -1149,21 +972,7 @@ fn hypothetical_meld_positions_conserve_physical_ownership() {
     let claim = tile(Suit::Wan, 1);
     let response_discards = [discard_info(source, claim, None, [false; 4])];
     let response_public = public_of(&response_discards, &[]);
-    let response_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let response_hand = suit_hand(&[1, 1, 1, 2, 3, 4, 5, 6, 9, 9], &[1, 2, 3], &[]);
     let (_, after_peng, _, peng_public) = super::claim_position(
         Action::Peng,
         &response_hand,
@@ -1213,19 +1022,7 @@ fn added_kong_path_is_evaluated_and_can_be_chosen() {
     let missing = Suit::Tiao;
     let source = Seat::new(1).expect("seat");
     let melds = [Meld::peng(tile(Suit::Wan, 2), source)];
-    let hand = hand(&[
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-        tile(Suit::Wan, 9),
-    ]);
+    let hand = suit_hand(&[2, 3, 4, 5, 6, 7, 8, 9, 9], &[5, 5], &[]);
     let kong_tile = tile(Suit::Wan, 2);
     let public = public_of(&[], &melds);
 
@@ -1343,22 +1140,7 @@ fn repeated_decisions_are_cache_and_constructor_independent() {
 
     // A different decision cannot change the next result: the policy holds no
     // logical history or decision cache.
-    let other_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 7),
-        tile(Suit::Tong, 1),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tiao, 1),
-        tile(Suit::Tiao, 4),
-        tile(Suit::Tiao, 7),
-        tile(Suit::Wan, 2),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tiao, 2),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let other_hand = suit_hand(&[1, 4, 7, 2, 9, 9], &[1, 4, 7, 2], &[1, 4, 7, 2]);
     let other_actions = [Action::Discard(tile(Suit::Wan, 7))];
     let other = decision(
         &other_hand,

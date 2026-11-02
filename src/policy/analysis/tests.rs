@@ -21,6 +21,14 @@ fn hand(tiles: &[Tile]) -> Hand {
     Hand::from_tiles(tiles).expect("legal hand")
 }
 
+fn suit_hand(wan: &[u8], tong: &[u8], tiao: &[u8]) -> Hand {
+    let mut tiles = Vec::new();
+    for (suit, ranks) in [(Suit::Wan, wan), (Suit::Tong, tong), (Suit::Tiao, tiao)] {
+        tiles.extend(ranks.iter().map(|&rank| tile(suit, rank)));
+    }
+    hand(&tiles)
+}
+
 fn capacities(melds: &[Meld], missing: Suit) -> [u8; TILE_KINDS] {
     let mut cap = [COPIES_PER_TILE; TILE_KINDS];
     for rank in 0..9 {
@@ -291,62 +299,19 @@ fn seven_pairs_targets_match_the_oracle_and_quads_count_twice() {
     let missing = Suit::Tiao;
 
     // Six pairs plus a singleton: tenpai on 6T.
-    let six_pairs = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 6),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tong, 7),
-    ]);
+    let six_pairs = suit_hand(&[1, 1], &[2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 7], &[]);
     let mut evaluator = DistanceEvaluator::new(&[], missing).unwrap();
     assert_eq!(evaluator.deficit(&six_pairs), 1);
     assert_matches_oracle(&six_pairs, &[], missing);
 
     // A quad supplies two pair units: 1111 + four pairs + singleton.
-    let quad = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 6),
-    ]);
+    let quad = suit_hand(&[1, 1, 1, 1], &[2, 2, 3, 3, 4, 4, 5, 5, 6], &[]);
     let mut evaluator = DistanceEvaluator::new(&[], missing).unwrap();
     assert_eq!(evaluator.deficit(&quad), 1);
     assert_matches_oracle(&quad, &[], missing);
 
     // Complete seven pairs has zero deficit.
-    let complete = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 6),
-        tile(Suit::Tong, 6),
-        tile(Suit::Tong, 7),
-        tile(Suit::Tong, 7),
-    ]);
+    let complete = suit_hand(&[1, 1], &[2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7], &[]);
     let mut evaluator = DistanceEvaluator::new(&[], missing).unwrap();
     assert_eq!(evaluator.deficit(&complete), 0);
     assert_eq!(
@@ -357,18 +322,7 @@ fn seven_pairs_targets_match_the_oracle_and_quads_count_twice() {
 
     // Any declared meld disables the seven-pairs route.
     let melds = [Meld::peng(tile(Suit::Tong, 9), Seat::DEALER)];
-    let open_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 2),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 3),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 4),
-        tile(Suit::Tong, 5),
-        tile(Suit::Tong, 5),
-    ]);
+    let open_hand = suit_hand(&[1, 1], &[2, 2, 3, 3, 4, 4, 5, 5], &[]);
     assert_matches_oracle(&open_hand, &melds, missing);
 }
 
@@ -376,18 +330,7 @@ fn seven_pairs_targets_match_the_oracle_and_quads_count_twice() {
 fn own_meld_copies_restrict_target_capacity() {
     let missing = Suit::Tiao;
     // Without the kong this hand wins on 3W; the kong owns all four 3W copies.
-    let concealed = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let concealed = suit_hand(&[1, 2, 4, 5, 6, 7, 8, 9, 9, 9], &[], &[]);
     let melds = [Meld::concealed_kong(tile(Suit::Wan, 3))];
     let mut evaluator = DistanceEvaluator::new(&melds, missing).unwrap();
     assert!(
@@ -424,21 +367,7 @@ fn zero_shanten_agrees_with_structural_waits() {
 #[test]
 fn publicly_exhausted_waits_keep_tenpai_with_zero_ukeire() {
     let missing = Suit::Tiao;
-    let ready = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let ready = suit_hand(&[1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 9], &[], &[]);
     let mut evaluator = DistanceEvaluator::new(&[], missing).unwrap();
     let deficit = evaluator.deficit(&ready);
     assert_eq!(deficit, 1);
@@ -459,21 +388,7 @@ fn publicly_exhausted_waits_keep_tenpai_with_zero_ukeire() {
 #[test]
 fn ukeire_sums_unseen_improving_copies() {
     let missing = Suit::Tiao;
-    let ready = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let ready = suit_hand(&[1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 9], &[], &[]);
     let mut evaluator = DistanceEvaluator::new(&[], missing).unwrap();
     let deficit = evaluator.deficit(&ready);
 
@@ -702,15 +617,7 @@ fn known_open_waits_and_own_meld_caps() {
         Meld::peng(tile(Suit::Tong, 5), Seat::DEALER),
         Meld::peng(tile(Suit::Tong, 6), Seat::DEALER),
     ];
-    let open = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-    ]);
+    let open = suit_hand(&[1, 2, 3, 4, 5, 6, 7], &[], &[]);
     let mut evaluator = DistanceEvaluator::new(&two_melds, missing).expect("valid melds");
     assert_eq!(evaluator.deficit(&open), 1);
     let waits: Vec<Tile> = eval::waiting_tiles(&open, &two_melds)
@@ -721,18 +628,7 @@ fn known_open_waits_and_own_meld_caps() {
 
     // One declared meld: the 10-tile concealed part waits on the pair tile.
     let one_meld = [Meld::peng(tile(Suit::Tong, 5), Seat::DEALER)];
-    let one_meld_hand = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 3),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let one_meld_hand = suit_hand(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 9], &[], &[]);
     let mut evaluator = DistanceEvaluator::new(&one_meld, missing).expect("valid melds");
     assert_eq!(evaluator.deficit(&one_meld_hand), 1);
     let waits: Vec<Tile> = eval::waiting_tiles(&one_meld_hand, &one_meld)
@@ -743,18 +639,7 @@ fn known_open_waits_and_own_meld_caps() {
 
     // A concealed kong owns all four 3W copies, so 3W cannot be a target.
     let kong = [Meld::concealed_kong(tile(Suit::Wan, 3))];
-    let capped = hand(&[
-        tile(Suit::Wan, 1),
-        tile(Suit::Wan, 2),
-        tile(Suit::Wan, 4),
-        tile(Suit::Wan, 5),
-        tile(Suit::Wan, 6),
-        tile(Suit::Wan, 7),
-        tile(Suit::Wan, 8),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-        tile(Suit::Wan, 9),
-    ]);
+    let capped = suit_hand(&[1, 2, 4, 5, 6, 7, 8, 9, 9, 9], &[], &[]);
     let mut evaluator = DistanceEvaluator::new(&kong, missing).expect("valid melds");
     assert!(evaluator.deficit(&capped) > 1);
     assert!(!eval::waiting_tiles(&capped, &kong).contains(&tile(Suit::Wan, 3)));
