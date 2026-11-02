@@ -28,24 +28,27 @@ with genuinely agent-specific guidance kept separate.
 | Setup, build, run, test | [README](../README.md), especially **Running** |
 | Fixed game semantics | [Baseline rules](baseline-rules.md) |
 | Current implementation | Relevant `src/` code, `tests/`, and executable evidence |
-| Component boundaries | README **Architecture**, then code |
-| Initial design rationale | [Initial design](../xzd-rust-simulator-design-revised.md) |
+| Component boundaries | [Current architecture](architecture/overview.md), then code |
+| Initial design rationale | [Historical initial design](history/xzd-rust-simulator-design-revised.md) |
 | Past test coverage and measurements | [Validation](validation.md) |
 | Proposed change intent | `specs/active/<change>/`, when present |
 | Consequential decision history | `docs/adr/`, when present |
 
-The [implementation plan](implementation-plan.md) and
-[integration contract](integration-contract.md) record initial work and
-coordination, not necessarily current behavior or APIs. Read only the material
-relevant to the task; reading order does not confer authority.
+The [historical implementation plan](history/implementation-plan.md) and
+[historical integration contract](history/integration-contract.md) record
+initial work and coordination, not current instructions or API contracts.
+These and the [initial design](history/xzd-rust-simulator-design-revised.md)
+are retained under [history](history/README.md) for context. Read only the
+material relevant to the task; reading order does not confer authority.
 
 ## Architecture knowledge
 
-README **Architecture** is the current high-level entry for Game, Policy, and
-Runner. Consult code for details. If a separate navigation guide becomes
-useful, use `docs/architecture/` for implemented responsibilities, boundaries,
-and code pointers. Label prospective designs clearly; reflect implemented ADR
-outcomes without repeating decision rationale or function-level detail.
+[Current architecture](architecture/overview.md) maps implemented components,
+boundaries, and code pointers; README **Architecture** is the short entry.
+Consult code for behavior. Keep the architecture overview aligned with
+implemented changes, label prospective designs distinctly, and reflect
+implemented ADR outcomes without repeating decision rationale or function-level
+detail.
 
 ## Change-centered work
 
@@ -78,8 +81,8 @@ and consequences; routine fixes need no ADR. The existing initial design
 remains historical context and need not be split into ADRs.
 
 ADRs preserve **why**, not a second registry of current architecture. Reflect
-implemented outcomes in README Architecture or `docs/architecture/` without
-copying the historical rationale. When an ADR fully or partially supersedes an
+implemented outcomes in [current architecture](architecture/overview.md)
+without copying the historical rationale. When an ADR fully or partially supersedes an
 older one, the **new** ADR identifies the old decision and affected scope;
 do not edit the old ADR to point forward. Older ADRs may move to
 `docs/adr/archive/` while remaining available as history.

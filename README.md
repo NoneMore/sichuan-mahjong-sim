@@ -52,31 +52,13 @@ zero-sum, including kong refunds and wall-exhaustion penalties.
 
 ## Architecture
 
-```text
-Runner ──drives──> Game
-   │                 │
-   └──calls──> Policy │
-                      └──owns authoritative state, legality, settlement
-```
-
-- `src/game.rs` owns the authoritative game state, the pending decision, legal
-  action computation, response arbitration, settlement, and cloning.
-- `src/policy.rs` defines the `Policy` trait and the two legal baseline
-  policies. A policy receives only `Decision`: the acting seat, the player's own
-  hand and public observation fields, and the current legal-action constraint.
-  It never receives `&Game`, another concealed hand, or wall order.
-- `src/runner.rs` drives a new or supplied game, calls one policy per seat,
-  records decisions, and separates policy time from rule-driving time. It
-  treats a rejected action as an error; it never silently substitutes another
-  action or retries forever.
-- `src/main.rs` is a small reproducible self-play CLI.
-- `src/tile.rs`, `src/action.rs`, `src/seat.rs`, `src/eval.rs`, and
-  `src/rules.rs` are the pure foundation shared by Game and policies.
-
-The exchange policy does not enumerate all triples. It selects one suit from
-the game's eligible-suit constraint and collects three tiles from the player's
-own hand. The random policy owns an independent SplitMix64 RNG and never reads
-game randomness.
+The simulator is one Rust crate with an authoritative `Game`, a `Runner`
+that drives games, and `Policy` implementations that choose actions from
+player-visible decisions. Pure tile, hand, rule, and winning-shape helpers
+support the core. See the [current architecture overview](docs/architecture/overview.md)
+for implemented component responsibilities, decision flow, information
+boundaries, and code navigation. The [baseline rules](docs/baseline-rules.md)
+define intended game semantics.
 
 ### Policies
 
@@ -288,13 +270,13 @@ produces uncorrelated game and policy randomness.
 
 ## Documentation
 
-- [`docs/governance.md`](docs/governance.md) - shared project governance conventions
-  for contributors and coding agents.
-- [`docs/validation.md`](docs/validation.md) - validation coverage and measured native CPU baseline.
-- [`docs/baseline-rules.md`](docs/baseline-rules.md) - normative fixed rules.
-- [`docs/integration-contract.md`](docs/integration-contract.md) - Game/Runner
-  boundary.
-- [`docs/implementation-plan.md`](docs/implementation-plan.md) - implementation
-  slices and completion checks.
-- [`xzd-rust-simulator-design-revised.md`](xzd-rust-simulator-design-revised.md)
-  - architecture decisions and scope.
+- [`docs/governance.md`](docs/governance.md) - shared conventions for
+  contributors and coding agents.
+- [`docs/architecture/overview.md`](docs/architecture/overview.md) -
+  navigation map of the current implemented architecture.
+- [`docs/baseline-rules.md`](docs/baseline-rules.md) - intended fixed game rules.
+- [`docs/validation.md`](docs/validation.md) - recorded validation coverage
+  and historical native CPU measurements, not a current performance promise.
+- [`docs/history/`](docs/history/README.md) - archived initial design,
+  implementation plan, and integration coordination documents; historical
+  context, not current implementation specifications.

@@ -1,6 +1,6 @@
 # Implementation slices
 
-The architecture baseline is [the design](../xzd-rust-simulator-design-revised.md). This file records execution boundaries and completion checks, not additional product scope.
+The architecture baseline is [the design](xzd-rust-simulator-design-revised.md). This file records execution boundaries and completion checks, not additional product scope.
 
 ## 1. Rules and pure computation
 
