@@ -31,6 +31,7 @@ use std::process::ExitCode;
 
 use sichuan_mahjong_sim::policy::{HeuristicPolicy, Policy};
 use sichuan_mahjong_sim::runner::{BatchReport, Runner, RunnerError, DEFAULT_DECISION_LIMIT};
+use sichuan_mahjong_sim::PLAYER_COUNT;
 
 /// Workload protocol identifier reported with every measurement.
 const PROTOCOL: &str = "heuristic-benchmark-v1";
@@ -330,21 +331,19 @@ where
     out.flush().map_err(BenchError::Output)
 }
 
-/// Measured games per second, or `None` when the batch wall time is zero.
-///
-/// The guard keeps a degenerate zero-duration observation from printing
-/// infinity or `NaN`.
-fn throughput_games_per_sec(batch: &BatchReport) -> Option<f64> {
+/// Rate per measured batch wall second, unavailable when the measured
+/// duration is zero. Both games and decisions use this same denominator.
+fn rate_per_second(count: u64, batch: &BatchReport) -> Option<f64> {
     let seconds = batch.total_time.as_secs_f64();
-    if batch.games > 0 && seconds > 0.0 {
-        Some(batch.games as f64 / seconds)
+    if seconds > 0.0 {
+        Some(count as f64 / seconds)
     } else {
         None
     }
 }
 
 /// Mean policy time per decision in microseconds over every decision kind, or
-/// `None` when the batch recorded no decisions.
+/// unavailable when the measured batch recorded no decisions.
 fn mean_policy_time_us(batch: &BatchReport) -> Option<f64> {
     if batch.decisions == 0 {
         None
@@ -353,77 +352,63 @@ fn mean_policy_time_us(batch: &BatchReport) -> Option<f64> {
     }
 }
 
-/// Formats the measured batch report.
+/// Formats one measured batch as stable, single-value "key: value" lines.
 ///
-/// Time fields are seconds inside the measured batch window, the throughput is
-/// completed games per `total_time` second, and the mean policy time is
-/// `policy_time` per recorded decision. Segment times are not an exact
-/// decomposition of `total_time`. Seat arrays use the fixed seat index order
-/// `0, 1, 2, 3`.
+/// Units belong to field names, rather than natural-language value suffixes.
+/// The protocol identifier distinguishes this workload and its timing semantics.
+/// No prose or extra lines are needed to consume the report.
 fn render_report(config: &Config, batch: &BatchReport) -> String {
-    let mut text = String::new();
-    text.push_str(&format!("protocol: {PROTOCOL}\n"));
-    text.push_str(&format!(
-        "policies: {POLICY_NAME} (one independent instance per seat, seats 0..3)\n"
-    ));
-    text.push_str(&format!("seed: {}\n", config.seed));
-    text.push_str(&format!("games: {}\n", config.games));
-    match config.warmup {
-        0 => text.push_str("warmup: 0 (disabled; no warmup batch was run)\n"),
-        warmup => text.push_str(&format!(
-            "warmup: {warmup} (seeds {}..={} before the measured batch)\n",
-            config.warmup_seed(0),
-            config.warmup_seed(warmup - 1)
-        )),
+    let mut text = format!(
+        "protocol: {PROTOCOL}\n\
+         policy: {POLICY_NAME}\n\
+         seats: {PLAYER_COUNT}\n\
+         seed: {}\n\
+         games: {}\n\
+         warmup_games: {}\n",
+        config.seed, config.games, config.warmup
+    );
+    if config.warmup_enabled() {
+        text.push_str(&format!("warmup_first_seed: {}\n", config.warmup_start()));
+    } else {
+        text.push_str("warmup_first_seed: none\n");
     }
     text.push_str(&format!(
-        "measured seeds: {}..={} (start + index, mod 2^64)\n",
-        config.measure_seed(0),
-        config.measure_seed(config.games.saturating_sub(1))
-    ));
-    text.push_str(&format!(
-        "decision limit per game: {DEFAULT_DECISION_LIMIT} \
-         (counted per game, not accumulated over the batch)\n"
-    ));
-
-    text.push_str("\nmeasured batch (warmup excluded):\n");
-    text.push_str(&format!("completed games: {}\n", batch.games));
-    text.push_str(&format!("total decisions: {}\n", batch.decisions));
-    text.push_str(&format!(
-        "total_time: {:.6} s (whole measured batch wall clock)\n",
-        batch.total_time.as_secs_f64()
-    ));
-    text.push_str(&format!(
-        "policy_time: {:.6} s (all Policy::choose calls)\n",
-        batch.policy_time.as_secs_f64()
-    ));
-    text.push_str(&format!(
-        "rules_time: {:.6} s (Game::next_decision plus Game::submit)\n",
+        "decision_limit_per_game: {DEFAULT_DECISION_LIMIT}\n\
+         decisions: {}\n\
+         total_time_seconds: {:.6}\n\
+         policy_time_seconds: {:.6}\n\
+         rules_time_seconds: {:.6}\n",
+        batch.decisions,
+        batch.total_time.as_secs_f64(),
+        batch.policy_time.as_secs_f64(),
         batch.rules_time.as_secs_f64()
     ));
-    match throughput_games_per_sec(batch) {
-        Some(throughput) => text.push_str(&format!(
-            "throughput: {throughput:.3} games/s (completed games / total_time seconds)\n"
-        )),
-        None => text.push_str("throughput: unavailable (measured total_time is zero)\n"),
+
+    match rate_per_second(batch.games, batch) {
+        Some(rate) => text.push_str(&format!("games_per_sec: {rate:.3}\n")),
+        None => text.push_str("games_per_sec: unavailable\n"),
+    }
+    match rate_per_second(batch.decisions, batch) {
+        Some(rate) => text.push_str(&format!("decisions_per_sec: {rate:.3}\n")),
+        None => text.push_str("decisions_per_sec: unavailable\n"),
     }
     match mean_policy_time_us(batch) {
-        Some(mean) => text.push_str(&format!(
-            "mean policy time per decision: {mean:.3} us \
-             (policy_time / total decisions, all decision kinds)\n"
-        )),
-        None => text.push_str("mean policy time per decision: unavailable (no decisions)\n"),
+        Some(mean) => text.push_str(&format!("mean_policy_us_per_decision: {mean:.3}\n")),
+        None => text.push_str("mean_policy_us_per_decision: unavailable\n"),
     }
 
-    text.push_str("\ngame results (seats in fixed index order 0, 1, 2, 3):\n");
-    text.push_str(&format!("net scores: {:?}\n", batch.score_totals));
-    text.push_str(&format!("wins: {:?}\n", batch.winners));
-    text.push_str(&format!("three-winner games: {}\n", batch.three_winners));
-    text.push_str(&format!("wall-exhausted games: {}\n", batch.wall_exhausted));
-    text.push_str(
-        "note: segment times are not an exact decomposition of total_time, and \
-         warmup does not imply a cold allocator or cache.\n",
-    );
+    text.push_str(&format!(
+        "three_winners: {}\n\
+         wall_exhausted: {}\n\
+         score_totals: {:?}\n\
+         score_sum: {}\n\
+         winners: {:?}\n",
+        batch.three_winners,
+        batch.wall_exhausted,
+        batch.score_totals,
+        batch.score_sum(),
+        batch.winners
+    ));
     text
 }
 

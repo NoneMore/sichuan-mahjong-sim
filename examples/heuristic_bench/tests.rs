@@ -308,53 +308,54 @@ fn a_small_measured_batch_completes_every_game_with_zero_sum_scores() {
 fn report_states_workload_units_and_game_results() {
     let workload = config(4, 1234, 2);
     let text = render_report(&workload, &fixture_batch());
-    // The limit line is asserted against the public constant so the report
-    // cannot silently drift from the runner's actual per-game default.
-    let limit_line = format!("decision limit per game: {DEFAULT_DECISION_LIMIT} ");
-    for expected in [
-        "protocol: heuristic-benchmark-v1",
-        "policies: heuristic",
-        "seed: 1234",
-        "games: 4",
-        "warmup: 2 (seeds 1232..=1233 before the measured batch)",
-        "measured seeds: 1234..=1237",
-        limit_line.as_str(),
-        "completed games: 4",
-        "total decisions: 400",
-        "total_time: 0.500000 s",
-        "policy_time: 0.002000 s",
-        "rules_time: 0.001000 s",
-        "throughput: 8.000 games/s",
-        "mean policy time per decision: 5.000 us",
-        "net scores: [12, -4, -5, -3]",
-        "wins: [3, 3, 2, 1]",
-        "three-winner games: 3",
-        "wall-exhausted games: 1",
-    ] {
-        assert!(text.contains(expected), "missing {expected:?} in:\n{text}");
+    let expected = format!(
+        "protocol: heuristic-benchmark-v1\n\
+         policy: heuristic\n\
+         seats: 4\n\
+         seed: 1234\n\
+         games: 4\n\
+         warmup_games: 2\n\
+         warmup_first_seed: 1232\n\
+         decision_limit_per_game: {DEFAULT_DECISION_LIMIT}\n\
+         decisions: 400\n\
+         total_time_seconds: 0.500000\n\
+         policy_time_seconds: 0.002000\n\
+         rules_time_seconds: 0.001000\n\
+         games_per_sec: 8.000\n\
+         decisions_per_sec: 800.000\n\
+         mean_policy_us_per_decision: 5.000\n\
+         three_winners: 3\n\
+         wall_exhausted: 1\n\
+         score_totals: [12, -4, -5, -3]\n\
+         score_sum: 0\n\
+         winners: [3, 3, 2, 1]\n"
+    );
+    assert_eq!(text, expected);
+    for line in text.lines() {
+        let (key, value) = line.split_once(": ").expect("every report line has a key");
+        assert!(!key.contains(' '), "{line}");
+        assert!(!value.is_empty(), "{line}");
+        assert!(!value.contains(" ("), "value should not contain prose: {line}");
     }
-    assert_eq!(text.matches(" s (").count(), 3, "{text}");
 }
 
 #[test]
 fn report_renders_wrapping_seed_ranges() {
     let backwards = render_report(&config(2, 0, 2), &fixture_batch());
-    assert!(backwards.contains(
-        "warmup: 2 (seeds 18446744073709551614..=18446744073709551615 before the measured batch)"
-    ));
-    assert!(backwards.contains("measured seeds: 0..=1"));
+    assert!(backwards.contains("seed: 0\n"));
+    assert!(backwards.contains("warmup_games: 2\n"));
+    assert!(backwards.contains("warmup_first_seed: 18446744073709551614\n"));
 
     let forwards = render_report(&config(2, u64::MAX, 0), &fixture_batch());
-    assert!(forwards.contains("measured seeds: 18446744073709551615..=0"));
+    assert!(forwards.contains("seed: 18446744073709551615\n"));
+    assert!(forwards.contains("warmup_first_seed: none\n"));
 }
 
 #[test]
 fn disabled_warmup_is_identifiable_in_the_report() {
     let text = render_report(&config(1, 5, 0), &fixture_batch());
-    assert!(
-        text.contains("warmup: 0 (disabled; no warmup batch was run)"),
-        "{text}"
-    );
+    assert!(text.contains("warmup_games: 0\n"), "{text}");
+    assert!(text.contains("warmup_first_seed: none\n"), "{text}");
 }
 
 #[test]
@@ -365,14 +366,13 @@ fn zero_time_and_zero_decisions_report_unavailable_instead_of_nan() {
     batch.total_time = std::time::Duration::ZERO;
     let text = render_report(&config(1, 0, 0), &batch);
 
-    assert!(
-        text.contains("throughput: unavailable (measured total_time is zero)"),
-        "{text}"
-    );
-    assert!(
-        text.contains("mean policy time per decision: unavailable (no decisions)"),
-        "{text}"
-    );
+    for field in [
+        "games_per_sec: unavailable\n",
+        "decisions_per_sec: unavailable\n",
+        "mean_policy_us_per_decision: unavailable\n",
+    ] {
+        assert!(text.contains(field), "{text}");
+    }
     assert!(!text.contains("NaN"), "{text}");
     assert!(!text.contains("inf"), "{text}");
 }
@@ -527,6 +527,7 @@ fn a_successful_run_writes_the_measured_report() {
     execute(&config(1, 5, 0), heuristic_runner, &mut buffer).unwrap();
     let text = String::from_utf8(buffer).expect("report is UTF-8");
     assert!(text.contains("protocol: heuristic-benchmark-v1"), "{text}");
-    assert!(text.contains("completed games: 1"), "{text}");
-    assert!(text.contains("throughput: "), "{text}");
+    assert!(text.contains("games: 1\n"), "{text}");
+    assert!(text.contains("games_per_sec: "), "{text}");
+    assert!(text.contains("score_sum: 0\n"), "{text}");
 }
