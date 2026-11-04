@@ -88,11 +88,13 @@ impl Config {
     }
 
     /// Seed of measured game `index`, valid for `index < games`.
+    #[cfg(test)]
     fn measure_seed(&self, index: u64) -> u64 {
         self.seed.wrapping_add(index)
     }
 
     /// Seed of warmup game `index`, valid for `index < warmup`.
+    #[cfg(test)]
     fn warmup_seed(&self, index: u64) -> u64 {
         self.warmup_start().wrapping_add(index)
     }
@@ -362,6 +364,7 @@ fn render_report(config: &Config, batch: &BatchReport) -> String {
         "protocol: {PROTOCOL}\n\
          policy: {POLICY_NAME}\n\
          seats: {PLAYER_COUNT}\n\
+         seat_order: [0, 1, 2, 3]\n\
          seed: {}\n\
          games: {}\n\
          warmup_games: {}\n",
@@ -374,10 +377,12 @@ fn render_report(config: &Config, batch: &BatchReport) -> String {
     }
     text.push_str(&format!(
         "decision_limit_per_game: {DEFAULT_DECISION_LIMIT}\n\
+         completed_games: {}\n\
          decisions: {}\n\
          total_time_seconds: {:.6}\n\
          policy_time_seconds: {:.6}\n\
          rules_time_seconds: {:.6}\n",
+        batch.games,
         batch.decisions,
         batch.total_time.as_secs_f64(),
         batch.policy_time.as_secs_f64(),

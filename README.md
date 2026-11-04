@@ -332,10 +332,14 @@ The `heuristic-benchmark-v1` report uses one `key: value` per line.
 It records the workload, measured game/decision counts, wall time, policy and
 rule-driving times (seconds), throughput (games/s and decisions/s), mean
 policy cost (microseconds/decision), and terminal-game statistics. Field names
-carry units, and `unavailable` is used when a rate cannot be calculated.
+carry units, `seat_order` labels the seat arrays, and `completed_games` records
+actual completions separately from the requested `games`. `unavailable` is used
+when a rate cannot be calculated.
 All timing and rates exclude warmup and construction of the measured runner.
-The mean policy cost covers all decision kinds; aggregate game results do not
-establish action-by-action equivalence. Warmup does not guarantee cold caches.
+Batch wall time includes game construction, driving and aggregation; policy
+and rules timings need not sum to it. The mean policy cost covers all decision
+kinds; aggregate game results do not establish action-by-action equivalence.
+Warmup does not reset process-level caches or guarantee a speedup.
 
 The command reports one observation, not a statistical conclusion. Record the
 source revision, build/toolchain, environment and repeat-run conditions separately.

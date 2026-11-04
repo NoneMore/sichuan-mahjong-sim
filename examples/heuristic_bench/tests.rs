@@ -312,11 +312,13 @@ fn report_states_workload_units_and_game_results() {
         "protocol: heuristic-benchmark-v1\n\
          policy: heuristic\n\
          seats: 4\n\
+         seat_order: [0, 1, 2, 3]\n\
          seed: 1234\n\
          games: 4\n\
          warmup_games: 2\n\
          warmup_first_seed: 1232\n\
          decision_limit_per_game: {DEFAULT_DECISION_LIMIT}\n\
+         completed_games: 4\n\
          decisions: 400\n\
          total_time_seconds: 0.500000\n\
          policy_time_seconds: 0.002000\n\
@@ -335,7 +337,10 @@ fn report_states_workload_units_and_game_results() {
         let (key, value) = line.split_once(": ").expect("every report line has a key");
         assert!(!key.contains(' '), "{line}");
         assert!(!value.is_empty(), "{line}");
-        assert!(!value.contains(" ("), "value should not contain prose: {line}");
+        assert!(
+            !value.contains(" ("),
+            "value should not contain prose: {line}"
+        );
     }
 }
 
@@ -375,6 +380,18 @@ fn zero_time_and_zero_decisions_report_unavailable_instead_of_nan() {
     }
     assert!(!text.contains("NaN"), "{text}");
     assert!(!text.contains("inf"), "{text}");
+}
+
+#[test]
+fn rates_use_completed_games_and_handle_zero_decisions_with_nonzero_time() {
+    let mut batch = fixture_batch();
+    batch.decisions = 0;
+    let text = render_report(&config(5, 0, 0), &batch);
+    assert!(text.contains("games: 5\n"));
+    assert!(text.contains("completed_games: 4\n"));
+    assert!(text.contains("games_per_sec: 8.000\n"));
+    assert!(text.contains("decisions_per_sec: 0.000\n"));
+    assert!(text.contains("mean_policy_us_per_decision: unavailable\n"));
 }
 
 #[test]
