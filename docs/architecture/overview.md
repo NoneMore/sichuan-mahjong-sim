@@ -20,6 +20,7 @@ Pure `eval` and `rules` helpers supply facts, not competing state owners.
 | Policies | [`policy.rs`](../../src/policy.rs), [`policy/heuristic.rs`](../../src/policy/heuristic.rs), [`policy/missing_only.rs`](../../src/policy/missing_only.rs), [`policy/analysis.rs`](../../src/policy/analysis.rs) | `Policy` trait, legal baselines, deterministic shanten/ukeire `HeuristicPolicy`, and the `MissingOnlyPolicy` ablation that delegates to `FirstLegalPolicy` except for the shared missing-suit rule; exact target-deficit analysis remains private |
 | Execution | [`runner.rs`](../../src/runner.rs), [`main.rs`](../../src/main.rs) | Driving games, aggregating results, and the native CLI |
 | Native policy comparison | [`examples/policy_ab.rs`](../../examples/policy_ab.rs) | Standalone balanced 2A2B comparison with selectable A/B policies and fresh policies and runner per game; no new game rules or library API |
+| Heuristic benchmark | [`examples/heuristic_bench.rs`](../../examples/heuristic_bench.rs) | Standalone `heuristic-benchmark-v1` four-seat `HeuristicPolicy` self-play benchmark: one `Runner` and four fresh policies per phase, reused across games within a phase, with warmup seeds preceding the measured range; no new game rules or library API |
 
 Public modules and exports are declared in [`src/lib.rs`](../../src/lib.rs).
 
@@ -82,6 +83,10 @@ so fresh instances reproduce continuation from a cloned game. The
   ablation.
 - [`examples/policy_ab/tests.rs`](../../examples/policy_ab/tests.rs): A/B example
   tests for seed-block aggregation, balanced placements, replay, and failure handling.
+- [`examples/heuristic_bench/tests.rs`](../../examples/heuristic_bench/tests.rs):
+  benchmark example tests for argument validation, seed planning and wrapping,
+  phase isolation and reuse, report fields, and failure propagation; included by
+  `examples/heuristic_bench.rs` and run by `cargo test --all-targets`.
 - [`tests/settlement_matrix.rs`](../../tests/settlement_matrix.rs):
   payment-category combinations.
 - [`tests/state_stress.rs`](../../tests/state_stress.rs):

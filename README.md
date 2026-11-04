@@ -62,8 +62,11 @@ define intended game semantics.
 `Runner::random(seed)` initializes a separate RNG stream for each seat. There is
 no heuristic or missing-only runner shortcut: build `HeuristicPolicy::new()` or
 `MissingOnlyPolicy::new()` values and pass them to `Runner::new`. The main
-simulation CLI still offers only `--policy first|random`; the heuristic and
-missing-only policies are library and A/B-example options for now.
+simulation CLI still offers only `--policy first|random`. Both policies are
+available through the library and the
+[`policy_ab` example](#policy-ab-comparison-example); four-seat heuristic
+self-play also has a dedicated
+[`heuristic_bench` example](#heuristic-benchmark-example).
 
 ### Runner API
 
@@ -306,6 +309,42 @@ error, or failed consistency check exits non-zero without writing a summary;
 completed records remain for diagnosis. `SE` uses the seed block as the
 sampling unit and describes variation among the provided seeds, not
 population-level precision.
+
+### Heuristic benchmark example
+
+`examples/heuristic_bench.rs` measures complete, single-threaded
+four-seat `HeuristicPolicy` self-play through `Runner::run_batch`.
+It does not change game rules, policy decisions, or the main CLI.
+
+```text
+cargo run --release --example heuristic_bench -- --games 200 --seed 7 --warmup 20
+```
+
+All three arguments are required: `--games N` is a positive measured game
+count, `--seed S` is the first measured seed, and `--warmup W` is an
+optional-in-effect warmup count (`0` disables it). `--help` prints usage.
+The measured games use wrapping seeds `S + i`; warmup uses the adjacent
+`W` seeds preceding `S`. The tool rejects `N + W > 2^64` to prevent
+overlap. A fresh `Runner` and four policies are constructed for each phase;
+policy instances are reused across games within their phase.
+
+The `heuristic-benchmark-v1` report uses one `key: value` per line.
+It records the workload, measured game/decision counts, wall time, policy and
+rule-driving times (seconds), throughput (games/s and decisions/s), mean
+policy cost (microseconds/decision), and terminal-game statistics. Field names
+carry units, `seat_order` labels the seat arrays, and `completed_games` records
+actual completions separately from the requested `games`. `unavailable` is used
+when a rate cannot be calculated.
+All timing and rates exclude warmup and construction of the measured runner.
+Batch wall time includes game construction, driving and aggregation; policy
+and rules timings need not sum to it. The mean policy cost covers all decision
+kinds; aggregate game results do not establish action-by-action equivalence.
+Warmup does not reset process-level caches or guarantee a speedup.
+
+The command reports one observation, not a statistical conclusion. Record the
+source revision, build/toolchain, environment and repeat-run conditions separately.
+Failed input, execution, or report output makes the run invalid; no partial
+batch is reported as a normal measurement.
 
 ## Documentation
 
