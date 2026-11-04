@@ -62,8 +62,11 @@ define intended game semantics.
 `Runner::random(seed)` initializes a separate RNG stream for each seat. There is
 no heuristic or missing-only runner shortcut: build `HeuristicPolicy::new()` or
 `MissingOnlyPolicy::new()` values and pass them to `Runner::new`. The main
-simulation CLI still offers only `--policy first|random`; the heuristic and
-missing-only policies are library and A/B-example options for now.
+simulation CLI still offers only `--policy first|random`. Both policies are
+available through the library and the
+[`policy_ab` example](#policy-ab-comparison-example); four-seat heuristic
+self-play also has a dedicated
+[`heuristic_bench` example](#heuristic-benchmark-example).
 
 ### Runner API
 
@@ -306,6 +309,81 @@ error, or failed consistency check exits non-zero without writing a summary;
 completed records remain for diagnosis. `SE` uses the seed block as the
 sampling unit and describes variation among the provided seeds, not
 population-level precision.
+
+### Heuristic benchmark example
+
+`examples/heuristic_bench.rs` measures four independent `HeuristicPolicy` seats
+in complete self-play batches through `Runner::run_batch`, without changing the
+main CLI, game rules, or policy logic.
+
+```text
+cargo run --release --example heuristic_bench -- --games 200 --seed 7 --warmup 20
+cargo run --release --example heuristic_bench -- --help
+```
+
+| Argument | Meaning |
+|---|---|
+| `--games N` | Decimal `u64` measured games; required, and must be at least 1. |
+| `--seed S` | Decimal `u64` seed of measured game 0; required. |
+| `--warmup W` | Decimal `u64` warmup games before the measured range; required, may be `0`. |
+| `-h`, `--help` | Print usage and exit successfully without running games; no workload arguments are needed. |
+
+There is no default workload. Missing arguments or values, malformed or
+out-of-range numbers, unknown arguments, `--games 0`, and overlapping seed
+ranges are rejected before any game runs. The per-game decision limit remains
+`runner::DEFAULT_DECISION_LIMIT` (currently `10_000`), is reported, and has no
+command-line override.
+
+**Protocol `heuristic-benchmark-v1`.** One invocation performs one optional
+warmup batch followed by one measured batch, in the same process and thread.
+Each phase constructs its own `Runner` and four fresh policies, reuses them
+throughout that batch, and completes every game. Warmup instances and results
+are discarded before constructing the measured runner; `--warmup 0` skips
+warmup altogether and is identified as disabled in the report.
+
+Measured game `i` uses `S.wrapping_add(i)`. Warmup game `j` uses
+`S.wrapping_sub(W).wrapping_add(j)`. These adjacent intervals must not overlap:
+`N + W <= 2^64` is checked without `u64` overflow, including equality.
+Changing `W` leaves the measured seed sequence unchanged. For example,
+`S = 0, W = 2, N = 2` warms up on `[u64::MAX - 1, u64::MAX]` and measures
+`[0, 1]`; `S = u64::MAX, N = 2` measures `[u64::MAX, 0]`. Distinct seeds need
+not produce distinct deals.
+
+**Timing and report.** Timings come directly from the measured `run_batch`:
+
+- `total_time`: batch wall time, including game construction, driving,
+  aggregation, and intervening overhead.
+- `policy_time`: summed time in every `Policy::choose` call.
+- `rules_time`: summed time in `Game::next_decision` and `Game::submit`.
+
+Parsing, warmup, measured runner/policy construction, and printing are excluded.
+Segmented times need not sum to `total_time`; existing per-decision timing is
+retained without per-decision output or extra profiling.
+
+The plain-text report identifies the protocol, four-seat policy, configuration,
+completed games, decisions, timings with units, and seat order. Its primary
+performance observation is completed games / `total_time` seconds (games/s).
+Average policy cost is `policy_time` / **all** measured decisions, not isolated
+complex-discard latency; zero decisions yield an unavailable average and zero
+elapsed time cannot produce infinite or `NaN` throughput. Per-seat net scores,
+win counts, three-winner endings, and wall-exhaustion endings diagnose workload
+differences, but do not prove per-action behavioral equivalence.
+
+**Interpretation limits.** Rebuilding policies does not clear allocator, CPU
+cache, or other process-level state: this is not a cold-cache benchmark.
+Heuristic analysis caches last only for a single `choose` call, so warmup does
+not pass warm policy caches into measurement or guarantee a speedup. Do not mix
+results with incompatible seed, instance-lifetime, or timing protocols.
+Record source revision, build profile and command, toolchain, machine
+environment, full invocation, and repeated-run conditions externally; the tool
+does not collect them. A single run is not a performance guarantee.
+
+Input, warmup, measured-batch, and output failures exit non-zero and invalidate
+the measurement. Runtime errors identify the phase and retain the underlying
+message. No failed games are skipped, replaced, counted as zero, or resumed,
+and no partial batch is reported as a normal measurement. Failed output may
+leave partial text, which is not a valid report. Existing `run_batch` errors do
+not identify the failing seed or game index.
 
 ## Documentation
 
