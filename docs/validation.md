@@ -171,8 +171,11 @@ See the [heuristic cost-attribution study](studies/heuristic-cost-attribution.md
 for historical pre-optimization measurements. The
 [post-optimization refresh](studies/heuristic-cost-attribution-refresh.md) profiles
 `6d3173b` after both optimizations below, separating distance-only and masked suit
-DP, with per-run evidence, reproduction steps and limits. These are research
-observations, not performance guarantees.
+DP, with per-run evidence, reproduction steps and limits. The
+[one-pass discard refresh](studies/heuristic-cost-attribution-discard.md) summarizes
+`06fb919`: masked suit DP dominates, chiefly the needed-mask path. Its temporary
+artifacts were deleted at the user's request; the summary retains measurement
+conditions and limits. These are historical observations, not performance guarantees.
 
 ## Heuristic hand-analysis optimization
 

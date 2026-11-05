@@ -1,5 +1,8 @@
 # 启发式策略成本归因：优化后复测（2026-11-05）
 
+> 本文保留 one-pass discard 之前 `6d3173b` 的历史结论。新版见
+> [one-pass discard 后复测](heuristic-cost-attribution-discard.md)，普通距离 DP 已非首要热点。
+
 ## 结论
 
 在 **`6d3173b2857f42ff2681061e5d9f203172b52d20`** 上，下一轮优化仍应优先研究**逐花色精确 DP**：主采样中纯距离 `suit_table` self 为 **48.70%**，掩码版 `suit_table_with_mask` 为 **35.23%**，合计 **83.93%**。重复、换种子、长批次和采样方式交叉检查均支持这一排序。

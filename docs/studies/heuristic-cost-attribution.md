@@ -1,7 +1,8 @@
 # 启发式策略成本归因
 
 > 本文保留优化前的历史结论。七对子/花色 DP 与 one-pass ukeire 优化后的
-> `6d3173b` 测量见[优化后复测](heuristic-cost-attribution-refresh.md)。
+> `6d3173b` 测量见[优化后复测](heuristic-cost-attribution-refresh.md)；最新 `06fb919`
+> 测量见 [one-pass discard 后复测](heuristic-cost-attribution-discard.md)。
 
 ## 结论
 
