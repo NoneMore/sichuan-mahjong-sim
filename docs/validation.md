@@ -171,3 +171,31 @@ See the [heuristic cost-attribution study](studies/heuristic-cost-attribution.md
 for `heuristic-benchmark-v1` baseline measurements, function-level sampling,
 stability checks, reproduction steps, and attribution limits. This is a research
 result, not an implemented optimization or a performance guarantee.
+
+## Heuristic hand-analysis optimization
+
+The [completed Change and evidence](../specs/archive/heuristic-analysis-optimization/results.md)
+retain only the exact seven-pairs formula, with every declared meld still
+disabling that route. The tested tighter standard-target enumeration was
+withdrawn for identifiable regression. Skipping the missing suit and removing
+ukeire's direct-win shortcut were declined after their bounded uncertain
+results; uncertainty is not proof of equal performance or identifiable regression.
+Rules, policy ranking, cache keys/lifetime and checkpoint behavior are unchanged.
+
+Final formatting, warning-denied Clippy and all-target tests pass: **214 tests in
+both debug and release**. New coverage compares the formula with independent
+0/2/4 target-cost enumeration over all 241 held-count classes and boundary/meld
+cases; cache tests also compare fresh-per-hand and repeated deficit/ukeire calls.
+The final implementation reproduces the pre-change 64-game, 3514-decision full
+trace, scores, winners and finish reasons. Withdrawn experiments and their
+equivalence tests remain reconstructible as Change-local patches.
+
+Against baseline `c9202e33ac78cfb819def7339c3986c58cc3d13f`, the retained formula
+used `heuristic-benchmark-v1`, 2000 games, warmup 20, first seeds 7 and 10007,
+three alternating pairs per seed. Batch-time medians decreased from
+16.632 to 16.205 s (2.57%) and 17.124 to 16.830 s (1.72%); both seed groups
+meet the specified candidate-max < baseline-min engineering criterion. These
+are small local observations, not statistical significance or a cross-machine
+promise. See the [full per-run results](../specs/archive/heuristic-analysis-optimization/performance-summary.md)
+and [source/build/environment protocol](../specs/archive/heuristic-analysis-optimization/execution.md)
+for all candidates, ranges, policy times, throughput, decisions and raw evidence.

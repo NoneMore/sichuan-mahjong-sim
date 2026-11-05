@@ -1,0 +1,19 @@
+--- a/src/policy/analysis.rs
++++ b/src/policy/analysis.rs
+@@ -125,6 +125,16 @@
+         combine[0][0] = 0;
+ 
+         for suit in Suit::ALL {
++            // The missing suit has zero capacity at every rank, so its table is
++            // the merge identity: 0 at `[0][0]` and INF elsewhere. Skipping the
++            // slice, table build, cache lookup, and merge therefore leaves the
++            // combined table, the total set budget, and the exactly-one-pair
++            // requirement unchanged. Any missing-suit tiles in `counts` stay
++            // surplus to every target, exactly as before: they can never appear
++            // in a target, so they must not change the deficit either.
++            if suit == self.missing {
++                continue;
++            }
+             let mut local = [0u8; 9];
+             let start = suit.index() * 9;
+             local.copy_from_slice(&counts[start..start + 9]);

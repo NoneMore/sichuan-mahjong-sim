@@ -1,0 +1,656 @@
+{
+  "comparison": "B-vs-baseline",
+  "protocol": "heuristic-benchmark-v1",
+  "binaries": {
+    "baseline": {
+      "path": "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\baseline.exe",
+      "sha256": "ead0da786919a10825259ada241205f190a39deb2707dea88cf27df61eda26a4"
+    },
+    "candidate": {
+      "path": "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\B.exe",
+      "sha256": "ba4d8da34ff52eaa8c2f5eadb62970d2d48153dbbc4dcd721d0a6c02cfc1dc2c"
+    }
+  },
+  "runs": [
+    {
+      "seed": 7,
+      "pair": 1,
+      "role": "baseline",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\baseline.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "7",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:31:30.087806+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 7\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 18446744073709551603\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 113841\ntotal_time_seconds: 16.713775\npolicy_time_seconds: 16.609652\nrules_time_seconds: 0.081145\ngames_per_sec: 119.662\ndecisions_per_sec: 6811.208\nmean_policy_us_per_decision: 145.902\nthree_winners: 1781\nwall_exhausted: 219\nscore_totals: [439, 58, -51, -446]\nscore_sum: 0\nwinners: [1470, 1465, 1419, 1366]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "18446744073709551603",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": 16.713775,
+        "policy_time_seconds": 16.609652,
+        "rules_time_seconds": 0.081145,
+        "games_per_sec": 119.662,
+        "decisions_per_sec": 6811.208,
+        "mean_policy_us_per_decision": "145.902",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      }
+    },
+    {
+      "seed": 7,
+      "pair": 1,
+      "role": "candidate",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\B.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "7",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:31:46.987676+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 7\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 18446744073709551603\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 113841\ntotal_time_seconds: 15.954207\npolicy_time_seconds: 15.854581\nrules_time_seconds: 0.074761\ngames_per_sec: 125.359\ndecisions_per_sec: 7135.485\nmean_policy_us_per_decision: 139.270\nthree_winners: 1781\nwall_exhausted: 219\nscore_totals: [439, 58, -51, -446]\nscore_sum: 0\nwinners: [1470, 1465, 1419, 1366]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "18446744073709551603",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": 15.954207,
+        "policy_time_seconds": 15.854581,
+        "rules_time_seconds": 0.074761,
+        "games_per_sec": 125.359,
+        "decisions_per_sec": 7135.485,
+        "mean_policy_us_per_decision": "139.270",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      }
+    },
+    {
+      "seed": 7,
+      "pair": 2,
+      "role": "candidate",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\B.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "7",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:32:03.117446+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 7\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 18446744073709551603\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 113841\ntotal_time_seconds: 16.205243\npolicy_time_seconds: 16.104483\nrules_time_seconds: 0.078260\ngames_per_sec: 123.417\ndecisions_per_sec: 7024.949\nmean_policy_us_per_decision: 141.465\nthree_winners: 1781\nwall_exhausted: 219\nscore_totals: [439, 58, -51, -446]\nscore_sum: 0\nwinners: [1470, 1465, 1419, 1366]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "18446744073709551603",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": 16.205243,
+        "policy_time_seconds": 16.104483,
+        "rules_time_seconds": 0.07826,
+        "games_per_sec": 123.417,
+        "decisions_per_sec": 7024.949,
+        "mean_policy_us_per_decision": "141.465",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      }
+    },
+    {
+      "seed": 7,
+      "pair": 2,
+      "role": "baseline",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\baseline.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "7",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:32:19.508083+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 7\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 18446744073709551603\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 113841\ntotal_time_seconds: 16.632460\npolicy_time_seconds: 16.528120\nrules_time_seconds: 0.081252\ngames_per_sec: 120.247\ndecisions_per_sec: 6844.508\nmean_policy_us_per_decision: 145.186\nthree_winners: 1781\nwall_exhausted: 219\nscore_totals: [439, 58, -51, -446]\nscore_sum: 0\nwinners: [1470, 1465, 1419, 1366]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "18446744073709551603",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": 16.63246,
+        "policy_time_seconds": 16.52812,
+        "rules_time_seconds": 0.081252,
+        "games_per_sec": 120.247,
+        "decisions_per_sec": 6844.508,
+        "mean_policy_us_per_decision": "145.186",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      }
+    },
+    {
+      "seed": 7,
+      "pair": 3,
+      "role": "baseline",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\baseline.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "7",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:32:36.323177+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 7\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 18446744073709551603\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 113841\ntotal_time_seconds: 16.625032\npolicy_time_seconds: 16.520449\nrules_time_seconds: 0.080931\ngames_per_sec: 120.301\ndecisions_per_sec: 6847.566\nmean_policy_us_per_decision: 145.119\nthree_winners: 1781\nwall_exhausted: 219\nscore_totals: [439, 58, -51, -446]\nscore_sum: 0\nwinners: [1470, 1465, 1419, 1366]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "18446744073709551603",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": 16.625032,
+        "policy_time_seconds": 16.520449,
+        "rules_time_seconds": 0.080931,
+        "games_per_sec": 120.301,
+        "decisions_per_sec": 6847.566,
+        "mean_policy_us_per_decision": "145.119",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      }
+    },
+    {
+      "seed": 7,
+      "pair": 3,
+      "role": "candidate",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\B.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "7",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:32:53.129767+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 7\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 18446744073709551603\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 113841\ntotal_time_seconds: 16.328181\npolicy_time_seconds: 16.224640\nrules_time_seconds: 0.080759\ngames_per_sec: 122.488\ndecisions_per_sec: 6972.056\nmean_policy_us_per_decision: 142.520\nthree_winners: 1781\nwall_exhausted: 219\nscore_totals: [439, 58, -51, -446]\nscore_sum: 0\nwinners: [1470, 1465, 1419, 1366]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "18446744073709551603",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": 16.328181,
+        "policy_time_seconds": 16.22464,
+        "rules_time_seconds": 0.080759,
+        "games_per_sec": 122.488,
+        "decisions_per_sec": 6972.056,
+        "mean_policy_us_per_decision": "142.520",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      }
+    },
+    {
+      "seed": 10007,
+      "pair": 1,
+      "role": "candidate",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\B.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "10007",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:33:09.634257+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 10007\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 9987\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 115351\ntotal_time_seconds: 16.828378\npolicy_time_seconds: 16.721306\nrules_time_seconds: 0.083267\ngames_per_sec: 118.847\ndecisions_per_sec: 6854.552\nmean_policy_us_per_decision: 144.960\nthree_winners: 1727\nwall_exhausted: 273\nscore_totals: [618, 117, -87, -648]\nscore_sum: 0\nwinners: [1466, 1430, 1399, 1348]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "9987",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "total_time_seconds": 16.828378,
+        "policy_time_seconds": 16.721306,
+        "rules_time_seconds": 0.083267,
+        "games_per_sec": 118.847,
+        "decisions_per_sec": 6854.552,
+        "mean_policy_us_per_decision": "144.960",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      }
+    },
+    {
+      "seed": 10007,
+      "pair": 1,
+      "role": "baseline",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\baseline.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "10007",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:33:26.646264+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 10007\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 9987\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 115351\ntotal_time_seconds: 17.123764\npolicy_time_seconds: 17.017104\nrules_time_seconds: 0.083828\ngames_per_sec: 116.797\ndecisions_per_sec: 6736.311\nmean_policy_us_per_decision: 147.525\nthree_winners: 1727\nwall_exhausted: 273\nscore_totals: [618, 117, -87, -648]\nscore_sum: 0\nwinners: [1466, 1430, 1399, 1348]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "9987",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "total_time_seconds": 17.123764,
+        "policy_time_seconds": 17.017104,
+        "rules_time_seconds": 0.083828,
+        "games_per_sec": 116.797,
+        "decisions_per_sec": 6736.311,
+        "mean_policy_us_per_decision": "147.525",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      }
+    },
+    {
+      "seed": 10007,
+      "pair": 2,
+      "role": "baseline",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\baseline.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "10007",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:33:43.959266+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 10007\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 9987\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 115351\ntotal_time_seconds: 16.990964\npolicy_time_seconds: 16.886157\nrules_time_seconds: 0.082098\ngames_per_sec: 117.710\ndecisions_per_sec: 6788.962\nmean_policy_us_per_decision: 146.389\nthree_winners: 1727\nwall_exhausted: 273\nscore_totals: [618, 117, -87, -648]\nscore_sum: 0\nwinners: [1466, 1430, 1399, 1348]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "9987",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "total_time_seconds": 16.990964,
+        "policy_time_seconds": 16.886157,
+        "rules_time_seconds": 0.082098,
+        "games_per_sec": 117.71,
+        "decisions_per_sec": 6788.962,
+        "mean_policy_us_per_decision": "146.389",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      }
+    },
+    {
+      "seed": 10007,
+      "pair": 2,
+      "role": "candidate",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\B.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "10007",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:34:01.133109+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 10007\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 9987\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 115351\ntotal_time_seconds: 16.829683\npolicy_time_seconds: 16.723013\nrules_time_seconds: 0.082337\ngames_per_sec: 118.838\ndecisions_per_sec: 6854.021\nmean_policy_us_per_decision: 144.975\nthree_winners: 1727\nwall_exhausted: 273\nscore_totals: [618, 117, -87, -648]\nscore_sum: 0\nwinners: [1466, 1430, 1399, 1348]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "9987",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "total_time_seconds": 16.829683,
+        "policy_time_seconds": 16.723013,
+        "rules_time_seconds": 0.082337,
+        "games_per_sec": 118.838,
+        "decisions_per_sec": 6854.021,
+        "mean_policy_us_per_decision": "144.975",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      }
+    },
+    {
+      "seed": 10007,
+      "pair": 3,
+      "role": "candidate",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\B.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "10007",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:34:18.149488+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 10007\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 9987\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 115351\ntotal_time_seconds: 16.934870\npolicy_time_seconds: 16.828436\nrules_time_seconds: 0.083381\ngames_per_sec: 118.100\ndecisions_per_sec: 6811.449\nmean_policy_us_per_decision: 145.889\nthree_winners: 1727\nwall_exhausted: 273\nscore_totals: [618, 117, -87, -648]\nscore_sum: 0\nwinners: [1466, 1430, 1399, 1348]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "9987",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "total_time_seconds": 16.93487,
+        "policy_time_seconds": 16.828436,
+        "rules_time_seconds": 0.083381,
+        "games_per_sec": 118.1,
+        "decisions_per_sec": 6811.449,
+        "mean_policy_us_per_decision": "145.889",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      }
+    },
+    {
+      "seed": 10007,
+      "pair": 3,
+      "role": "baseline",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\heuristic-opt-builds\\baseline.exe",
+        "--games",
+        "2000",
+        "--seed",
+        "10007",
+        "--warmup",
+        "20"
+      ],
+      "utc": "2026-11-05T07:34:35.274622+00:00",
+      "returncode": 0,
+      "stdout": "protocol: heuristic-benchmark-v1\npolicy: heuristic\nseats: 4\nseat_order: [0, 1, 2, 3]\nseed: 10007\ngames: 2000\nwarmup_games: 20\nwarmup_first_seed: 9987\ndecision_limit_per_game: 10000\ncompleted_games: 2000\ndecisions: 115351\ntotal_time_seconds: 17.334335\npolicy_time_seconds: 17.225104\nrules_time_seconds: 0.085239\ngames_per_sec: 115.378\ndecisions_per_sec: 6654.481\nmean_policy_us_per_decision: 149.328\nthree_winners: 1727\nwall_exhausted: 273\nscore_totals: [618, 117, -87, -648]\nscore_sum: 0\nwinners: [1466, 1430, 1399, 1348]\n",
+      "stderr": "",
+      "fields": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "9987",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "total_time_seconds": 17.334335,
+        "policy_time_seconds": 17.225104,
+        "rules_time_seconds": 0.085239,
+        "games_per_sec": 115.378,
+        "decisions_per_sec": 6654.481,
+        "mean_policy_us_per_decision": "149.328",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      }
+    }
+  ],
+  "initial_three_pair_verdict": "benefit",
+  "summary": {
+    "verdict": "benefit",
+    "seeds": {
+      "7": {
+        "roles": {
+          "baseline": {
+            "total_time_seconds": {
+              "median": 16.63246,
+              "min": 16.625032,
+              "max": 16.713775
+            },
+            "policy_time_seconds": {
+              "median": 16.52812,
+              "min": 16.520449,
+              "max": 16.609652
+            },
+            "games_per_sec": {
+              "median": 120.247,
+              "min": 119.662,
+              "max": 120.301
+            },
+            "decisions_per_sec": {
+              "median": 6844.508,
+              "min": 6811.208,
+              "max": 6847.566
+            }
+          },
+          "candidate": {
+            "total_time_seconds": {
+              "median": 16.205243,
+              "min": 15.954207,
+              "max": 16.328181
+            },
+            "policy_time_seconds": {
+              "median": 16.104483,
+              "min": 15.854581,
+              "max": 16.22464
+            },
+            "games_per_sec": {
+              "median": 123.417,
+              "min": 122.488,
+              "max": 125.359
+            },
+            "decisions_per_sec": {
+              "median": 7024.949,
+              "min": 6972.056,
+              "max": 7135.485
+            }
+          }
+        },
+        "pairs": [
+          {
+            "pair": 1,
+            "total_change_percent": -4.544562793264828,
+            "policy_change_percent": -4.545977242629773
+          },
+          {
+            "pair": 2,
+            "total_change_percent": -2.5685737407454945,
+            "policy_change_percent": -2.563128776896606
+          },
+          {
+            "pair": 3,
+            "total_change_percent": -1.7855664879321775,
+            "policy_change_percent": -1.790562714124766
+          }
+        ]
+      },
+      "10007": {
+        "roles": {
+          "baseline": {
+            "total_time_seconds": {
+              "median": 17.123764,
+              "min": 16.990964,
+              "max": 17.334335
+            },
+            "policy_time_seconds": {
+              "median": 17.017104,
+              "min": 16.886157,
+              "max": 17.225104
+            },
+            "games_per_sec": {
+              "median": 116.797,
+              "min": 115.378,
+              "max": 117.71
+            },
+            "decisions_per_sec": {
+              "median": 6736.311,
+              "min": 6654.481,
+              "max": 6788.962
+            }
+          },
+          "candidate": {
+            "total_time_seconds": {
+              "median": 16.829683,
+              "min": 16.828378,
+              "max": 16.93487
+            },
+            "policy_time_seconds": {
+              "median": 16.723013,
+              "min": 16.721306,
+              "max": 16.828436
+            },
+            "games_per_sec": {
+              "median": 118.838,
+              "min": 118.1,
+              "max": 118.847
+            },
+            "decisions_per_sec": {
+              "median": 6854.021,
+              "min": 6811.449,
+              "max": 6854.552
+            }
+          }
+        },
+        "pairs": [
+          {
+            "pair": 1,
+            "total_change_percent": -1.7250062544660216,
+            "policy_change_percent": -1.738239361997207
+          },
+          {
+            "pair": 2,
+            "total_change_percent": -0.9492163010880517,
+            "policy_change_percent": -0.9661404901067705
+          },
+          {
+            "pair": 3,
+            "total_change_percent": -2.3044725973047075,
+            "policy_change_percent": -2.302848215023845
+          }
+        ]
+      }
+    }
+  }
+}

@@ -606,6 +606,27 @@ fn cache_fill_order_does_not_change_results() {
 
     assert_eq!(cold_distances, warm_distances);
     assert_eq!(cold_ukeire, warm_ukeire);
+
+    // A fresh evaluator per hand must agree with both filling orders and with
+    // repeated queries after hypothetical draws have populated the caches.
+    for ((hand, &distance), &available) in hands
+        .iter()
+        .zip(cold_distances.iter())
+        .zip(cold_ukeire.iter())
+    {
+        let mut fresh = DistanceEvaluator::new(&[], missing).expect("valid melds");
+        let fresh_distance = fresh.deficit(hand);
+        assert_eq!(fresh_distance, distance);
+        assert_eq!(
+            ukeire(&mut fresh, hand, &[0u8; TILE_KINDS], fresh_distance),
+            available
+        );
+        assert_eq!(cold.deficit(hand), distance);
+        assert_eq!(
+            ukeire(&mut cold, hand, &[0u8; TILE_KINDS], distance),
+            available
+        );
+    }
 }
 
 #[test]

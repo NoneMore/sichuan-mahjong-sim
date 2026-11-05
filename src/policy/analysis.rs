@@ -15,14 +15,15 @@
 //! melds. Surplus copies in `H` are discarded for free, which is why the sum
 //! only counts positive deficits.
 //!
-//! The implementation is an exact counted dynamic program:
+//! Standard targets use an exact counted dynamic program:
 //!
 //! - For a standard target, each suit independently chooses triplets and
 //!   sequences while tracking the two pending sequence tails. A second pass
-//!   combines the three suits and places the single pair.
-//! - A seven-pairs target is only legal with no declared melds. Its per-kind
-//!   counts are even, so the choice is 0, 2, or 4 copies per kind under the
-//!   four-copy capacity. Four identical tiles therefore supply two pair units.
+//!   combines the relevant suits and places the single pair.
+//! - A seven-pairs target is only legal with no declared melds, where every
+//!   non-missing kind keeps the full four-copy capacity. It is therefore
+//!   evaluated with a closed form over held pair units and odd kinds rather
+//!   than a per-kind target DP; see `seven_pairs_deficit` below.
 //!
 //! No heuristic shanten estimate is used. The only memoization is keyed by
 //! exact counted hands (and exact per-suit count vectors); it is local to one
@@ -94,9 +95,10 @@ impl<'a> DistanceEvaluator<'a> {
 
     /// Exact `D(hand)` for the fixed target size.
     ///
-    /// A complete `14 - 3 * meld_count` hand has deficit zero; a post-discard
-    /// hand of one fewer tile has deficit at least one, so its shanten is
-    /// `deficit - 1`.
+    /// A hand equal to a legal target has deficit zero; a post-discard hand of
+    /// one fewer tile has deficit at least one, so its shanten is `deficit - 1`.
+    /// Zero deficit identifies the input as a target only when the input and
+    /// target sizes agree and the declared melds are legal.
     pub(crate) fn deficit(&mut self, hand: &Hand) -> u8 {
         let key = *hand.counts();
         if let Some(&cached) = self.hand_cache.get(&key) {
@@ -169,38 +171,45 @@ impl<'a> DistanceEvaluator<'a> {
         combine[self.target_sets][1]
     }
 
-    fn seven_pairs_deficit(&mut self, counts: &[u8; TILE_KINDS]) -> u8 {
-        // Exactly seven pair units. Each kind contributes 0, 1, or 2 units
-        // (0, 2, or 4 identical tiles), so a quad is two pairs.
-        let mut best = [INF; 8];
-        best[0] = 0;
+    /// Exact `D_7(hand)` for a seven-pairs target.
+    ///
+    /// Only called with no declared melds, so every non-missing kind can hold
+    /// the full four target copies this formula assumes. With `t` ranging over
+    /// the 18 non-missing kinds:
+    ///
+    /// ```text
+    /// P = sum_t floor(H[t] / 2)   free pair units, a quad being two of them
+    /// O = sum_t (H[t] mod 2)      odd kinds, including held triples
+    /// K = max(0, 7 - P)           pair units still to fill
+    /// D_7 = K + max(0, K - O)
+    /// ```
+    ///
+    /// The `P` units are target pairs fully covered by held tiles. Each of the
+    /// `O` odd kinds supplies one free tile towards an extra pair, so the first
+    /// `min(K, O)` missing units cost one copy each. Every remaining unit needs
+    /// two copies. Surplus units beyond seven are free, hence
+    /// the saturating subtraction that keeps `P > 7` from underflowing.
+    fn seven_pairs_deficit(&self, counts: &[u8; TILE_KINDS]) -> u8 {
+        debug_assert!(
+            self.melds.is_empty(),
+            "declared melds disable the seven-pairs route"
+        );
+
+        let mut free_units = 0u8;
+        let mut odd_kinds = 0u8;
         for tile in Tile::ALL {
             if tile.suit() == self.missing {
                 continue;
             }
             let held = counts[tile.index() as usize];
-            let capacity = self.capacities[tile.suit_index()][tile.rank_index()];
-            let mut next = [INF; 8];
-            for units in 0..=7 {
-                let current = best[units];
-                if current == INF {
-                    continue;
-                }
-                for (copies, add_units) in [(0u8, 0usize), (2, 1), (4, 2)] {
-                    if copies > capacity || units + add_units > 7 {
-                        continue;
-                    }
-                    let extra = copies.saturating_sub(held);
-                    let total = current.saturating_add(extra);
-                    let slot = &mut next[units + add_units];
-                    if total < *slot {
-                        *slot = total;
-                    }
-                }
-            }
-            best = next;
+            free_units += held / 2;
+            odd_kinds += held % 2;
         }
-        best[7]
+
+        // At most 18 kinds x 4 held copies, so `free_units` fits a byte and the
+        // result is at most 14.
+        let missing_units = 7u8.saturating_sub(free_units);
+        missing_units + missing_units.saturating_sub(odd_kinds)
     }
 }
 
@@ -368,5 +377,7 @@ pub(crate) fn max_discard_fan(hand: &Hand, melds: &[Meld], missing: Suit) -> u8 
     best
 }
 
+#[cfg(test)]
+mod optimization_b_tests;
 #[cfg(test)]
 mod tests;

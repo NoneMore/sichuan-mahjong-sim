@@ -1,0 +1,7 @@
+# Preserve portable scripts and the canonical LF trace encoding on Windows.
+*.py text eol=lf
+tools/*.sh text eol=lf
+baseline/trace-corpus.txt text eol=lf
+
+# A unified diff intentionally contains space-prefixed empty context lines.
+patches/*.patch text eol=lf -whitespace

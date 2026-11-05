@@ -1,0 +1,495 @@
+--- a/src/policy/analysis.rs
++++ b/src/policy/analysis.rs
+@@ -369,4 +369,6 @@
+ }
+ 
+ #[cfg(test)]
++mod optimization_a_tests;
++#[cfg(test)]
+ mod tests;
+--- /dev/null
++++ b/src/policy/analysis/optimization_a_tests.rs
+@@ -0,0 +1,483 @@
++//! Candidate A checks for the tightened standard-target enumeration.
++//!
++//! Two kind of test-only references stand behind the production `suit_table`:
++//!
++//! - `original_bounds_suit_table` keeps the pre-change form, where every
++//!   candidate triple `(sequences, triplets, pair)` inside the set budget is
++//!   enumerated first and then rejected by the `pair_used` and per-rank
++//!   capacity checks. It is also the source of the baseline candidate counts.
++//! - `enumerated_suit_table` ignores the decomposition dynamic program entirely
++//!   and enumerates concrete per-suit targets (multisets of triplets and
++//!   sequences plus an optional pair) whose rank counts fit the capacity.
++//!
++//! Candidate counts describe the isolated A experiment, not the shipped
++//! implementation: A was withdrawn after an end-to-end regression. The counting
++//! model's table is compared with production and both independent references;
++//! equal tables alone do not establish equal enumeration work.
++//!
++//! Candidate counts depend only on capacity and `target_sets`, not on the held
++//! tiles, because the enumeration bounds never inspect the hand. The
++//! representative hands are still swept to demonstrate that independence.
++
++use super::*;
++
++const RANKS: usize = 9;
++
++/// Candidate transitions reached by the per-rank enumeration.
++#[derive(Clone, Copy, Debug, Default)]
++struct EnumerationCounts {
++    /// One `(state, pair, sequences, triplets)` choice reached by the loops.
++    candidates: usize,
++    /// Candidates discarded by a post-enumeration check.
++    rejected: usize,
++}
++
++/// Capacity patterns for one suit: all-zero, all-four, and meld-occupied ranks.
++///
++/// Pung and kong patterns drop the occupied rank to one or zero remaining
++/// concealed copies. The edge patterns exercise sequence starts and sequence
++/// tails at both ends of the rank range.
++fn capacity_patterns() -> Vec<(&'static str, [u8; RANKS])> {
++    vec![
++        ("zero", [0u8; RANKS]),
++        ("full", [4u8; RANKS]),
++        ("pung-rank-5", [4, 4, 4, 4, 1, 4, 4, 4, 4]),
++        ("kong-rank-1", [0, 4, 4, 4, 4, 4, 4, 4, 4]),
++        ("kong-rank-9", [4, 4, 4, 4, 4, 4, 4, 4, 0]),
++        ("kong-both-ends", [0, 4, 4, 4, 4, 4, 4, 4, 0]),
++    ]
++}
++
++/// Held-rank counts for one suit, bounded to at most fourteen tiles.
++fn representative_hands() -> Vec<(&'static str, [u8; RANKS])> {
++    vec![
++        ("empty", [0u8; RANKS]),
++        ("123456789", [1, 1, 1, 1, 1, 1, 1, 1, 1]),
++        ("1112345678999", [3, 1, 1, 1, 1, 1, 1, 1, 3]),
++        ("1122334455", [2, 2, 2, 2, 2, 0, 0, 0, 0]),
++        ("12345678", [1, 2, 3, 3, 2, 1, 0, 0, 0]),
++        ("loose-ends", [4, 0, 0, 0, 0, 0, 0, 0, 4]),
++        ("middle-kong", [0, 0, 0, 0, 4, 0, 0, 0, 0]),
++        ("over-capacity", [4, 4, 4, 0, 0, 0, 0, 0, 2]),
++    ]
++}
++
++/// Fingerprint used in assertion messages, since `[u8; 9]` is not `Display`.
++fn describe(name: &str, hand: &[u8; RANKS], capacity: &[u8; RANKS], target_sets: usize) -> String {
++    format!("hand {name} {hand:?}, capacity {capacity:?}, target_sets {target_sets}")
++}
++
++/// Pre-change per-suit table: full candidate enumeration plus post-checks.
++///
++/// Deliberately keeps the bounds that the optimization replaces: the pair is
++/// always attempted and rejected on conflict, and capacity is only checked after
++/// the counts are formed.
++fn original_bounds_suit_table(
++    hand: &[u8; RANKS],
++    capacity: &[u8; RANKS],
++    target_sets: usize,
++) -> (SuitTable, EnumerationCounts) {
++    const STRIDE: usize = 5;
++    const STATES: usize = STRIDE * STRIDE * STRIDE * 2;
++
++    let index = |a: usize, b: usize, sets: usize, pair: usize| -> usize {
++        (((a * STRIDE + b) * STRIDE + sets) * 2) + pair
++    };
++
++    let mut counts = EnumerationCounts::default();
++    let mut dp = [INF; STATES];
++    let mut active = [0u16; STATES];
++    let mut active_len = 0usize;
++    let start = index(0, 0, 0, 0);
++    dp[start] = 0;
++    active[0] = start as u16;
++    active_len += 1;
++
++    for rank in 0..RANKS {
++        let mut next = [INF; STATES];
++        let mut next_active = [0u16; STATES];
++        let mut next_len = 0usize;
++        let max_new_sequences = if rank <= 6 { target_sets } else { 0 };
++
++        for &active_state in &active[..active_len] {
++            let state = active_state as usize;
++            let current = dp[state];
++            let pair_used = state & 1;
++            let rest = state >> 1;
++            let sets = rest % STRIDE;
++            let rest = rest / STRIDE;
++            let b = rest % STRIDE;
++            let a = rest / STRIDE;
++
++            let set_budget = target_sets - sets;
++            let max_sequences = set_budget.min(max_new_sequences);
++            for sequences in 0..=max_sequences {
++                for triplets in 0..=(set_budget - sequences) {
++                    for pair in 0..=1 {
++                        counts.candidates += 1;
++                        if pair == 1 && pair_used == 1 {
++                            counts.rejected += 1;
++                            continue;
++                        }
++                        let count = 3 * triplets + sequences + a + b + 2 * pair;
++                        if count > capacity[rank] as usize {
++                            counts.rejected += 1;
++                            continue;
++                        }
++                        let extra = (count as u8).saturating_sub(hand[rank]);
++                        let cost = current.saturating_add(extra);
++                        let next_state =
++                            index(b, sequences, sets + triplets + sequences, pair_used + pair);
++                        if cost < next[next_state] {
++                            if next[next_state] == INF {
++                                next_active[next_len] = next_state as u16;
++                                next_len += 1;
++                            }
++                            next[next_state] = cost;
++                        }
++                    }
++                }
++            }
++        }
++
++        dp = next;
++        active = next_active;
++        active_len = next_len;
++        if active_len == 0 {
++            break;
++        }
++    }
++
++    let mut table = [[INF; 2]; 5];
++    for sets in 0..=target_sets {
++        for pair in 0..=1 {
++            table[sets][pair] = dp[index(0, 0, sets, pair)];
++        }
++    }
++    (table, counts)
++}
++
++/// Test-side model of the withdrawn candidate's tightened bounds.
++///
++/// This keeps the experiment reproducible without production instrumentation;
++/// its legality assertions use the original transition conditions.
++fn tightened_bounds_suit_table(
++    hand: &[u8; RANKS],
++    capacity: &[u8; RANKS],
++    target_sets: usize,
++) -> (SuitTable, EnumerationCounts) {
++    const STRIDE: usize = 5;
++    const STATES: usize = STRIDE * STRIDE * STRIDE * 2;
++
++    let index = |a: usize, b: usize, sets: usize, pair: usize| -> usize {
++        (((a * STRIDE + b) * STRIDE + sets) * 2) + pair
++    };
++
++    let mut counts = EnumerationCounts::default();
++    let mut dp = [INF; STATES];
++    let mut active = [0u16; STATES];
++    let mut active_len = 0usize;
++    let start = index(0, 0, 0, 0);
++    dp[start] = 0;
++    active[0] = start as u16;
++    active_len += 1;
++
++    for rank in 0..RANKS {
++        let mut next = [INF; STATES];
++        let mut next_active = [0u16; STATES];
++        let mut next_len = 0usize;
++        let max_new_sequences = if rank <= 6 { target_sets } else { 0 };
++        let rank_capacity = capacity[rank] as usize;
++
++        for &active_state in &active[..active_len] {
++            let state = active_state as usize;
++            let current = dp[state];
++            let pair_used = state & 1;
++            let rest = state >> 1;
++            let sets = rest % STRIDE;
++            let rest = rest / STRIDE;
++            let b = rest % STRIDE;
++            let a = rest / STRIDE;
++
++            let reserved = a + b;
++            if reserved > rank_capacity {
++                continue;
++            }
++            let free = rank_capacity - reserved;
++            let set_budget = target_sets - sets;
++
++            for pair in 0..=(1 - pair_used).min(free / 2) {
++                let pair_tiles = 2 * pair;
++                let available = free - pair_tiles;
++                let max_sequences = set_budget.min(max_new_sequences).min(available);
++                for sequences in 0..=max_sequences {
++                    let remaining = available - sequences;
++                    let max_triplets = (set_budget - sequences).min(remaining / 3);
++                    for triplets in 0..=max_triplets {
++                        counts.candidates += 1;
++                        let count = 3 * triplets + sequences + reserved + pair_tiles;
++                        assert!(pair + pair_used <= 1);
++                        assert!(sets + triplets + sequences <= target_sets);
++                        assert!(count <= capacity[rank] as usize);
++                        let extra = (count as u8).saturating_sub(hand[rank]);
++                        let cost = current.saturating_add(extra);
++                        let next_state =
++                            index(b, sequences, sets + triplets + sequences, pair_used + pair);
++                        if cost < next[next_state] {
++                            if next[next_state] == INF {
++                                next_active[next_len] = next_state as u16;
++                                next_len += 1;
++                            }
++                            next[next_state] = cost;
++                        }
++                    }
++                }
++            }
++        }
++
++        dp = next;
++        active = next_active;
++        active_len = next_len;
++        if active_len == 0 {
++            break;
++        }
++    }
++
++    let mut table = [[INF; 2]; 5];
++    for sets in 0..=target_sets {
++        for pair in 0..=1 {
++            table[sets][pair] = dp[index(0, 0, sets, pair)];
++        }
++    }
++    (table, counts)
++}
++
++/// All concrete per-suit sets: nine triplets and seven sequences.
++fn candidate_sets() -> Vec<[u8; RANKS]> {
++    let mut sets = Vec::new();
++    for rank in 0..RANKS {
++        let mut triplet = [0u8; RANKS];
++        triplet[rank] = 3;
++        sets.push(triplet);
++    }
++    for start in 0..=6 {
++        let mut sequence = [0u8; RANKS];
++        sequence[start..start + 3].fill(1);
++        sets.push(sequence);
++    }
++    sets
++}
++
++/// Enumerates legal set multisets of exactly `remaining` sets.
++fn walk_targets(
++    start: usize,
++    remaining: usize,
++    sets: &[[u8; RANKS]],
++    capacity: &[u8; RANKS],
++    target: &mut [u8; RANKS],
++    visit: &mut impl FnMut(&[u8; RANKS]),
++) {
++    if remaining == 0 {
++        visit(target);
++        return;
++    }
++    for index in start..sets.len() {
++        let candidate = &sets[index];
++        if (0..RANKS).any(|rank| target[rank] + candidate[rank] > capacity[rank]) {
++            continue;
++        }
++        for rank in 0..RANKS {
++            target[rank] += candidate[rank];
++        }
++        walk_targets(index, remaining - 1, sets, capacity, target, visit);
++        for rank in 0..RANKS {
++            target[rank] -= candidate[rank];
++        }
++    }
++}
++
++fn target_cost(hand: &[u8; RANKS], target: &[u8; RANKS]) -> u8 {
++    let mut cost = 0u8;
++    for rank in 0..RANKS {
++        cost += target[rank].saturating_sub(hand[rank]);
++    }
++    cost
++}
++
++/// Independent reference: enumerate concrete per-suit targets directly.
++///
++/// Entry `[sets][pair]` is the cheapest deficit over targets with exactly
++/// `sets` sets and `pair` pairs, which is exactly what `suit_table` returns.
++fn enumerated_suit_table(
++    hand: &[u8; RANKS],
++    capacity: &[u8; RANKS],
++    target_sets: usize,
++) -> SuitTable {
++    let sets = candidate_sets();
++    let mut table = [[INF; 2]; 5];
++    let mut target = [0u8; RANKS];
++
++    for (chosen, entry) in table.iter_mut().enumerate().take(target_sets + 1) {
++        walk_targets(0, chosen, &sets, capacity, &mut target, &mut |target| {
++            entry[0] = entry[0].min(target_cost(hand, target));
++            for rank in 0..RANKS {
++                if target[rank] + 2 > capacity[rank] {
++                    continue;
++                }
++                let mut paired = *target;
++                paired[rank] += 2;
++                entry[1] = entry[1].min(target_cost(hand, &paired));
++            }
++        });
++    }
++
++    table
++}
++
++/// Deterministic pseudo-random hands (LCG, no test-only dependencies).
++///
++/// Each hand holds at most thirteen tiles with at most four copies per rank,
++/// which keeps the sweep inside shapes that the evaluator can actually see.
++fn generated_hands(count: usize) -> Vec<[u8; RANKS]> {
++    let mut state = 0x2545_F491_4F6C_DD1Du64;
++    let mut hands = Vec::new();
++    for _ in 0..count {
++        let mut hand = [0u8; RANKS];
++        for _ in 0..13 {
++            state = state
++                .wrapping_mul(6_364_136_223_846_793_005)
++                .wrapping_add(1_442_695_040_888_963_407);
++            let rank = ((state >> 33) % RANKS as u64) as usize;
++            if hand[rank] < 4 {
++                hand[rank] += 1;
++            }
++        }
++        hands.push(hand);
++    }
++    hands
++}
++
++#[test]
++fn every_table_entry_matches_the_original_bounds() {
++    for (hand_name, hand) in representative_hands() {
++        for (_capacity_name, capacity) in capacity_patterns() {
++            for target_sets in 0..=4 {
++                let expected = original_bounds_suit_table(&hand, &capacity, target_sets).0;
++                let actual = suit_table(&hand, &capacity, target_sets);
++                assert_eq!(
++                    actual,
++                    expected,
++                    "original-bounds mismatch, {}",
++                    describe(hand_name, &hand, &capacity, target_sets)
++                );
++
++                let mirrored = tightened_bounds_suit_table(&hand, &capacity, target_sets).0;
++                assert_eq!(
++                    actual,
++                    mirrored,
++                    "counting mirror mismatch, {}",
++                    describe(hand_name, &hand, &capacity, target_sets)
++                );
++            }
++        }
++    }
++}
++
++#[test]
++fn generated_hands_match_the_original_bounds() {
++    for hand in generated_hands(60) {
++        for (_capacity_name, capacity) in capacity_patterns() {
++            for target_sets in 0..=4 {
++                let expected = original_bounds_suit_table(&hand, &capacity, target_sets).0;
++                let actual = suit_table(&hand, &capacity, target_sets);
++                assert_eq!(
++                    actual,
++                    expected,
++                    "original-bounds mismatch, {}",
++                    describe("generated", &hand, &capacity, target_sets)
++                );
++            }
++        }
++    }
++}
++
++#[test]
++fn every_table_entry_matches_enumerated_targets() {
++    for (hand_name, hand) in representative_hands() {
++        for (capacity_name, capacity) in capacity_patterns() {
++            for target_sets in 0..=4 {
++                let expected = enumerated_suit_table(&hand, &capacity, target_sets);
++                let actual = suit_table(&hand, &capacity, target_sets);
++                assert_eq!(
++                    actual,
++                    expected,
++                    "enumerated-target mismatch ({}), {}",
++                    capacity_name,
++                    describe(hand_name, &hand, &capacity, target_sets)
++                );
++            }
++        }
++    }
++}
++
++/// Records candidate enumeration counts: baseline (post-checked bounds) versus
++/// the tightened bounds.
++///
++/// The required configuration is full four-copy capacity with `target_sets = 4`,
++/// where every suit may still place all four sets. Counts are hand-independent,
++/// so the sweep also asserts that property instead of implying per-hand savings.
++#[test]
++fn enumeration_counts_reduce_at_full_capacity_four_sets() {
++    let capacity = [4u8; RANKS];
++    let hands = representative_hands();
++    let mut baseline_per_hand = Vec::new();
++
++    for (hand_name, hand) in &hands {
++        let (baseline_table, baseline) = original_bounds_suit_table(hand, &capacity, 4);
++        let (mirror_table, tightened) = tightened_bounds_suit_table(hand, &capacity, 4);
++        let production = suit_table(hand, &capacity, 4);
++
++        assert_eq!(production, baseline_table, "hand {hand_name}");
++        assert_eq!(production, mirror_table, "hand {hand_name}");
++        assert!(
++            tightened.candidates < baseline.candidates,
++            "hand {hand_name}: tightened {} candidates, baseline {}",
++            tightened.candidates,
++            baseline.candidates
++        );
++
++        println!(
++            "full capacity, target_sets=4, hand {hand_name:<16} baseline {} candidates \
++             ({} rejected by post-checks), tightened {} candidates",
++            baseline.candidates, baseline.rejected, tightened.candidates
++        );
++        baseline_per_hand.push((baseline.candidates, tightened.candidates));
++    }
++
++    let (baseline_candidates, tightened_candidates) = baseline_per_hand[0];
++    for (index, counts) in baseline_per_hand.iter().enumerate() {
++        assert_eq!(
++            *counts,
++            (baseline_candidates, tightened_candidates),
++            "candidate counts must not depend on the held tiles, hand index {index}"
++        );
++    }
++    println!(
++        "full capacity, target_sets=4: baseline {baseline_candidates} candidates, \
++         tightened {tightened_candidates} candidates"
++    );
++
++    // Full-capacity row for the record, varying the set budget while keeping
++    // the four-copy rank capacity fixed.
++    for target_sets in 0..=4 {
++        let hand = &hands[2].1;
++        let (_, baseline) = original_bounds_suit_table(hand, &capacity, target_sets);
++        let (_, tightened) = tightened_bounds_suit_table(hand, &capacity, target_sets);
++        assert!(tightened.candidates <= baseline.candidates);
++        println!(
++            "full capacity, target_sets={target_sets}: baseline {} candidates \
++             ({} rejected), tightened {} candidates",
++            baseline.candidates, baseline.rejected, tightened.candidates
++        );
++    }
++}
