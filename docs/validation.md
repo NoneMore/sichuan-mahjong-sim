@@ -171,3 +171,53 @@ See the [heuristic cost-attribution study](studies/heuristic-cost-attribution.md
 for `heuristic-benchmark-v1` baseline measurements, function-level sampling,
 stability checks, reproduction steps, and attribution limits. This is a research
 result, not an implemented optimization or a performance guarantee.
+
+## Heuristic hand-analysis optimization
+
+Two private exact-analysis optimizations are retained: B replaces the seven-pairs
+DP with a pair-unit formula (every declared meld still disables that route), and
+A2 prunes impossible suit-table transitions without changing loop order or DP
+states. Rules, policy ranking, information boundaries, cache keys/lifetime and
+checkpoint behavior are unchanged. The full A enumeration rewrite and the C/D
+shortcut experiments were not retained.
+
+Formatting, warning-denied Clippy and all-target tests pass, with **223 tests in
+both debug and release**. Permanent coverage includes independent 0/2/4 target
+costs over all 241 seven-pairs count classes, formula boundaries and meld gating,
+fresh/reused cache equivalence, and complete suit-table comparisons against the
+original enumeration and an independent concrete-target oracle. Historical
+cross-version replay also matched 64 games and 3514 decisions, including full
+traces, scores, winners and finish reasons.
+
+### Historical performance and rerunning
+
+The measurements used Windows 10 build 19045, Ryzen 7 3700X,
+`x86_64-pc-windows-msvc`, rustc/Cargo 1.98.0, LLVM 22.1.8 and the default release
+profile, without custom Rust flags or CPU affinity. Each comparison used
+`heuristic-benchmark-v1`, 2000 games, warmup 20, first seeds 7 and 10007, and
+three interleaved rounds per seed. Median batch times in seconds were:
+
+| Comparison | Seed 7, before → after | Seed 10007, before → after |
+| --- | --- | --- |
+| B: `c9202e3` → `5ad7540` | 16.632 → 16.205 (−2.57%) | 17.124 → 16.830 (−1.72%) |
+| A2 on B: `5ad7540` → `d29d864` | 15.924593 → 15.598216 (−2.05%) | 16.297933 → 16.042941 (−1.56%) |
+
+Candidate maxima were below baseline minima in both seed groups for each
+comparison. These are small local observations, not statistical significance,
+a cross-machine promise or a measured combined speedup; A2's isolated
+microbenchmark was mixed. Raw samples, the frozen trace corpus, experimental
+patches and one-off tooling are not maintained in the current tree.
+
+To remeasure, build each source revision in a separate checkout before any timed
+runs, then invoke its saved executable directly (`.exe` on Windows):
+
+```text
+cargo build --release --example heuristic_bench
+target/release/examples/heuristic_bench --games 2000 --seed 7 --warmup 20
+target/release/examples/heuristic_bench --games 2000 --seed 10007 --warmup 20
+```
+
+Run serially without overlapping builds/tests. Interleave baseline and candidate
+runs for at least three rounds per seed, varying order, and retain all samples
+and non-time outputs with source, toolchain and environment details for the new
+comparison. Fresh measurements do not reproduce the original timing samples.

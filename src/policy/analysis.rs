@@ -15,14 +15,15 @@
 //! melds. Surplus copies in `H` are discarded for free, which is why the sum
 //! only counts positive deficits.
 //!
-//! The implementation is an exact counted dynamic program:
+//! Standard targets use an exact counted dynamic program:
 //!
 //! - For a standard target, each suit independently chooses triplets and
 //!   sequences while tracking the two pending sequence tails. A second pass
-//!   combines the three suits and places the single pair.
-//! - A seven-pairs target is only legal with no declared melds. Its per-kind
-//!   counts are even, so the choice is 0, 2, or 4 copies per kind under the
-//!   four-copy capacity. Four identical tiles therefore supply two pair units.
+//!   combines the relevant suits and places the single pair.
+//! - A seven-pairs target is only legal with no declared melds, where every
+//!   non-missing kind keeps the full four-copy capacity. It is therefore
+//!   evaluated with a closed form over held pair units and odd kinds rather
+//!   than a per-kind target DP; see `seven_pairs_deficit` below.
 //!
 //! No heuristic shanten estimate is used. The only memoization is keyed by
 //! exact counted hands (and exact per-suit count vectors); it is local to one
@@ -94,9 +95,10 @@ impl<'a> DistanceEvaluator<'a> {
 
     /// Exact `D(hand)` for the fixed target size.
     ///
-    /// A complete `14 - 3 * meld_count` hand has deficit zero; a post-discard
-    /// hand of one fewer tile has deficit at least one, so its shanten is
-    /// `deficit - 1`.
+    /// A hand equal to a legal target has deficit zero; a post-discard hand of
+    /// one fewer tile has deficit at least one, so its shanten is `deficit - 1`.
+    /// Zero deficit identifies the input as a target only when the input and
+    /// target sizes agree and the declared melds are legal.
     pub(crate) fn deficit(&mut self, hand: &Hand) -> u8 {
         let key = *hand.counts();
         if let Some(&cached) = self.hand_cache.get(&key) {
@@ -169,38 +171,45 @@ impl<'a> DistanceEvaluator<'a> {
         combine[self.target_sets][1]
     }
 
-    fn seven_pairs_deficit(&mut self, counts: &[u8; TILE_KINDS]) -> u8 {
-        // Exactly seven pair units. Each kind contributes 0, 1, or 2 units
-        // (0, 2, or 4 identical tiles), so a quad is two pairs.
-        let mut best = [INF; 8];
-        best[0] = 0;
+    /// Exact `D_7(hand)` for a seven-pairs target.
+    ///
+    /// Only called with no declared melds, so every non-missing kind can hold
+    /// the full four target copies this formula assumes. With `t` ranging over
+    /// the 18 non-missing kinds:
+    ///
+    /// ```text
+    /// P = sum_t floor(H[t] / 2)   free pair units, a quad being two of them
+    /// O = sum_t (H[t] mod 2)      odd kinds, including held triples
+    /// K = max(0, 7 - P)           pair units still to fill
+    /// D_7 = K + max(0, K - O)
+    /// ```
+    ///
+    /// The `P` units are target pairs fully covered by held tiles. Each of the
+    /// `O` odd kinds supplies one free tile towards an extra pair, so the first
+    /// `min(K, O)` missing units cost one copy each. Every remaining unit needs
+    /// two copies. Surplus units beyond seven are free, hence
+    /// the saturating subtraction that keeps `P > 7` from underflowing.
+    fn seven_pairs_deficit(&self, counts: &[u8; TILE_KINDS]) -> u8 {
+        debug_assert!(
+            self.melds.is_empty(),
+            "declared melds disable the seven-pairs route"
+        );
+
+        let mut free_units = 0u8;
+        let mut odd_kinds = 0u8;
         for tile in Tile::ALL {
             if tile.suit() == self.missing {
                 continue;
             }
             let held = counts[tile.index() as usize];
-            let capacity = self.capacities[tile.suit_index()][tile.rank_index()];
-            let mut next = [INF; 8];
-            for units in 0..=7 {
-                let current = best[units];
-                if current == INF {
-                    continue;
-                }
-                for (copies, add_units) in [(0u8, 0usize), (2, 1), (4, 2)] {
-                    if copies > capacity || units + add_units > 7 {
-                        continue;
-                    }
-                    let extra = copies.saturating_sub(held);
-                    let total = current.saturating_add(extra);
-                    let slot = &mut next[units + add_units];
-                    if total < *slot {
-                        *slot = total;
-                    }
-                }
-            }
-            best = next;
+            free_units += held / 2;
+            odd_kinds += held % 2;
         }
-        best[7]
+
+        // At most 18 kinds x 4 held copies, so `free_units` fits a byte and the
+        // result is at most 14.
+        let missing_units = 7u8.saturating_sub(free_units);
+        missing_units + missing_units.saturating_sub(odd_kinds)
     }
 }
 
@@ -208,8 +217,13 @@ impl<'a> DistanceEvaluator<'a> {
 ///
 /// At rank `r`, `a` and `b` count sequences started at `r - 2` and `r - 1`;
 /// `sequences` starts new sequences at `r`, and `triplets` chooses triplets.
-/// The pair may be placed at any rank. A transition is rejected when the resulting per-rank
-/// target count exceeds the four-copy capacity or the total set budget.
+/// The pair may be placed at any rank. Capacity is charged before enumerating
+/// the candidates that add tiles at this rank: the pending tails `a + b` are
+/// mandatory target tiles, so a state that cannot pay them is dropped, and the
+/// leftover capacity bounds the new sequences and triplets. The pair is still
+/// enumerated in the innermost loop and only rejected when the resulting
+/// per-rank count exceeds that rank's capacity, so the traversal order and
+/// every legal transition are unchanged.
 fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTable {
     // Flat state: (((a * 5 + b) * 5 + sets) * 2 + pair_used).
     const STRIDE_A: usize = 5;
@@ -234,6 +248,7 @@ fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTab
         let mut next_active = [0u16; STATES];
         let mut next_len = 0usize;
         let max_new_sequences = if rank <= 6 { target_sets } else { 0 };
+        let rank_capacity = capacity[rank] as usize;
 
         for &active_state in &active[..active_len] {
             let state = active_state as usize;
@@ -245,16 +260,29 @@ fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTab
             let b = rest % STRIDE_B;
             let a = rest / STRIDE_B;
 
+            // Tails carried from earlier ranks are mandatory tiles here.
+            let reserved = a + b;
+            if reserved > rank_capacity {
+                continue;
+            }
+            let free = rank_capacity - reserved;
             let set_budget = target_sets - sets;
-            let max_sequences = set_budget.min(max_new_sequences);
+            let max_sequences = set_budget.min(max_new_sequences).min(free);
             for sequences in 0..=max_sequences {
+                let after_sequences = free - sequences;
                 for triplets in 0..=(set_budget - sequences) {
+                    // The pair only raises the count, so once the triplet count
+                    // alone overflows the free capacity no pair choice can fit
+                    // and the increasing triplet count cannot recover.
+                    if 3 * triplets > after_sequences {
+                        break;
+                    }
                     for pair in 0..=1 {
                         if pair == 1 && pair_used == 1 {
                             continue;
                         }
-                        let count = 3 * triplets + sequences + a + b + 2 * pair;
-                        if count > capacity[rank] as usize {
+                        let count = 3 * triplets + sequences + reserved + 2 * pair;
+                        if count > rank_capacity {
                             continue;
                         }
                         let extra = (count as u8).saturating_sub(hand[rank]);
@@ -368,5 +396,9 @@ pub(crate) fn max_discard_fan(hand: &Hand, melds: &[Meld], missing: Suit) -> u8 
     best
 }
 
+#[cfg(test)]
+mod optimization_a2_tests;
+#[cfg(test)]
+mod optimization_b_tests;
 #[cfg(test)]
 mod tests;
