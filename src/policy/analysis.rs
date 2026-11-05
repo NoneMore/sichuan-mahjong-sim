@@ -22,8 +22,8 @@
 //!   combines the relevant suits and places the single pair.
 //! - A seven-pairs target is only legal with no declared melds, where every
 //!   non-missing kind keeps the full four-copy capacity. It is therefore
-//!   evaluated with a closed form over held pair units and odd kinds rather
-//!   than a per-kind target DP; see `seven_pairs_deficit` below.
+//!   evaluated with a closed form over held pair units and odd kinds for plain
+//!   distance and needed masks; the surplus query uses a small pair-unit DP.
 //!
 //! [`DistanceEvaluator::deficit_with_mask`] additionally propagates, for every
 //! DP state, the union of tile kinds that the cheapest partial targets reaching
@@ -32,6 +32,13 @@
 //! draws that lower the distance, so [`ukeire`] no longer reruns the distance
 //! analysis once per tile kind. The masked analysis keeps its own per-suit and
 //! full-hand caches: a plain-distance cache hit never answers a mask query.
+//!
+//! [`DistanceEvaluator::deficit_with_surplus`] is the dual query for an
+//! original hand: it returns the same deficit together with the union of kinds
+//! that some optimal target holds fewer of than the hand, so one analysis
+//! answers every candidate discard as `D(H - t) = D(H)` or `D(H) + 1` without a
+//! per-candidate distance solve. It is not the complement of the needed mask
+//! and keeps its own caches, allocated only on the first surplus query.
 //!
 //! No heuristic shanten estimate is used. The only memoization is keyed by
 //! exact counted hands (and exact per-suit count vectors); it is local to one
@@ -52,8 +59,9 @@ type SuitTable = [[u8; 2]; 5];
 
 /// Per-suit masked result table indexed by `[sets][pair_used]`.
 ///
-/// Each entry holds the cheapest per-suit cost and the union of needed ranks
-/// over every partial target attaining that cost. Bits are local to the suit:
+/// Each entry holds the cheapest per-suit cost and the union of marked ranks
+/// (needed or surplus, according to the query) over every partial target
+/// attaining that cost. Bits are local to the suit:
 /// rank `r` is `1 << r`, so bits 9.. are always zero. Unreachable entries are
 /// `(INF, 0)`; an entry with cost `INF` never carries a mask bit.
 type MaskTable = [[(u8, u32); 2]; 5];
@@ -74,6 +82,21 @@ pub(crate) struct DistanceEvaluator<'a> {
     /// separate so that a plain hit never suppresses the mask analysis.
     suit_mask_cache: HashMap<(u8, [u8; 9]), MaskTable>,
     hand_mask_cache: HashMap<[u8; TILE_KINDS], (u8, u32)>,
+    /// Surplus-analysis caches, `None` until the first surplus query so an
+    /// evaluator used for ordinary distance or needed masks pays neither the
+    /// analysis nor an allocation for them.
+    surplus_cache: Option<Box<SurplusCache>>,
+}
+
+/// Lazily allocated caches for [`DistanceEvaluator::deficit_with_surplus`].
+///
+/// The keys are the same exact counted hands and per-suit vectors as the other
+/// caches, so the cache lifetime (one evaluator, one decision) and the meld,
+/// missing-suit, and capacity isolation are unchanged.
+#[derive(Default)]
+struct SurplusCache {
+    suit: HashMap<(u8, [u8; 9]), MaskTable>,
+    hand: HashMap<[u8; TILE_KINDS], (u8, u32)>,
 }
 
 impl<'a> DistanceEvaluator<'a> {
@@ -102,6 +125,7 @@ impl<'a> DistanceEvaluator<'a> {
             hand_cache: HashMap::new(),
             suit_mask_cache: HashMap::new(),
             hand_mask_cache: HashMap::new(),
+            surplus_cache: None,
         })
     }
 
@@ -187,6 +211,74 @@ impl<'a> DistanceEvaluator<'a> {
         result
     }
 
+    /// Exact `deficit` of an original hand together with its surplus mask.
+    ///
+    /// Intended for the original `14 - 3 * melds.len()` tile hand a policy ranks
+    /// discards from. Bit `t` is set exactly when some optimal target `T`
+    /// attaining the returned deficit holds fewer `t` than the hand, i.e.
+    /// `T[t] < hand[t]`. Removing one held copy of kind `t` therefore leaves the
+    /// deficit unchanged exactly for the surplus bits:
+    ///
+    /// ```text
+    /// D(hand - t) = D(hand)      when bit t is set
+    ///             = D(hand) + 1  otherwise
+    /// ```
+    ///
+    /// The identity also holds for other counted sizes, but the intended use is
+    /// the original hand; a post-discard hand one tile below the target size has
+    /// its own exact [`Self::deficit`].
+    ///
+    /// The surplus mask is not the complement of the needed mask from
+    /// [`Self::deficit_with_mask`]: different optimal targets may make the same
+    /// kind both needed and surplus, and a held missing-suit copy is surplus
+    /// because no target may contain it. Equally cheap standard and seven-pairs
+    /// targets union their masks; a strictly cheaper route replaces the other
+    /// one, and a strictly cheaper target always replaces the mask instead of
+    /// unioning it.
+    pub(crate) fn deficit_with_surplus(&mut self, hand: &Hand) -> (u8, u32) {
+        let key = *hand.counts();
+        if let Some(cached) = self
+            .surplus_cache
+            .as_ref()
+            .and_then(|cache| cache.hand.get(&key))
+        {
+            return *cached;
+        }
+
+        let melds_empty = self.melds.is_empty();
+        let missing = self.missing;
+        let target_sets = self.target_sets;
+        let capacities = self.capacities;
+        let cache = self.surplus_cache.get_or_insert_with(Box::default);
+
+        let (standard, standard_mask) =
+            standard_masked::<true>(&mut cache.suit, &capacities, target_sets, &key);
+        // Declared melds complete standard sets and disable seven pairs.
+        let (seven_pairs, seven_pairs_mask) = if melds_empty {
+            seven_pairs_deficit_surplus(missing, &key)
+        } else {
+            (INF, 0)
+        };
+        let result = if seven_pairs < standard {
+            (seven_pairs, seven_pairs_mask)
+        } else if seven_pairs == standard {
+            (standard, standard_mask | seven_pairs_mask)
+        } else {
+            (standard, standard_mask)
+        };
+        debug_assert!(
+            result.0 != INF,
+            "a legal meld count always admits a standard target"
+        );
+        cache.hand.insert(key, result);
+        debug_assert_eq!(
+            result.0,
+            self.deficit(hand),
+            "the surplus analysis must keep the exact plain deficit"
+        );
+        result
+    }
+
     fn standard_deficit(&mut self, counts: &[u8; TILE_KINDS]) -> u8 {
         let mut combine = [[INF; 2]; 5];
         combine[0][0] = 0;
@@ -245,61 +337,12 @@ impl<'a> DistanceEvaluator<'a> {
     /// cheapest target; a strictly cheaper combination replaces the mask
     /// instead of unioning it.
     fn standard_deficit_with_mask(&mut self, counts: &[u8; TILE_KINDS]) -> (u8, u32) {
-        let mut combine = [[(INF, 0u32); 2]; 5];
-        combine[0][0] = (0, 0);
-
-        for suit in Suit::ALL {
-            let mut local = [0u8; 9];
-            let start = suit.index() * 9;
-            local.copy_from_slice(&counts[start..start + 9]);
-
-            let table = match self.suit_mask_cache.get(&(suit.index() as u8, local)) {
-                Some(table) => *table,
-                None => {
-                    let table = suit_table_with_mask(
-                        &local,
-                        &self.capacities[suit.index()],
-                        self.target_sets,
-                    );
-                    self.suit_mask_cache
-                        .insert((suit.index() as u8, local), table);
-                    table
-                }
-            };
-
-            let shift = (suit.index() * 9) as u32;
-            let mut next = [[(INF, 0u32); 2]; 5];
-            for sets in 0..=self.target_sets {
-                for pair in 0..=1 {
-                    let (current, current_mask) = combine[sets][pair];
-                    if current == INF {
-                        continue;
-                    }
-                    for suit_sets in 0..=(self.target_sets - sets) {
-                        for suit_pair in 0..=1 {
-                            if pair + suit_pair > 1 {
-                                continue;
-                            }
-                            let (cost, suit_mask) = table[suit_sets][suit_pair];
-                            if cost == INF {
-                                continue;
-                            }
-                            let total = current.saturating_add(cost);
-                            let mask = current_mask | (suit_mask << shift);
-                            let slot = &mut next[sets + suit_sets][pair + suit_pair];
-                            if total < slot.0 {
-                                *slot = (total, mask);
-                            } else if total == slot.0 {
-                                slot.1 |= mask;
-                            }
-                        }
-                    }
-                }
-            }
-            combine = next;
-        }
-
-        combine[self.target_sets][1]
+        standard_masked::<false>(
+            &mut self.suit_mask_cache,
+            &self.capacities,
+            self.target_sets,
+            counts,
+        )
     }
 
     /// Exact `D_7(hand)` for a seven-pairs target.
@@ -397,6 +440,78 @@ impl<'a> DistanceEvaluator<'a> {
     }
 }
 
+/// Shared masked standard analysis for both mask meanings.
+///
+/// `SURPLUS` selects the per-suit mask predicate: `false` is the needed mask
+/// used by [`ukeire`] (target count above the held count), `true` is the
+/// surplus mask used by [`DistanceEvaluator::deficit_with_surplus`] (target
+/// count below the held count). Costs are identical to
+/// [`DistanceEvaluator::standard_deficit`] in both variants; only the
+/// accumulated bits differ. The suit table is computed once per exact local
+/// hand and cached in the caller's cache, which belongs to one evaluator.
+///
+/// Suit-local masks are shifted to global tile indices and unioned on equal
+/// cost, because both prefixes are then part of some cheapest completion; a
+/// strictly cheaper combination replaces the mask instead of unioning it.
+fn standard_masked<const SURPLUS: bool>(
+    suit_cache: &mut HashMap<(u8, [u8; 9]), MaskTable>,
+    capacities: &[[u8; 9]; 3],
+    target_sets: usize,
+    counts: &[u8; TILE_KINDS],
+) -> (u8, u32) {
+    let mut combine = [[(INF, 0u32); 2]; 5];
+    combine[0][0] = (0, 0);
+
+    for suit in Suit::ALL {
+        let mut local = [0u8; 9];
+        let start = suit.index() * 9;
+        local.copy_from_slice(&counts[start..start + 9]);
+
+        let table = match suit_cache.get(&(suit.index() as u8, local)) {
+            Some(table) => *table,
+            None => {
+                let table =
+                    suit_table_masked::<SURPLUS>(&local, &capacities[suit.index()], target_sets);
+                suit_cache.insert((suit.index() as u8, local), table);
+                table
+            }
+        };
+
+        let shift = (suit.index() * 9) as u32;
+        let mut next = [[(INF, 0u32); 2]; 5];
+        for sets in 0..=target_sets {
+            for pair in 0..=1 {
+                let (current, current_mask) = combine[sets][pair];
+                if current == INF {
+                    continue;
+                }
+                for suit_sets in 0..=(target_sets - sets) {
+                    for suit_pair in 0..=1 {
+                        if pair + suit_pair > 1 {
+                            continue;
+                        }
+                        let (cost, suit_mask) = table[suit_sets][suit_pair];
+                        if cost == INF {
+                            continue;
+                        }
+                        let total = current.saturating_add(cost);
+                        let mask = current_mask | (suit_mask << shift);
+                        let slot = &mut next[sets + suit_sets][pair + suit_pair];
+                        if total < slot.0 {
+                            *slot = (total, mask);
+                        } else if total == slot.0 {
+                            slot.1 |= mask;
+                        }
+                    }
+                }
+            }
+        }
+        combine = next;
+    }
+
+    combine[target_sets][1]
+}
+
 /// Exact seven-pairs cost from the `P`/`O` quantities documented on
 /// [`DistanceEvaluator::seven_pairs_deficit`].
 ///
@@ -405,6 +520,62 @@ impl<'a> DistanceEvaluator<'a> {
 fn seven_pairs_cost(free_units: u8, odd_kinds: u8) -> u8 {
     let missing_units = 7u8.saturating_sub(free_units);
     missing_units + missing_units.saturating_sub(odd_kinds)
+}
+
+/// Exact seven-pairs distance together with the union of surplus kinds over
+/// every optimal seven-pairs target.
+///
+/// A seven-pairs target is a choice of seven pair units over the 18 non-missing
+/// kinds, each kind contributing zero, one, or two units (`0`, `2`, or `4`
+/// target copies). The DP walks the kinds in encoding order and keeps, for every
+/// unit count, the cheapest cost and the surplus union over all partial targets
+/// attaining it. Each kind is scored against its held count exactly like the
+/// standard suit DP: a target count above the held count costs the difference;
+/// a target count below it costs nothing and sets the surplus bit. A strictly
+/// cheaper arrival replaces `(cost, mask)` and an
+/// equal-cost arrival unions the mask, so the final entry is exact over every
+/// optimal seven-pairs target.
+///
+/// Missing-suit kinds are walked with units fixed at zero instead of being
+/// skipped: a held copy can never appear in a target, so it is surplus and its
+/// bit must join the union. The distance agrees with [`seven_pairs_cost`].
+fn seven_pairs_deficit_surplus(missing: Suit, counts: &[u8; TILE_KINDS]) -> (u8, u32) {
+    let mut dp = [(INF, 0u32); 8];
+    dp[0] = (0, 0);
+
+    for kind in Tile::ALL {
+        let held = counts[kind.index() as usize];
+        let max_units = if kind.suit() == missing { 0 } else { 2 };
+        let mut next = [(INF, 0u32); 8];
+        for (units, &(cost, mask)) in dp.iter().enumerate() {
+            if cost == INF {
+                continue;
+            }
+            for target_units in 0..=max_units {
+                let total_units = units + target_units;
+                if total_units > 7 {
+                    continue;
+                }
+                let target_count = (2 * target_units) as u8;
+                let extra = target_count.saturating_sub(held);
+                let new_cost = cost.saturating_add(extra);
+                let new_mask = if target_count < held {
+                    mask | (1u32 << kind.index())
+                } else {
+                    mask
+                };
+                let slot = &mut next[total_units];
+                if new_cost < slot.0 {
+                    *slot = (new_cost, new_mask);
+                } else if new_cost == slot.0 {
+                    slot.1 |= new_mask;
+                }
+            }
+        }
+        dp = next;
+    }
+
+    dp[7]
 }
 
 /// Computes the exact per-suit cost table for a standard target.
@@ -512,19 +683,37 @@ fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTab
     table
 }
 
-/// Computes the exact masked per-suit table for a standard target.
+/// Computes the exact masked per-suit table for a standard target, marking
+/// needed ranks (target count above the held count).
+///
+/// Production goes through [`suit_table_masked`] directly; this alias is the
+/// test-facing name used by the complete-table checks.
+#[cfg(test)]
+fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> MaskTable {
+    suit_table_masked::<false>(hand, capacity, target_sets)
+}
+
+/// Shared masked per-suit DP for the needed and surplus masks.
 ///
 /// This mirrors [`suit_table`] transition for transition, including the A2
 /// capacity bounds and the `pair` placement, so the costs are identical. Each
-/// state additionally keeps the union of needed local ranks over every partial
-/// target attaining its cheapest cost: a rank whose target count exceeds the
-/// held count contributes its bit, a strictly cheaper arrival replaces
-/// `(cost, mask)`, and an equal-cost arrival only unions the mask because both
-/// prefixes are then part of some cheapest completion. Unreachable states stay
-/// `(INF, 0)`: `INF` entries are never written or ORed because every written
-/// cost is finite: only reachable active states are expanded, and their
-/// target costs are too small to saturate at `INF`.
-fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> MaskTable {
+/// state additionally keeps the union of marked local ranks over every partial
+/// target attaining its cheapest cost. `SURPLUS` selects the predicate:
+///
+/// - `false` marks `count > hand[rank]`, the ranks a target still needs;
+/// - `true` marks `count < hand[rank]`, the ranks a target holds fewer of.
+///
+/// A strictly cheaper arrival replaces `(cost, mask)`, and an equal-cost
+/// arrival only unions the mask because both prefixes are then part of some
+/// cheapest completion. Unreachable states stay `(INF, 0)`: `INF` entries are
+/// never written or ORed because every written cost is finite: only reachable
+/// active states are expanded, and their target costs are too small to saturate
+/// at `INF`.
+fn suit_table_masked<const SURPLUS: bool>(
+    hand: &[u8; 9],
+    capacity: &[u8; 9],
+    target_sets: usize,
+) -> MaskTable {
     // Flat state: (((a * 5 + b) * 5 + sets) * 2 + pair_used).
     const STRIDE_A: usize = 5;
     const STRIDE_B: usize = 5;
@@ -582,10 +771,15 @@ fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) 
                         if count > rank_capacity {
                             continue;
                         }
-                        let needed = count as u8 > hand[rank];
-                        let extra = (count as u8).saturating_sub(hand[rank]);
+                        let count = count as u8;
+                        let marked = if SURPLUS {
+                            count < hand[rank]
+                        } else {
+                            count > hand[rank]
+                        };
+                        let extra = count.saturating_sub(hand[rank]);
                         let cost = current.saturating_add(extra);
-                        let mask = if needed {
+                        let mask = if marked {
                             current_mask | (1u32 << rank)
                         } else {
                             current_mask
@@ -706,6 +900,8 @@ pub(crate) fn max_discard_fan(hand: &Hand, melds: &[Meld], missing: Suit) -> u8 
     best
 }
 
+#[cfg(test)]
+mod discard_surplus_tests;
 #[cfg(test)]
 mod one_pass_reference;
 #[cfg(test)]

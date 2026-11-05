@@ -17,7 +17,7 @@ Pure `eval` and `rules` helpers supply facts, not competing state owners.
 | Hand evaluation | [`eval.rs`](../../src/eval.rs) | Winning shapes and waiting tiles |
 | Fixed-rule helpers | [`rules.rs`](../../src/rules.rs) | Legality and settlement facts used by `Game` |
 | Authoritative game | [`game.rs`](../../src/game.rs), [`game/tests.rs`](../../src/game/tests.rs) | Decisions, stage progression, claims, settlement, and invariants |
-| Policies | [`policy.rs`](../../src/policy.rs), [`policy/heuristic.rs`](../../src/policy/heuristic.rs), [`policy/missing_only.rs`](../../src/policy/missing_only.rs), [`policy/analysis.rs`](../../src/policy/analysis.rs) | `Policy` trait, legal baselines, deterministic shanten/ukeire `HeuristicPolicy`, and the `MissingOnlyPolicy` ablation that delegates to `FirstLegalPolicy` except for the shared missing-suit rule; exact target-deficit and optimal-target-mask analysis remain private |
+| Policies | [`policy.rs`](../../src/policy.rs), [`policy/heuristic.rs`](../../src/policy/heuristic.rs), [`policy/missing_only.rs`](../../src/policy/missing_only.rs), [`policy/analysis.rs`](../../src/policy/analysis.rs) | `Policy` trait, legal baselines, deterministic shanten/ukeire `HeuristicPolicy`, and the `MissingOnlyPolicy` ablation that delegates to `FirstLegalPolicy` except for the shared missing-suit rule; exact target-deficit, optimal needed-mask ukeire, and one-original-hand surplus-mask discard analysis remain private |
 | Execution | [`runner.rs`](../../src/runner.rs), [`main.rs`](../../src/main.rs) | Driving games, aggregating results, and the native CLI |
 | Native policy comparison | [`examples/policy_ab.rs`](../../examples/policy_ab.rs) | Standalone balanced 2A2B comparison with selectable A/B policies and fresh policies and runner per game; no new game rules or library API |
 | Heuristic benchmark | [`examples/heuristic_bench.rs`](../../examples/heuristic_bench.rs) | Standalone `heuristic-benchmark-v1` four-seat `HeuristicPolicy` self-play benchmark: one `Runner` and four fresh policies per phase, reused across games within a phase, with warmup seeds preceding the measured range; no new game rules or library API |
@@ -73,6 +73,11 @@ so fresh instances reproduce continuation from a cloned game. The
   decision of the missing-suit-only ablation against its reference policy
   (`HeuristicPolicy` for the declaration, `FirstLegalPolicy` otherwise),
   legality, seeded replay, and continuation with fresh policies.
+- [`src/policy/analysis/discard_surplus_tests.rs`](../../src/policy/analysis/discard_surplus_tests.rs)
+  and [`src/policy/heuristic/tests/one_pass_discard.rs`](../../src/policy/heuristic/tests/one_pass_discard.rs):
+  exact per-candidate removed-tile deficit references, optimal surplus unions,
+  standard/seven-pairs ties, physical sampled states, lazy/context-isolated
+  caches, candidate order, ukeire/fan ranking, and peng/kong decision regressions.
 - [`src/policy/analysis/one_pass_tests.rs`](../../src/policy/analysis/one_pass_tests.rs)
   and its submodules: optimal-target masks, frozen ukeire/distance reference,
   concrete target oracles, full suit tables, ownership, ties, and cache ordering.
