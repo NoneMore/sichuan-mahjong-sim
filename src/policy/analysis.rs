@@ -25,6 +25,14 @@
 //!   evaluated with a closed form over held pair units and odd kinds rather
 //!   than a per-kind target DP; see `seven_pairs_deficit` below.
 //!
+//! [`DistanceEvaluator::deficit_with_mask`] additionally propagates, for every
+//! DP state, the union of tile kinds that the cheapest partial targets reaching
+//! that state still need, including kinds entirely absent from the hand.
+//! The resulting 27-bit mask is exactly the set of
+//! draws that lower the distance, so [`ukeire`] no longer reruns the distance
+//! analysis once per tile kind. The masked analysis keeps its own per-suit and
+//! full-hand caches: a plain-distance cache hit never answers a mask query.
+//!
 //! No heuristic shanten estimate is used. The only memoization is keyed by
 //! exact counted hands (and exact per-suit count vectors); it is local to one
 //! policy decision and can never change an action.
@@ -42,6 +50,14 @@ const INF: u8 = u8::MAX;
 /// Per-suit result table indexed by `[sets][pair_used]`.
 type SuitTable = [[u8; 2]; 5];
 
+/// Per-suit masked result table indexed by `[sets][pair_used]`.
+///
+/// Each entry holds the cheapest per-suit cost and the union of needed ranks
+/// over every partial target attaining that cost. Bits are local to the suit:
+/// rank `r` is `1 << r`, so bits 9.. are always zero. Unreachable entries are
+/// `(INF, 0)`; an entry with cost `INF` never carries a mask bit.
+type MaskTable = [[(u8, u32); 2]; 5];
+
 /// Exact target-deficit evaluator for one fixed meld set and missing suit.
 ///
 /// Creating a new evaluator per meld set keeps the four-copy capacity and the
@@ -54,6 +70,10 @@ pub(crate) struct DistanceEvaluator<'a> {
     capacities: [[u8; 9]; 3],
     suit_cache: HashMap<(u8, [u8; 9]), SuitTable>,
     hand_cache: HashMap<[u8; TILE_KINDS], u8>,
+    /// Masked counterparts of the two plain-distance caches. They are kept
+    /// separate so that a plain hit never suppresses the mask analysis.
+    suit_mask_cache: HashMap<(u8, [u8; 9]), MaskTable>,
+    hand_mask_cache: HashMap<[u8; TILE_KINDS], (u8, u32)>,
 }
 
 impl<'a> DistanceEvaluator<'a> {
@@ -80,17 +100,14 @@ impl<'a> DistanceEvaluator<'a> {
             capacities,
             suit_cache: HashMap::new(),
             hand_cache: HashMap::new(),
+            suit_mask_cache: HashMap::new(),
+            hand_mask_cache: HashMap::new(),
         })
     }
 
     /// The missing suit fixed for this evaluator.
     pub(crate) const fn missing(&self) -> Suit {
         self.missing
-    }
-
-    /// The declared melds fixed for this evaluator.
-    pub(crate) const fn melds(&self) -> &'a [Meld] {
-        self.melds
     }
 
     /// Exact `D(hand)` for the fixed target size.
@@ -118,6 +135,55 @@ impl<'a> DistanceEvaluator<'a> {
             "a legal meld count always admits a standard target"
         );
         self.hand_cache.insert(key, result);
+        result
+    }
+
+    /// Exact `deficit` together with the union of draws that lower it.
+    ///
+    /// Bit `t` of the mask is set exactly when some optimal target `T` of this
+    /// hand needs kind `t`, i.e. `T[t] > hand[t]`. The mask is structural: it
+    /// ignores `public`/`unseen` ownership and may therefore hold a bit for a
+    /// kind whose four copies are already publicly exhausted.
+    ///
+    /// The returned distance is the same value as [`Self::deficit`] for this
+    /// hand and context; only the cached state differs. The two routes are
+    /// merged by taking the lower distance, and an exact tie unions the masks
+    /// because both target families are then optimal.
+    ///
+    /// For a hand one tile below the target size (the post-discard and
+    /// post-declaration shapes [`ukeire`] analyzes), a legal added copy of kind
+    /// `t` strictly lowers this distance if and only if bit `t` is set. See
+    /// `specs/archive/one-pass-ukeire/proof.md`.
+    pub(crate) fn deficit_with_mask(&mut self, hand: &Hand) -> (u8, u32) {
+        let key = *hand.counts();
+        if let Some(&cached) = self.hand_mask_cache.get(&key) {
+            return cached;
+        }
+
+        let (standard, standard_mask) = self.standard_deficit_with_mask(&key);
+        // Declared melds complete standard sets and disable seven pairs.
+        let (seven_pairs, seven_pairs_mask) = if self.melds.is_empty() {
+            self.seven_pairs_deficit_with_mask(&key)
+        } else {
+            (INF, 0)
+        };
+        let result = if seven_pairs < standard {
+            (seven_pairs, seven_pairs_mask)
+        } else if seven_pairs == standard {
+            (standard, standard_mask | seven_pairs_mask)
+        } else {
+            (standard, standard_mask)
+        };
+        debug_assert!(
+            result.0 != INF,
+            "a legal meld count always admits a standard target"
+        );
+        debug_assert_eq!(
+            result.0,
+            self.deficit(hand),
+            "the masked analysis must keep the exact plain deficit"
+        );
+        self.hand_mask_cache.insert(key, result);
         result
     }
 
@@ -171,6 +237,71 @@ impl<'a> DistanceEvaluator<'a> {
         combine[self.target_sets][1]
     }
 
+    /// Masked counterpart of [`Self::standard_deficit`].
+    ///
+    /// Costs are combined exactly as in the plain analysis. Masks are shifted
+    /// from suit-local rank bits into the global tile index and merged when the
+    /// combined costs tie, because both suit prefixes are then part of some
+    /// cheapest target; a strictly cheaper combination replaces the mask
+    /// instead of unioning it.
+    fn standard_deficit_with_mask(&mut self, counts: &[u8; TILE_KINDS]) -> (u8, u32) {
+        let mut combine = [[(INF, 0u32); 2]; 5];
+        combine[0][0] = (0, 0);
+
+        for suit in Suit::ALL {
+            let mut local = [0u8; 9];
+            let start = suit.index() * 9;
+            local.copy_from_slice(&counts[start..start + 9]);
+
+            let table = match self.suit_mask_cache.get(&(suit.index() as u8, local)) {
+                Some(table) => *table,
+                None => {
+                    let table = suit_table_with_mask(
+                        &local,
+                        &self.capacities[suit.index()],
+                        self.target_sets,
+                    );
+                    self.suit_mask_cache
+                        .insert((suit.index() as u8, local), table);
+                    table
+                }
+            };
+
+            let shift = (suit.index() * 9) as u32;
+            let mut next = [[(INF, 0u32); 2]; 5];
+            for sets in 0..=self.target_sets {
+                for pair in 0..=1 {
+                    let (current, current_mask) = combine[sets][pair];
+                    if current == INF {
+                        continue;
+                    }
+                    for suit_sets in 0..=(self.target_sets - sets) {
+                        for suit_pair in 0..=1 {
+                            if pair + suit_pair > 1 {
+                                continue;
+                            }
+                            let (cost, suit_mask) = table[suit_sets][suit_pair];
+                            if cost == INF {
+                                continue;
+                            }
+                            let total = current.saturating_add(cost);
+                            let mask = current_mask | (suit_mask << shift);
+                            let slot = &mut next[sets + suit_sets][pair + suit_pair];
+                            if total < slot.0 {
+                                *slot = (total, mask);
+                            } else if total == slot.0 {
+                                slot.1 |= mask;
+                            }
+                        }
+                    }
+                }
+            }
+            combine = next;
+        }
+
+        combine[self.target_sets][1]
+    }
+
     /// Exact `D_7(hand)` for a seven-pairs target.
     ///
     /// Only called with no declared melds, so every non-missing kind can hold
@@ -195,6 +326,17 @@ impl<'a> DistanceEvaluator<'a> {
             "declared melds disable the seven-pairs route"
         );
 
+        let (free_units, odd_kinds) = self.seven_pairs_units(counts);
+        seven_pairs_cost(free_units, odd_kinds)
+    }
+
+    /// Held pair units `P` and odd kinds `O` over the non-missing suits.
+    ///
+    /// `P = sum_t floor(H[t] / 2)` counts target pair units already fully
+    /// covered by held tiles, a quad being two of them. `O = sum_t (H[t] mod 2)`
+    /// counts kinds where one more copy upgrades the held tiles to a target
+    /// pair, so it is the number of extra units available at cost one.
+    fn seven_pairs_units(&self, counts: &[u8; TILE_KINDS]) -> (u8, u8) {
         let mut free_units = 0u8;
         let mut odd_kinds = 0u8;
         for tile in Tile::ALL {
@@ -205,12 +347,64 @@ impl<'a> DistanceEvaluator<'a> {
             free_units += held / 2;
             odd_kinds += held % 2;
         }
-
-        // At most 18 kinds x 4 held copies, so `free_units` fits a byte and the
-        // result is at most 14.
-        let missing_units = 7u8.saturating_sub(free_units);
-        missing_units + missing_units.saturating_sub(odd_kinds)
+        (free_units, odd_kinds)
     }
+
+    /// Masked counterpart of [`Self::seven_pairs_deficit`].
+    ///
+    /// The optimal seven-pairs targets are characterized by the cost of their
+    /// pair units, so the needed-kind union follows from the same `P`/`O`
+    /// quantities (see `specs/archive/one-pass-ukeire/proof.md`):
+    ///
+    /// - zero deficit: every optimal target has cost zero, so no target count
+    ///   can exceed the held count and the mask is empty;
+    /// - `0 < K <= O` with `K = 7 - P`: an optimal target extends exactly `K`
+    ///   distinct odd kinds by one copy, hence every odd kind is needed and no
+    ///   other kind can be;
+    /// - `O < K`: every odd kind is extended and the remaining `K - O` units
+    ///   cost two each from any non-missing kind holding fewer than four
+    ///   copies, so every such kind is needed.
+    fn seven_pairs_deficit_with_mask(&self, counts: &[u8; TILE_KINDS]) -> (u8, u32) {
+        debug_assert!(
+            self.melds.is_empty(),
+            "declared melds disable the seven-pairs route"
+        );
+
+        let (free_units, odd_kinds) = self.seven_pairs_units(counts);
+        let deficit = seven_pairs_cost(free_units, odd_kinds);
+        if deficit == 0 {
+            return (0, 0);
+        }
+
+        let missing_units = 7u8.saturating_sub(free_units);
+        let every_held_kind = missing_units > odd_kinds;
+        let mut mask = 0u32;
+        for tile in Tile::ALL {
+            if tile.suit() == self.missing {
+                continue;
+            }
+            let held = counts[tile.index() as usize];
+            let needed = if every_held_kind {
+                held < COPIES_PER_TILE
+            } else {
+                held % 2 == 1
+            };
+            if needed {
+                mask |= 1u32 << tile.index();
+            }
+        }
+        (deficit, mask)
+    }
+}
+
+/// Exact seven-pairs cost from the `P`/`O` quantities documented on
+/// [`DistanceEvaluator::seven_pairs_deficit`].
+///
+/// Shared by the plain and masked routes so the two can never disagree on the
+/// distance.
+fn seven_pairs_cost(free_units: u8, odd_kinds: u8) -> u8 {
+    let missing_units = 7u8.saturating_sub(free_units);
+    missing_units + missing_units.saturating_sub(odd_kinds)
 }
 
 /// Computes the exact per-suit cost table for a standard target.
@@ -318,53 +512,169 @@ fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTab
     table
 }
 
+/// Computes the exact masked per-suit table for a standard target.
+///
+/// This mirrors [`suit_table`] transition for transition, including the A2
+/// capacity bounds and the `pair` placement, so the costs are identical. Each
+/// state additionally keeps the union of needed local ranks over every partial
+/// target attaining its cheapest cost: a rank whose target count exceeds the
+/// held count contributes its bit, a strictly cheaper arrival replaces
+/// `(cost, mask)`, and an equal-cost arrival only unions the mask because both
+/// prefixes are then part of some cheapest completion. Unreachable states stay
+/// `(INF, 0)`: `INF` entries are never written or ORed because every written
+/// cost is finite: only reachable active states are expanded, and their
+/// target costs are too small to saturate at `INF`.
+fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> MaskTable {
+    // Flat state: (((a * 5 + b) * 5 + sets) * 2 + pair_used).
+    const STRIDE_A: usize = 5;
+    const STRIDE_B: usize = 5;
+    const STRIDE_SETS: usize = 5;
+    const STATES: usize = STRIDE_A * STRIDE_B * STRIDE_SETS * 2;
+
+    let index = |a: usize, b: usize, sets: usize, pair: usize| -> usize {
+        (((a * STRIDE_B + b) * STRIDE_SETS + sets) * 2) + pair
+    };
+
+    let mut dp = [(INF, 0u32); STATES];
+    let mut active = [0u16; STATES];
+    let mut active_len = 0usize;
+    let start = index(0, 0, 0, 0);
+    dp[start] = (0, 0);
+    active[0] = start as u16;
+    active_len += 1;
+
+    for rank in 0..9 {
+        let mut next = [(INF, 0u32); STATES];
+        let mut next_active = [0u16; STATES];
+        let mut next_len = 0usize;
+        let max_new_sequences = if rank <= 6 { target_sets } else { 0 };
+        let rank_capacity = capacity[rank] as usize;
+
+        for &active_state in &active[..active_len] {
+            let state = active_state as usize;
+            let (current, current_mask) = dp[state];
+            let pair_used = state & 1;
+            let rest = state >> 1;
+            let sets = rest % STRIDE_SETS;
+            let rest = rest / STRIDE_SETS;
+            let b = rest % STRIDE_B;
+            let a = rest / STRIDE_B;
+
+            // Tails carried from earlier ranks are mandatory tiles here.
+            let reserved = a + b;
+            if reserved > rank_capacity {
+                continue;
+            }
+            let free = rank_capacity - reserved;
+            let set_budget = target_sets - sets;
+            let max_sequences = set_budget.min(max_new_sequences).min(free);
+            for sequences in 0..=max_sequences {
+                let after_sequences = free - sequences;
+                for triplets in 0..=(set_budget - sequences) {
+                    if 3 * triplets > after_sequences {
+                        break;
+                    }
+                    for pair in 0..=1 {
+                        if pair == 1 && pair_used == 1 {
+                            continue;
+                        }
+                        let count = 3 * triplets + sequences + reserved + 2 * pair;
+                        if count > rank_capacity {
+                            continue;
+                        }
+                        let needed = count as u8 > hand[rank];
+                        let extra = (count as u8).saturating_sub(hand[rank]);
+                        let cost = current.saturating_add(extra);
+                        let mask = if needed {
+                            current_mask | (1u32 << rank)
+                        } else {
+                            current_mask
+                        };
+                        let next_state =
+                            index(b, sequences, sets + triplets + sequences, pair_used + pair);
+                        let slot = &mut next[next_state];
+                        if cost < slot.0 {
+                            if slot.0 == INF {
+                                next_active[next_len] = next_state as u16;
+                                next_len += 1;
+                            }
+                            *slot = (cost, mask);
+                        } else if cost == slot.0 {
+                            slot.1 |= mask;
+                        }
+                    }
+                }
+            }
+        }
+
+        dp = next;
+        active = next_active;
+        active_len = next_len;
+        if active_len == 0 {
+            break;
+        }
+    }
+
+    let mut table = [[(INF, 0u32); 2]; 5];
+    for sets in 0..=target_sets {
+        for pair in 0..=1 {
+            table[sets][pair] = dp[index(0, 0, sets, pair)];
+        }
+    }
+    table
+}
+
 /// Counts unseen copies of each tile kind that improve a post-discard hand.
 ///
-/// `deficit` is `D(H)` for the post-discard hand. The normalization proof used
-/// here is:
+/// `hand` is the equivalent hand one tile below the target size (post-discard
+/// or post-declaration, before the replacement draw), and `deficit` must be
+/// its exact distance `D(hand)` under the same evaluator context.
 ///
-/// - `H` has one fewer tile than a target.
-/// - After drawing `t`, the drawn hand and every target have the same size.
-/// - If the drawn hand is not winning, every optimal target has at least one
-///   surplus kind, so discarding a surplus tile leaves that target's deficit
-///   unchanged. Conversely, discarding a needed kind can only raise it. Hence
-///   the best legal post-draw discard has deficit `D(H + t)` exactly.
-/// - A winning drawn hand has deficit zero and is a direct win.
+/// The structural criterion is read from [`DistanceEvaluator::deficit_with_mask`]:
+/// kind `t` improves the hand exactly when some optimal target needs it, i.e.
+/// when bit `t` is set. Justification, with the full proof in
+/// `specs/archive/one-pass-ukeire/proof.md`:
 ///
-/// Therefore `t` improves `H` iff `D(H + t) < D(H)`. The drawn hand is never
-/// compared against `H` through a raw 14-tile/13-tile value: both sides are
-/// exact target deficits for the same target size.
+/// - For a fixed target, adding a held copy only lowers its deficit for the
+///   kinds the target still needs, so `D(hand + t)` is `D(hand)` or
+///   `D(hand) - 1` and the latter holds exactly for the mask bits.
+/// - A drawn winning hand has deficit zero, which is below the post-discard
+///   distance (a shorter hand can never contain a whole target), so direct
+///   wins are covered by the same bit instead of a separate check.
+/// - The drawn hand is never compared through a raw 14-tile/13-tile value:
+///   both sides are exact target deficits for the same fixed target size.
+///
+/// `public` only limits how many copies remain; a structurally improving kind
+/// whose four copies are publicly exhausted keeps its mask bit but contributes
+/// zero to the returned count.
 pub(crate) fn ukeire(
     evaluator: &mut DistanceEvaluator<'_>,
     hand: &Hand,
     public: &[u8; TILE_KINDS],
     deficit: u8,
 ) -> u32 {
+    let (structural_deficit, mask) = evaluator.deficit_with_mask(hand);
+    debug_assert_eq!(
+        structural_deficit, deficit,
+        "ukeire must use the exact distance of the same hand and context"
+    );
+    ukeire_from_mask(evaluator.missing(), hand, public, mask)
+}
+
+/// Sums unseen copies for the structurally improving kinds in `mask`.
+///
+/// Missing-suit kinds are skipped defensively even though no legal target can
+/// contain them, so a mask produced for a legal context never wastes a bit on
+/// them.
+fn ukeire_from_mask(missing: Suit, hand: &Hand, public: &[u8; TILE_KINDS], mask: u32) -> u32 {
     let mut total = 0u32;
     for tile in Tile::ALL {
-        if tile.suit() == evaluator.missing() {
+        if tile.suit() == missing || mask & (1u32 << tile.index()) == 0 {
             continue;
         }
         let index = tile.index() as usize;
-        let seen = hand.count(tile) as i32 + public[index] as i32;
-        let unseen = COPIES_PER_TILE as i32 - seen;
-        if unseen <= 0 {
-            continue;
-        }
-
-        let mut drawn = *hand;
-        if drawn.add(tile).is_err() {
-            continue;
-        }
-
-        // Recognize a direct win before the structural comparison. The
-        // deficit of a winning drawn hand is also zero, so the two paths agree.
-        if rules::can_hu(&drawn, evaluator.melds(), evaluator.missing()) {
-            total += unseen as u32;
-            continue;
-        }
-
-        if evaluator.deficit(&drawn) < deficit {
+        let unseen = COPIES_PER_TILE as i32 - hand.count(tile) as i32 - public[index] as i32;
+        if unseen > 0 {
             total += unseen as u32;
         }
     }
@@ -396,6 +706,10 @@ pub(crate) fn max_discard_fan(hand: &Hand, melds: &[Meld], missing: Suit) -> u8 
     best
 }
 
+#[cfg(test)]
+mod one_pass_reference;
+#[cfg(test)]
+mod one_pass_tests;
 #[cfg(test)]
 mod optimization_a2_tests;
 #[cfg(test)]

@@ -221,3 +221,25 @@ Run serially without overlapping builds/tests. Interleave baseline and candidate
 runs for at least three rounds per seed, varying order, and retain all samples
 and non-time outputs with source, toolchain and environment details for the new
 comparison. Fresh measurements do not reproduce the original timing samples.
+
+## One-pass ukeire (2026-11-05)
+
+Ukeire now reads an exact optimal-target missing-kind mask instead of repeating
+distance analysis per hypothetical draw. B/A2 distance-only analysis and separate
+decision-local mask caches preserve rules, policy ranking, and checkpoint semantics.
+
+Formatting, warning-denied Clippy, and **238 tests in debug and release** pass.
+Permanent coverage includes a frozen compatibility reference, concrete-target
+oracles, full suit tables, ownership, ties, and cache ordering. Historical replay
+matched 64 games (3514 decisions) plus 2234 clone/fresh-policy continuation decisions.
+
+The serial default-release `heuristic-benchmark-v1` experiment used 2000 games,
+warmup 20, seeds 7/10007, B/B calibration, and five interleaved pairs per seed.
+Paired median total/policy reductions were 62.44%/62.86% and 61.95%/62.35%,
+respectively, with 5/5 improvements and identical non-timing results. Pure-distance
+instrumented microbenchmarks regressed slightly (cold 1.3%, warm 4.8%).
+
+See the [archived summary](../specs/archive/one-pass-ukeire/results.md) for the
+proof, environment and limitations. Experiment tools and raw evidence were deleted
+at the user's request; only permanent tests, proof and historical summaries remain.
+These are historical observations, not performance or statistical guarantees.
