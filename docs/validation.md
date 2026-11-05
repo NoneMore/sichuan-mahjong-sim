@@ -174,57 +174,50 @@ result, not an implemented optimization or a performance guarantee.
 
 ## Heuristic hand-analysis optimization
 
-The [completed Change and evidence](../specs/archive/heuristic-analysis-optimization/results.md)
-retain only the exact seven-pairs formula, with every declared meld still
-disabling that route. The tested tighter standard-target enumeration was
-withdrawn for identifiable regression. Skipping the missing suit and removing
-ukeire's direct-win shortcut were declined after their bounded uncertain
-results; uncertainty is not proof of equal performance or identifiable regression.
-Rules, policy ranking, cache keys/lifetime and checkpoint behavior are unchanged.
+Two private exact-analysis optimizations are retained: B replaces the seven-pairs
+DP with a pair-unit formula (every declared meld still disables that route), and
+A2 prunes impossible suit-table transitions without changing loop order or DP
+states. Rules, policy ranking, information boundaries, cache keys/lifetime and
+checkpoint behavior are unchanged. The full A enumeration rewrite and the C/D
+shortcut experiments were not retained.
 
-Final formatting, warning-denied Clippy and all-target tests pass: **214 tests in
-both debug and release**. New coverage compares the formula with independent
-0/2/4 target-cost enumeration over all 241 held-count classes and boundary/meld
-cases; cache tests also compare fresh-per-hand and repeated deficit/ukeire calls.
-The final implementation reproduces the pre-change 64-game, 3514-decision full
-trace, scores, winners and finish reasons. Withdrawn experiments and their
-equivalence tests remain reconstructible as Change-local patches.
+Formatting, warning-denied Clippy and all-target tests pass, with **223 tests in
+both debug and release**. Permanent coverage includes independent 0/2/4 target
+costs over all 241 seven-pairs count classes, formula boundaries and meld gating,
+fresh/reused cache equivalence, and complete suit-table comparisons against the
+original enumeration and an independent concrete-target oracle. Historical
+cross-version replay also matched 64 games and 3514 decisions, including full
+traces, scores, winners and finish reasons.
 
-Against baseline `c9202e33ac78cfb819def7339c3986c58cc3d13f`, the retained formula
-used `heuristic-benchmark-v1`, 2000 games, warmup 20, first seeds 7 and 10007,
-three alternating pairs per seed. Batch-time medians decreased from
-16.632 to 16.205 s (2.57%) and 17.124 to 16.830 s (1.72%); both seed groups
-meet the specified candidate-max < baseline-min engineering criterion. These
-are small local observations, not statistical significance or a cross-machine
-promise. See the [full per-run results](../specs/archive/heuristic-analysis-optimization/performance-summary.md)
-and [source/build/environment protocol](../specs/archive/heuristic-analysis-optimization/execution.md)
-for all candidates, ranges, policy times, throughput, decisions and raw evidence.
+### Historical performance and rerunning
 
-## Suit-table A2 follow-up
+The measurements used Windows 10 build 19045, Ryzen 7 3700X,
+`x86_64-pc-windows-msvc`, rustc/Cargo 1.98.0, LLVM 22.1.8 and the default release
+profile, without custom Rust flags or CPU affinity. Each comparison used
+`heuristic-benchmark-v1`, 2000 games, warmup 20, first seeds 7 and 10007, and
+three interleaved rounds per seed. Median batch times in seconds were:
 
-The [A2 experiment and raw evidence](../specs/archive/suit-table-a2/results.md)
-compare the current B-only checkout `5ad7540` with the same checkout plus the
-archived A, and with A2. Only A2 is retained: `suit_table` keeps the original
-`sequences → triplets → pair` order, rejects impossible pending tails early,
-bounds sequence starts by remaining rank capacity, and stops increasing
-triplets once even the pair-free count exceeds capacity. It adds no dynamic
-`/ 3` bound and changes neither DP states nor caching nor the seven-pairs
-formula. All ten `SuitTable` entries and policy behavior are preserved.
+| Comparison | Seed 7, before → after | Seed 10007, before → after |
+| --- | --- | --- |
+| B: `c9202e3` → `5ad7540` | 16.632 → 16.205 (−2.57%) | 17.124 → 16.830 (−1.72%) |
+| A2 on B: `5ad7540` → `d29d864` | 15.924593 → 15.598216 (−2.05%) | 16.297933 → 16.042941 (−1.56%) |
 
-Formatting, warning-denied Clippy and all-target tests pass, with **223 tests
-in both debug and release**. Nine new focused tests compare complete tables
-against the original enumeration and an independent concrete-target oracle,
-including seeded random hands and capacities. The final source and all three
-measured variants reproduce the frozen **64-game, 3514-decision** action corpus,
-scores, winners and end reasons.
+Candidate maxima were below baseline minima in both seed groups for each
+comparison. These are small local observations, not statistical significance,
+a cross-machine promise or a measured combined speedup; A2's isolated
+microbenchmark was mixed. Raw samples, the frozen trace corpus, experimental
+patches and one-off tooling are not maintained in the current tree.
 
-The same-session, default-release `heuristic_bench` comparison used 2000 games,
-warmup 20, seeds 7 and 10007, three preordered interleaved rounds per seed.
-A2 batch-time medians decreased from 15.924593 to 15.598216 s (**2.05%**) and
-16.297933 to 16.042941 s (**1.56%**); both seed groups satisfy
-`A2 max < original min`, and all six paired times improve. The archived A still
-regresses by about 21%. A2's isolated microbenchmark is mixed, so this is not a
-claim of universal per-call improvement. Enumeration counts, the corrected
-cross-version counting definition, raw timings, release-assembly differences
-and limitations are retained with the experiment; fewer candidates or static
-instructions are not treated as proof of speedup.
+To remeasure, build each source revision in a separate checkout before any timed
+runs, then invoke its saved executable directly (`.exe` on Windows):
+
+```text
+cargo build --release --example heuristic_bench
+target/release/examples/heuristic_bench --games 2000 --seed 7 --warmup 20
+target/release/examples/heuristic_bench --games 2000 --seed 10007 --warmup 20
+```
+
+Run serially without overlapping builds/tests. Interleave baseline and candidate
+runs for at least three rounds per seed, varying order, and retain all samples
+and non-time outputs with source, toolchain and environment details for the new
+comparison. Fresh measurements do not reproduce the original timing samples.

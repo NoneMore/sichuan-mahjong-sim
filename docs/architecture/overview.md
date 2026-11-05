@@ -75,11 +75,12 @@ so fresh instances reproduce continuation from a cloned game. The
   legality, seeded replay, and continuation with fresh policies.
 - [`src/policy/analysis/tests.rs`](../../src/policy/analysis/tests.rs),
   [`src/policy/analysis/optimization_b_tests.rs`](../../src/policy/analysis/optimization_b_tests.rs),
+  [`src/policy/analysis/optimization_a2_tests.rs`](../../src/policy/analysis/optimization_a2_tests.rs),
   [`src/policy/heuristic/tests.rs`](../../src/policy/heuristic/tests.rs), and
   [`src/policy/heuristic/tests/calls.rs`](../../src/policy/heuristic/tests/calls.rs):
   independent target oracle, all 241 seven-pairs count classes and formula
-  boundaries, draw/discard normalization, public ownership, discard ranking,
-  and peng/kong gates.
+  boundaries, suit-table equivalence, draw/discard normalization, public
+  ownership, discard ranking, and peng/kong gates.
 - [`src/policy/missing_only/tests.rs`](../../src/policy/missing_only/tests.rs):
   focused missing-suit, fallback, exchange, turn, and `Hu` cases for the
   ablation.
