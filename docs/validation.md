@@ -245,3 +245,12 @@ See the [archived summary](../specs/archive/one-pass-ukeire/results.md) for the
 proof, environment and limitations. Experiment tools and raw evidence were deleted
 at the user's request; only permanent tests, proof and historical summaries remain.
 These are historical observations, not performance or statistical guarantees.
+
+## One-pass discard (2026-11-05)
+
+Discard ranking now derives exact candidate deficits from one original-hand
+surplus-mask analysis, without changing policy choices or checkpoint semantics.
+See the [archived summary](../specs/archive/one-pass-discard/results.md) for the
+258-test verification, cross-version replay, interleaved A/B results, and limits.
+One-off tools and raw measurements were deleted at the user's request; the
+reported gains are historical local observations, not performance guarantees.

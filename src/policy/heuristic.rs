@@ -158,6 +158,16 @@ struct ScoredDiscard {
 /// `public_before_discard` is ownership before the candidate discard; the
 /// discarded tile is added to public ownership for that candidate's ukeire
 /// count. `with_fan` enables the tenpai-only fan tie-break.
+///
+/// Candidate deficits come from one analysis of the original hand. Removing a
+/// held kind `t` leaves the exact distance unchanged exactly when some optimal
+/// target holds fewer copies of `t` than the hand (the surplus bit), and raises
+/// it by one otherwise. This identity holds for every counted hand size, not
+/// only the usual target size, because an optimal target that omits a held copy
+/// is unaffected by the removal, while every optimal target of a non-surplus
+/// kind loses one covered copy. The surplus analysis is started lazily on the first
+/// held candidate, so an empty or entirely invalid candidate list returns
+/// without hand analysis.
 fn rank_discards(
     hand: &Hand,
     melds: &[Meld],
@@ -166,7 +176,8 @@ fn rank_discards(
     candidates: &[Tile],
     with_fan: bool,
 ) -> Option<(Tile, Progress)> {
-    let mut evaluator = DistanceEvaluator::new(melds, missing)?;
+    let mut evaluator: Option<DistanceEvaluator<'_>> = None;
+    let mut base: Option<(u8, u32)> = None;
 
     let mut scored = Vec::with_capacity(candidates.len());
     for &tile in candidates {
@@ -174,7 +185,17 @@ fn rank_discards(
         if after.remove(tile).is_err() {
             continue;
         }
-        let deficit = evaluator.deficit(&after);
+        let (base_deficit, surplus) = match base {
+            Some(value) => value,
+            None => {
+                let mut fresh = DistanceEvaluator::new(melds, missing)?;
+                let value = fresh.deficit_with_surplus(hand);
+                evaluator = Some(fresh);
+                base = Some(value);
+                value
+            }
+        };
+        let deficit = base_deficit + u8::from((surplus & (1u32 << tile.index())) == 0);
         scored.push(ScoredDiscard {
             tile,
             hand: after,
@@ -186,6 +207,7 @@ fn rank_discards(
     if scored.is_empty() {
         return None;
     }
+    let mut evaluator = evaluator.expect("a scored discard implies a distance analysis");
 
     let best_deficit = scored
         .iter()

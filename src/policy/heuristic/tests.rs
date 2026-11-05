@@ -568,3 +568,6 @@ fn progress_of(hand: &Hand, melds: &[Meld], missing: Suit, public: &[u8; TILE_KI
 
 #[path = "tests/calls.rs"]
 mod calls;
+
+#[path = "tests/one_pass_discard.rs"]
+mod one_pass_discard;
