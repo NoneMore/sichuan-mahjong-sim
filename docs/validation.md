@@ -164,3 +164,10 @@ timings, reproduction instructions, and limitations.
 See the [missing-suit ablation study](studies/missing-only-ablation.md) for the
 48,000-game experimental setup, per-seed uncertainty convention, scores,
 reproduction commands, and artifact provenance.
+
+## Heuristic cost attribution
+
+See the [heuristic cost-attribution study](studies/heuristic-cost-attribution.md)
+for `heuristic-benchmark-v1` baseline measurements, function-level sampling,
+stability checks, reproduction steps, and attribution limits. This is a research
+result, not an implemented optimization or a performance guarantee.
