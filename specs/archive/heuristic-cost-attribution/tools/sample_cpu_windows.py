@@ -22,11 +22,22 @@ each sample also pays the suspend/context cost and, off-thread, the unwind and
 symbolization cost. With 1 ms sleeps the measured cadence was about 4.5-5.1 ms
 per sample, and with 5 ms sleeps plus unwinding while suspended about 12 ms.
 Report the achieved cadence (sampling wall time / samples), not the sleep.
+
+A run only counts as successful when the target itself exited with code 0 and
+at least one sample was captured. A non-zero target exit, a sampling or
+symbolization failure, and an empty sample set all exit non-zero and write no
+`samples.json`, so the offline scripts cannot mistake a failed or partial run
+for data. For the same reason the output directory must be fresh: a stale
+`samples.json` from an earlier run would make a failed run look successful.
+`samples.json` also records the SHA256 of the sampled EXE and PDB, and both
+offline scripts refuse to symbolize files whose content no longer matches that
+record.
 """
 
 
 import ctypes
 import ctypes.wintypes as wt
+import hashlib
 import json
 import os
 import subprocess
@@ -77,6 +88,9 @@ IMAGE_FILE_MACHINE_AMD64 = 0x8664
 ADDR_MODE_FLAT = 3
 STACKFRAME64_SIZE = 512
 MAX_DEPTH = int(os.environ.get("MAX_DEPTH", "96"))
+# Grace period used to tell "the target just exited" apart from a genuine
+# suspend/context-capture failure.
+EXIT_GRACE_MS = 500.0
 
 
 class THREADENTRY32(ctypes.Structure):
@@ -147,7 +161,9 @@ k32.Module32NextW.argtypes = [wt.HANDLE, ctypes.POINTER(MODULEENTRY32W)]
 k32.OpenThread.restype = wt.HANDLE
 k32.OpenThread.argtypes = [wt.DWORD, wt.BOOL, wt.DWORD]
 k32.SuspendThread.argtypes = [wt.HANDLE]
+k32.SuspendThread.restype = wt.DWORD
 k32.ResumeThread.argtypes = [wt.HANDLE]
+k32.ResumeThread.restype = wt.DWORD
 k32.GetThreadContext.argtypes = [wt.HANDLE, ctypes.c_void_p]
 k32.GetThreadTimes.argtypes = [
     wt.HANDLE, ctypes.POINTER(wt.FILETIME), ctypes.POINTER(wt.FILETIME),
@@ -247,6 +263,44 @@ def pick_workload_thread(handles, probe_ms=120):
     if not deltas:
         return None, deltas
     return max(deltas, key=deltas.get), deltas
+
+
+class SamplingError(Exception):
+    """A sampling failure that must not leave analysable output behind."""
+
+
+class ThreadGone(SamplingError):
+    """Suspend/context failed; benign only when the target itself is exiting."""
+
+
+def sha256_file(path, chunk_size=1 << 20):
+    """Content hash of one file, streamed so large images stay cheap to hash."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(chunk_size), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def file_identity(path):
+    return {"path": os.path.abspath(path), "size": os.path.getsize(path),
+            "sha256": sha256_file(path)}
+
+
+def image_identity(exe_path):
+    """Identifies the sampled EXE/PDB pair by content, not just by location.
+
+    A rebuild normally keeps the path and a similar size, so path and size
+    cannot tell the sampled binary from its replacement. These hashes are
+    recorded in `samples.json` and re-checked by both offline scripts before
+    any symbolization happens.
+    """
+    pdb_path = os.path.splitext(exe_path)[0] + ".pdb"
+    missing = [p for p in (exe_path, pdb_path) if not os.path.isfile(p)]
+    if missing:
+        raise SamplingError("offline analysis needs the EXE and PDB together; "
+                            "missing: %s" % ", ".join(missing))
+    return {"exe": file_identity(exe_path), "pdb": file_identity(pdb_path)}
 
 
 class Walker:
@@ -355,115 +409,241 @@ class Symbolizer:
         dbg.SymCleanup(self.proc)
 
 
+def prepare_outdir(outdir):
+    """Refuses to reuse a non-empty directory.
+
+    A stale `samples.json` from an earlier run would let a failed run look
+    successful to the offline scripts, so every run writes into a fresh
+    directory.
+    """
+    if os.path.exists(outdir) and not os.path.isdir(outdir):
+        raise SamplingError("output path exists and is not a directory: %s" % outdir)
+    if os.path.isdir(outdir) and os.listdir(outdir):
+        raise SamplingError(
+            "output directory is not empty: %s\n"
+            "use a fresh output directory for every run so that a stale "
+            "samples.json/sampler.log cannot mask a failed run" % outdir)
+    os.makedirs(outdir, exist_ok=True)
+
+
+def sample_once(h, walker, hold_suspended):
+    """Captures one sample; always attempts to resume a suspended thread."""
+    if k32.SuspendThread(h) == 0xFFFFFFFF:
+        raise ThreadGone("SuspendThread failed: %d" % ctypes.get_last_error())
+    suspended = True
+    try:
+        ctx = ctypes.create_string_buffer(CONTEXT_SIZE)
+        ctx[0x30:0x34] = CONTEXT_FULL.to_bytes(4, "little")
+        if not k32.GetThreadContext(h, ctypes.cast(ctx, ctypes.c_void_p)):
+            raise ThreadGone("GetThreadContext failed: %d"
+                             % ctypes.get_last_error())
+        if hold_suspended:
+            # Optional protocol: keep the thread suspended for the walk so the
+            # captured stack cannot change under the unwinder.
+            return walker.stack(ctx)
+        # Default: resume before unwinding. The walk only needs the captured
+        # CONTEXT and target memory, so holding the thread suspended for it
+        # would inflate the workload's wall time.
+        if k32.ResumeThread(h) == 0xFFFFFFFF:
+            raise SamplingError("ResumeThread failed: %d" % ctypes.get_last_error())
+        suspended = False
+        return walker.stack(ctx)
+    finally:
+        if suspended and k32.ResumeThread(h) == 0xFFFFFFFF:
+            raise SamplingError("ResumeThread failed: %d" % ctypes.get_last_error())
+
+
+def target_exiting(proc, grace_ms=None):
+    """True when a suspend/context failure is really the target exiting."""
+    grace_ms = EXIT_GRACE_MS if grace_ms is None else grace_ms
+    deadline = time.perf_counter() + grace_ms / 1000.0
+    while proc.poll() is None:
+        if time.perf_counter() >= deadline:
+            return False
+        time.sleep(0.01)
+    return True
+
+
+def sample(outdir, cmd, interval_ms, startup_skip_ms, hold_suspended, log):
+    """Samples the target once and returns this run's exit status.
+
+    Status 0 requires a zero target exit code and at least one sample; 3 is a
+    sampling/symbolization failure, 4 a non-zero target exit, and 5 an empty
+    sample set. Failures write no `samples.json`.
+    """
+    proc = None
+    hproc = None
+    walker = None
+    symbolizer = None
+    handles = {}
+    samples = []
+    target_rc = None
+    try:
+        with open(os.path.join(outdir, "target.stdout.txt"), "w",
+                  encoding="utf-8") as so, \
+             open(os.path.join(outdir, "target.stderr.txt"), "w",
+                  encoding="utf-8") as se:
+            proc = subprocess.Popen(cmd, stdout=so, stderr=se)
+            log.write(
+                "command: %s\npid: %d\ninterval_ms: %s\nstartup_skip_ms: %s\n"
+                "max_depth: %d\nhold_suspended: %d\n"
+                % (" ".join(cmd), proc.pid, interval_ms, startup_skip_ms,
+                   MAX_DEPTH, int(hold_suspended)))
+            log.write("python: %s (%s)\ndbghelp: %s\n"
+                      % (sys.version.split()[0], sys.executable, DBGHELP_PATH))
+            log.flush()
+
+            hproc = k32.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                                    False, proc.pid)
+            if not hproc:
+                raise SamplingError("OpenProcess failed: %d"
+                                    % ctypes.get_last_error())
+            time.sleep(startup_skip_ms / 1000.0)
+
+            modules = list_modules(proc.pid)
+            if not modules:
+                raise SamplingError("no modules for pid %d" % proc.pid)
+            exe = modules[0]
+            image = image_identity(exe["path"])
+            log.write("image: %s size=%d sha256=%s\n"
+                      % (image["exe"]["path"], image["exe"]["size"],
+                         image["exe"]["sha256"]))
+            log.write("pdb: %s size=%d sha256=%s\n"
+                      % (image["pdb"]["path"], image["pdb"]["size"],
+                         image["pdb"]["sha256"]))
+            log.flush()
+
+            walker = Walker(hproc, modules, exe)
+            symbolizer = Symbolizer(modules, exe)
+
+            handles = open_threads(proc.pid)
+            tid, deltas = pick_workload_thread(handles)
+            log.write("threads: %s\ncpu_ms_delta_120ms: %s\nworkload_tid: %s\n"
+                      % (sorted(handles), deltas, tid))
+            if tid is None:
+                raise SamplingError("no workload thread")
+            h = handles[tid]
+            cpu_start = thread_cpu_ms(h)
+
+            short_walks = 0
+            start = time.perf_counter()
+            while proc.poll() is None:
+                try:
+                    pcs = sample_once(h, walker, hold_suspended)
+                except ThreadGone as error:
+                    if target_exiting(proc):
+                        # The target exited between the poll and the suspend;
+                        # that is an empty outcome, not a sampler failure.
+                        log.write("sampling stopped when the target exited: %s\n"
+                                  % error)
+                        break
+                    raise
+                if not pcs:
+                    continue
+                if len(pcs) < 3:
+                    short_walks += 1
+                resolved = [symbolizer.resolve(pc) for pc in pcs]
+                samples.append({"t": round(time.perf_counter() - start, 6),
+                                "rip": resolved[0], "frames": resolved[1:]})
+                time.sleep(interval_ms / 1000.0)
+            elapsed = time.perf_counter() - start
+
+            cpu_end = thread_cpu_ms(h)
+            for t, th in handles.items():
+                v = thread_cpu_ms(th)
+                log.write("thread %d cpu_ms_total=%.3f\n"
+                          % (t, v if v is not None else -1))
+            log.write("workload_thread_cpu_ms_window=%.3f\n"
+                      % ((cpu_end - cpu_start)
+                         if cpu_start is not None and cpu_end is not None else -1))
+            log.write("samples: %d\nsampling_wall_s: %.3f\n"
+                      % (len(samples), elapsed))
+            log.write("cadence_ms: %.2f (sleep is not the achieved cadence)\n"
+                      % (1000.0 * elapsed / len(samples) if samples else 0.0))
+            depths = (sorted(len(s["frames"]) + 1 for s in samples)
+                      if samples else [0])
+            log.write("chain_depth min/median/max: %d/%d/%d\n"
+                      % (depths[0], depths[len(depths) // 2], depths[-1]))
+            log.write("short_walks(<3 frames): %d\n" % short_walks)
+            log.flush()
+
+            target_rc = proc.wait()
+            if target_rc != 0:
+                print("target exited with code %d; discarded %d samples and "
+                      "wrote no samples.json" % (target_rc, len(samples)),
+                      file=sys.stderr)
+                return 4
+            if not samples:
+                print("no samples captured; nothing is analysable", file=sys.stderr)
+                return 5
+
+            with open(os.path.join(outdir, "samples.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump({"status": "ok", "command": cmd, "pid": proc.pid,
+                           "interval_ms": interval_ms,
+                           "startup_skip_ms": startup_skip_ms,
+                           "max_depth": MAX_DEPTH,
+                           "sampling_wall_s": elapsed, "image": image,
+                           "samples": samples}, f)
+            with open(os.path.join(outdir, "modules.json"), "w",
+                      encoding="utf-8") as f:
+                json.dump(modules, f, indent=2)
+            print("sampled %d in %.2fs -> %s" % (len(samples), elapsed, outdir))
+            return 0
+    except SamplingError as error:
+        log.write("sampling_failed: %s\n" % error)
+        log.flush()
+        print("sampling failed: %s" % error, file=sys.stderr)
+        return 3
+    except Exception as error:  # unexpected API/walk failure fails the run
+        log.write("sampling_error: %r\n" % (error,))
+        log.flush()
+        print("sampling failed: %r" % (error,), file=sys.stderr)
+        return 3
+    finally:
+        for thread_handle in handles.values():
+            k32.CloseHandle(thread_handle)
+        for owned in (walker, symbolizer):
+            if owned is not None:
+                owned.cleanup()
+        if hproc:
+            k32.CloseHandle(hproc)
+        if proc is not None:
+            if target_rc is None:
+                if proc.poll() is None:
+                    # Never block on a child that may still be running or
+                    # suspended: terminate it, then reap it.
+                    proc.kill()
+                target_rc = proc.wait()
+            log.write("target_exit_code: %d\n" % target_rc)
+            log.flush()
+
+
 def main():
     if len(sys.argv) < 3 or "--" not in sys.argv:
-        print("usage: probe.py OUTDIR -- command args...", file=sys.stderr)
+        print("usage: sample_cpu_windows.py OUTDIR -- command args...",
+              file=sys.stderr)
         return 2
     outdir = sys.argv[1]
     cmd = sys.argv[sys.argv.index("--") + 1:]
+    if not cmd:
+        print("usage: sample_cpu_windows.py OUTDIR -- command args...",
+              file=sys.stderr)
+        return 2
     interval_ms = float(os.environ.get("SAMPLE_INTERVAL_MS", "1.0"))
     startup_skip_ms = float(os.environ.get("STARTUP_SKIP_MS", "150"))
     hold_suspended = os.environ.get("HOLD_SUSPENDED", "0") == "1"
-    os.makedirs(outdir, exist_ok=True)
-
+    try:
+        prepare_outdir(outdir)
+    except SamplingError as error:
+        print("cannot use output directory: %s" % error, file=sys.stderr)
+        return 2
     log = open(os.path.join(outdir, "sampler.log"), "w", encoding="utf-8")
-    samples = []
-    with open(os.path.join(outdir, "target.stdout.txt"), "w", encoding="utf-8") as so, \
-         open(os.path.join(outdir, "target.stderr.txt"), "w", encoding="utf-8") as se:
-        proc = subprocess.Popen(cmd, stdout=so, stderr=se)
-        log.write("command: %s\npid: %d\ninterval_ms: %s\nstartup_skip_ms: %s\n"
-                  "max_depth: %d\nhold_suspended: %d\n"
-                  % (" ".join(cmd), proc.pid, interval_ms, startup_skip_ms,
-                     MAX_DEPTH, int(hold_suspended)))
-        log.write("python: %s (%s)\ndbghelp: %s\n"
-                  % (sys.version.split()[0], sys.executable, DBGHELP_PATH))
-        log.flush()
-
-        hproc = k32.OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
-                                False, proc.pid)
-        if not hproc:
-            print("OpenProcess failed: %d" % ctypes.get_last_error(), file=sys.stderr)
-            return 3
-        time.sleep(startup_skip_ms / 1000.0)
-
-        modules = list_modules(proc.pid)
-        if not modules:
-            print("no modules", file=sys.stderr)
-            return 3
-        exe = modules[0]
-        walker = Walker(hproc, modules, exe)
-        sym = Symbolizer(modules, exe)
-
-        handles = open_threads(proc.pid)
-        tid, deltas = pick_workload_thread(handles)
-        log.write("threads: %s\ncpu_ms_delta_120ms: %s\nworkload_tid: %s\n"
-                  % (sorted(handles), deltas, tid))
-        if tid is None:
-            print("no workload thread", file=sys.stderr)
-            return 3
-        h = handles[tid]
-        cpu_start = thread_cpu_ms(h)
-
-        short_walks = 0
-        start = time.perf_counter()
-        while proc.poll() is None:
-            if k32.SuspendThread(h) == 0xFFFFFFFF:
-                break
-            ctx = ctypes.create_string_buffer(CONTEXT_SIZE)
-            ctx[0x30:0x34] = CONTEXT_FULL.to_bytes(4, "little")
-            ok = k32.GetThreadContext(h, ctypes.cast(ctx, ctypes.c_void_p))
-            if hold_suspended:
-                # Optional protocol: keep the thread suspended for the walk so
-                # the captured stack cannot change under the unwinder.
-                pcs = walker.stack(ctx) if ok else []
-                k32.ResumeThread(h)
-            else:
-                # Default: resume before unwinding. The walk only needs the
-                # captured CONTEXT and target memory, so holding the thread
-                # suspended for it would inflate the workload's wall time.
-                k32.ResumeThread(h)
-                pcs = walker.stack(ctx) if ok else []
-            if not ok or not pcs:
-                continue
-            if len(pcs) < 3:
-                short_walks += 1
-            resolved = [sym.resolve(pc) for pc in pcs]
-            samples.append({"t": round(time.perf_counter() - start, 6),
-                            "rip": resolved[0], "frames": resolved[1:]})
-            time.sleep(interval_ms / 1000.0)
-        elapsed = time.perf_counter() - start
-        cpu_end = thread_cpu_ms(h)
-        for t, th in handles.items():
-            v = thread_cpu_ms(th)
-            log.write("thread %d cpu_ms_total=%.3f\n" % (t, v if v is not None else -1))
-        log.write("workload_thread_cpu_ms_window=%.3f\n"
-                  % ((cpu_end - cpu_start)
-                     if cpu_start is not None and cpu_end is not None else -1))
-        log.write("samples: %d\nsampling_wall_s: %.3f\n" % (len(samples), elapsed))
-        log.write("cadence_ms: %.2f (sleep is not the achieved cadence)\n"
-                  % (1000.0 * elapsed / len(samples) if samples else 0.0))
-        depths = sorted(len(s["frames"]) + 1 for s in samples) if samples else [0]
-        log.write("chain_depth min/median/max: %d/%d/%d\n"
-                  % (depths[0], depths[len(depths) // 2], depths[-1]))
-        log.write("short_walks(<3 frames): %d\n" % short_walks)
-        log.flush()
-
-        with open(os.path.join(outdir, "samples.json"), "w", encoding="utf-8") as f:
-            json.dump({"command": cmd, "pid": proc.pid, "interval_ms": interval_ms,
-                       "startup_skip_ms": startup_skip_ms, "max_depth": MAX_DEPTH,
-                       "sampling_wall_s": elapsed, "samples": samples}, f)
-        with open(os.path.join(outdir, "modules.json"), "w", encoding="utf-8") as f:
-            json.dump(modules, f, indent=2)
-        walker.cleanup()
-        sym.cleanup()
-        for th in handles.values():
-            k32.CloseHandle(th)
-        k32.CloseHandle(hproc)
-        proc.wait()
-    log.write("target_exit_code: %d\n" % proc.returncode)
-    log.close()
-    print("sampled %d in %.2fs -> %s" % (len(samples), elapsed, outdir))
-    return 0
+    try:
+        return sample(outdir, cmd, interval_ms, startup_skip_ms,
+                      hold_suspended, log)
+    finally:
+        log.close()
 
 
 if __name__ == "__main__":

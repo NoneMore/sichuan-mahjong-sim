@@ -1,7 +1,9 @@
 """Aggregates probe.py samples into the buckets used by the study record.
 
-Input: one or more probe.py output directories that used the same image
-(the PDB path and module list come from each directory).
+Input: one or more probe.py output directories that used the same image.
+The PDB path and module list come from each directory, and every directory
+must record a matching EXE/PDB SHA256 pair: samples without that record are
+refused rather than trusted against the files currently on disk.
 
 Outputs, per directory and combined:
   * self-cost buckets (innermost inlined function, symbol or module),

@@ -6,6 +6,10 @@ inlined exact DP (`suit_table`, `seven_pairs_deficit`) into
 (`SymQueryInlineTrace` + `SymFromInlineContextW`) to report the innermost
 inlined function (and its line) for the sampled instruction, so the DP loops,
 hash-table probing and memo work can be separated by self cost.
+
+Both this script and `aggregate_attribution.py` validate the recorded build
+identity (EXE and PDB SHA256) before symbolizing anything, so a rebuilt or
+replaced binary is refused instead of being silently mis-attributed.
 """
 
 import ctypes
@@ -227,36 +231,104 @@ def report(name, a, top=18):
         print("   %6.2f%%  %5d  %s %s:%s" % (pct(v, n), v, fn, file, line))
 
 
+HASH_HEX_LENGTH = 64
+
+
+def recorded_entry(path, image, key):
+    """One recorded EXE/PDB identity, refusing samples that predate hashing."""
+    entry = image.get(key) if isinstance(image, dict) else None
+    sha = entry.get("sha256") if isinstance(entry, dict) else None
+    if not isinstance(sha, str) or len(sha) != HASH_HEX_LENGTH:
+        raise SystemExit(
+            "%s: samples.json records no %s SHA256, so the sampled build cannot "
+            "be identified.\nRefusing to symbolize these samples against "
+            "whatever image/PDB is on disk now; resample with the current "
+            "sample_cpu_windows.py and keep that exact EXE/PDB for analysis."
+            % (path, key.upper()))
+    return entry
+
+
+def verify_recorded_file(path, kind, file_path, recorded):
+    """Fails closed when the file on disk is not the sampled content."""
+    if not os.path.exists(file_path):
+        raise SystemExit("%s: %s is missing: %s" % (path, kind, file_path))
+    actual_size = os.path.getsize(file_path)
+    actual_sha = P.sha256_file(file_path)
+    if actual_sha == recorded.get("sha256") and actual_size == recorded.get("size"):
+        return
+    raise SystemExit(
+        "%s: %s changed since sampling: recorded %s bytes SHA256 %s, on disk "
+        "%s bytes SHA256 %s\nSymbolizing a different build silently "
+        "mis-attributes cost; restore the sampled file or resample."
+        % (path, kind, recorded.get("size"), recorded.get("sha256"),
+           actual_size, actual_sha))
+
+
 def load_image(path):
-    """Loads one directory's module list and validates its image/PDB pair."""
-    with open(os.path.join(path, "modules.json"), encoding="utf-8") as f:
+    """Loads one directory's module list and validates its recorded build.
+
+    The sampler records the EXE and PDB path, size and SHA256. Path and size
+    alone cannot detect a rebuild in place, so the recorded content hashes are
+    compared with the files on disk before any symbolization happens.
+    """
+    modules_path = os.path.join(path, "modules.json")
+    samples_path = os.path.join(path, "samples.json")
+    for required in (modules_path, samples_path):
+        if not os.path.exists(required):
+            raise SystemExit("%s: %s is missing; not a completed sampling run"
+                             % (path, os.path.basename(required)))
+    with open(modules_path, encoding="utf-8") as f:
         modules = json.load(f)
     if not modules:
         raise SystemExit("%s: modules.json is empty" % path)
+    with open(samples_path, encoding="utf-8") as f:
+        data = json.load(f)
+    status = data.get("status")
+    if status != "ok":
+        raise SystemExit("%s: samples.json status is %r, so this is a failed or "
+                         "partial sampling run; resample instead of analysing it"
+                         % (path, status))
+    if not data.get("samples"):
+        raise SystemExit("%s: samples.json holds no samples; resample" % path)
+
     exe = modules[0]
-    pdb = os.path.splitext(exe["path"])[0] + ".pdb"
-    if not os.path.exists(exe["path"]):
-        raise SystemExit("%s: analysed image is missing: %s" % (path, exe["path"]))
-    if not os.path.exists(pdb):
-        raise SystemExit("%s: PDB is missing next to the image: %s" % (path, pdb))
-    identity = (exe["name"], exe["path"], exe["size"], os.path.getsize(pdb))
-    return modules, identity
+    image = data.get("image")
+    recorded_exe = recorded_entry(path, image, "exe")
+    recorded_pdb = recorded_entry(path, image, "pdb")
+    pdb_path = os.path.splitext(exe["path"])[0] + ".pdb"
+    for kind, expected, recorded in (("image", exe["path"], recorded_exe),
+                                     ("PDB", pdb_path, recorded_pdb)):
+        if os.path.normcase(os.path.abspath(expected)) != \
+                os.path.normcase(os.path.abspath(str(recorded.get("path")))):
+            raise SystemExit(
+                "%s: modules.json names %s %s but the recorded sampled %s was "
+                "%s; the files do not belong together"
+                % (path, kind, expected, kind, recorded.get("path")))
+        verify_recorded_file(path, kind, expected, recorded)
+    return modules, image
+
+
+def build_id(identity):
+    """Build identity for cross-directory aggregation, independent of paths."""
+    return (identity["exe"]["sha256"], identity["pdb"]["sha256"])
 
 
 def check_same_image(dirs):
-    """Refuses to aggregate directories sampled against different images/PDBs."""
+    """Refuses to aggregate directories sampled against different builds."""
     reference = None
     modules = None
     for d in dirs:
         mods, identity = load_image(d)
         if reference is None:
-            reference, modules = identity, mods
-        elif identity != reference:
+            reference, modules = (identity, d), mods
+        elif build_id(identity) != build_id(reference[0]):
             raise SystemExit(
-                "refusing to mix images: %s used %s (image %d bytes, PDB %d bytes) "
-                "but %s used %s (image %d bytes, PDB %d bytes)"
-                % (dirs[0], reference[1], reference[2], reference[3],
-                   d, identity[1], identity[2], identity[3]))
+                "refusing to mix builds: %s sampled %s (image SHA256 %s, PDB "
+                "SHA256 %s) but %s sampled %s (image SHA256 %s, PDB SHA256 %s)"
+                % (reference[1], reference[0]["exe"]["path"],
+                   reference[0]["exe"]["sha256"], reference[0]["pdb"]["sha256"],
+                   d, identity["exe"]["path"], identity["exe"]["sha256"],
+                   identity["pdb"]["sha256"]))
     return modules
 
 

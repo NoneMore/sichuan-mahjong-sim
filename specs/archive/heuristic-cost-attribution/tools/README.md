@@ -39,13 +39,23 @@ python specs/archive/heuristic-cost-attribution/tools/symbolize_inline.py target
 python specs/archive/heuristic-cost-attribution/tools/aggregate_attribution.py target/hca-sample
 ```
 
-每次采样使用不同的输出目录。多目录聚合只接受同一个可执行文件及 PDB；两个分析脚本会检查记录的镜像路径、镜像大小及当前 PDB 大小，拒绝混用构建。分析前须保留采样时的二进制与 PDB，不能原地重新构建后继续解析旧样本。
+每次采样必须使用新的输出目录：若目录已存在且非空，采样脚本直接拒绝运行，避免旧 `samples.json` 把失败的一轮伪装成成功。一轮采样只有同时满足“目标进程自身退出码为 0”和“至少捕获到一个样本”才算有效；目标非零退出、采样/符号化异常、零样本都会以非零码结束，并且不写 `samples.json`。因此两个分析脚本看不到失败的采样结果。
+
+镜像身份按内容校验，而不只是路径和大小：采样阶段在 `samples.json` 中记录 EXE 与 PDB 的绝对路径、字节数和 SHA256；`symbolize_inline.py` 与 `aggregate_attribution.py` 在解析之前都会重新计算磁盘上这两个文件的 SHA256，与记录不符即拒绝。多目录聚合还要求各目录记录同一构建身份（EXE 与 PDB 的 SHA256 均相同），因此同路径同大小的原地重建、混用不同构建都会被拒绝。旧采样若没有记录哈希会 fail closed 并提示重新采样，不会默默信任当前磁盘上的文件。分析前须保留采样时的二进制与 PDB。
 
 复现研究中的主要构建时，另用 `target/prof2`，将 `RUSTFLAGS` 设为 `-C force-frame-pointers=yes -C debuginfo=2`。无 frame-pointer 构建须单独分析，不能与它合并符号化。
 
+## 测试
+
+从工具目录运行单元测试（用 mock 替代 Win32/dbghelp 调用，不需要目标构建或已有采样证据）：
+
+```sh
+python -B -m unittest test_tools -v
+```
+
 ## 脚本与采样选项
 
-- `sample_cpu_windows.py`：启动目标进程，以线程 CPU 增量选择工作线程，周期性暂停并捕获上下文，用 `StackWalk64` 展开栈；保存样本、模块信息、运行日志及目标输出。
+- `sample_cpu_windows.py`：启动目标进程，以线程 CPU 增量选择工作线程，周期性暂停并捕获上下文，用 `StackWalk64` 展开栈；保存样本、模块信息、运行日志及目标输出。暂停后使用 `finally` 尝试恢复线程；恢复失败会使本轮采样失败，失败时终止自己启动的子进程并关闭句柄。退出码：`0` 成功，`2` 参数或输出目录不可用，`3` 采样/符号化失败，`4` 目标非零退出，`5` 零样本；除 `0` 外都不写 `samples.json`。
 - `symbolize_inline.py`：解析 PDB 内联函数和行号，输出 self、inclusive 及调用者统计。
 - `aggregate_attribution.py`：按成本类别聚合，并输出阶段归属、栈完整率和多次运行的对比。
 
