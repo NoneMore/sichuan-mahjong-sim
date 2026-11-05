@@ -224,37 +224,22 @@ comparison. Fresh measurements do not reproduce the original timing samples.
 
 ## One-pass ukeire (2026-11-05)
 
-The private analysis now propagates the union of missing tile kinds over every
-optimal target; ukeire sums unseen copies from that exact mask instead of
-performing a full distance analysis for each hypothetical draw. The B/A2
-pure-distance path remains available, with separate decision-local mask caches.
-Rules, policy ordering, fan tie-breaks, meld gates, and checkpoint semantics are
-unchanged.
+Ukeire now reads an exact optimal-target missing-kind mask instead of repeating
+distance analysis per hypothetical draw. B/A2 distance-only analysis and separate
+decision-local mask caches preserve rules, policy ranking, and checkpoint semantics.
 
-Formatting, warning-denied all-target Clippy, and **238 tests in both debug and
-release** pass. New evidence includes a frozen `dc6ff5c` compatibility reference,
-independent concrete-target mask oracles, full suit tables, physical samples and
-cache ordering. Cross-version replay matched 64 complete games (3514 decisions)
-and 2234 additional clone/fresh-policy continuation decisions, including policy
-analysis results and terminal results.
+Formatting, warning-denied Clippy, and **238 tests in debug and release** pass.
+Permanent coverage includes a frozen compatibility reference, concrete-target
+oracles, full suit tables, ownership, ties, and cache ordering. Historical replay
+matched 64 games (3514 decisions) plus 2234 clone/fresh-policy continuation decisions.
 
-The Windows/Ryzen 7 3700X/rustc 1.98.0 default-release experiment used saved clean
-binaries, `heuristic-benchmark-v1`, 2000 games, warmup 20, seeds 7/10007, and five
-prescribed interleaved pairs per seed after B/B calibration. Median **paired**
-total/policy reductions were 62.44%/62.86% for seed 7 and 61.95%/62.35% for seed
-10007, with 5/5 strict improvements for both metrics in both groups and identical
-non-timing results. The optimization was retained. Instrumented microbenchmarks
-showed slight pure-distance regressions (cold 1.3%, warm 4.8%), not zero added
-cost; they are not the end-to-end gate or a statistical significance claim.
+The serial default-release `heuristic-benchmark-v1` experiment used 2000 games,
+warmup 20, seeds 7/10007, B/B calibration, and five interleaved pairs per seed.
+Paired median total/policy reductions were 62.44%/62.86% and 61.95%/62.35%,
+respectively, with 5/5 improvements and identical non-timing results. Pure-distance
+instrumented microbenchmarks regressed slightly (cold 1.3%, warm 4.8%).
 
 See the [archived summary](../specs/archive/one-pass-ukeire/results.md) for the
-proof, environment, workload, historical measurements, and limitations. At the
-user's explicit cleanup request, the experiment tools, source snapshots, raw
-calibration/formal samples, traces, and checksums were deleted before commit;
-they are not maintained or independently recheckable from the repository.
-Permanent Rust regression tests and the mathematical proof remain. A later
-non-algorithmic cleanup removed an unused test-only melds accessor and updated
-proof links without changing the measured release algorithm or policy
-behavior; the standard checks were rerun. These are local historical
-observations, not a performance guarantee. The completed Change is archived
-under `specs/archive/one-pass-ukeire/`.
+proof, environment and limitations. Experiment tools and raw evidence were deleted
+at the user's request; only permanent tests, proof and historical summaries remain.
+These are historical observations, not performance or statistical guarantees.

@@ -74,13 +74,8 @@ so fresh instances reproduce continuation from a cloned game. The
   (`HeuristicPolicy` for the declaration, `FirstLegalPolicy` otherwise),
   legality, seeded replay, and continuation with fresh policies.
 - [`src/policy/analysis/one_pass_tests.rs`](../../src/policy/analysis/one_pass_tests.rs)
-  and its `oracle`, `states`, and `suit` submodules: one-pass needed-tile masks,
-  frozen pre-change ukeire/distance reference, concrete target enumeration,
-  complete masked suit tables, physical ownership, ties, and cache ordering.
-  The private evaluator keeps mask caches separate from its distance-only
-  caches; ukeire counts unseen copies from the optimal-target needed-kind union
-  instead of re-running distance analysis for each hypothetical draw. Both
-  cache families remain local to one fixed context inside a decision.
+  and its submodules: optimal-target masks, frozen ukeire/distance reference,
+  concrete target oracles, full suit tables, ownership, ties, and cache ordering.
 - [`src/policy/analysis/tests.rs`](../../src/policy/analysis/tests.rs),
   [`src/policy/analysis/optimization_b_tests.rs`](../../src/policy/analysis/optimization_b_tests.rs),
   [`src/policy/analysis/optimization_a2_tests.rs`](../../src/policy/analysis/optimization_a2_tests.rs),
