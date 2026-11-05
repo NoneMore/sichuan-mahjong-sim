@@ -168,9 +168,11 @@ reproduction commands, and artifact provenance.
 ## Heuristic cost attribution
 
 See the [heuristic cost-attribution study](studies/heuristic-cost-attribution.md)
-for `heuristic-benchmark-v1` baseline measurements, function-level sampling,
-stability checks, reproduction steps, and attribution limits. This is a research
-result, not an implemented optimization or a performance guarantee.
+for historical pre-optimization measurements. The
+[post-optimization refresh](studies/heuristic-cost-attribution-refresh.md) profiles
+`6d3173b` after both optimizations below, separating distance-only and masked suit
+DP, with per-run evidence, reproduction steps and limits. These are research
+observations, not performance guarantees.
 
 ## Heuristic hand-analysis optimization
 

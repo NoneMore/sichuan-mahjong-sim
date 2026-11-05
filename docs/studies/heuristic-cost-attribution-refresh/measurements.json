@@ -1,0 +1,1519 @@
+{
+  "source": {
+    "revision": "6d3173b2857f42ff2681061e5d9f203172b52d20",
+    "git_status_before_measurement": "",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-pc-windows-msvc\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)\n",
+    "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+    "builds": {
+      "default": {
+        "rustflags": "",
+        "files": [
+          {
+            "path": "E:\\Home\\projects\\sichuan-mahjong-sim\\target\\hca-refresh-6d3173b\\build-default\\release\\examples\\heuristic_bench.exe",
+            "size": 261120,
+            "sha256": "14f3139468573f09870069aa739a9372b2ae8aca923b185fb38501d14e01bb31"
+          }
+        ]
+      },
+      "fp": {
+        "rustflags": "-C force-frame-pointers=yes -C debuginfo=2",
+        "files": [
+          {
+            "path": "E:\\Home\\projects\\sichuan-mahjong-sim\\target\\hca-refresh-6d3173b\\build-fp\\release\\examples\\heuristic_bench.exe",
+            "size": 260608,
+            "sha256": "8c2b1fb4bd938fad71fd1bcc9638f8d6f350931eb8c791fb53fbf48692810c7c"
+          },
+          {
+            "path": "E:\\Home\\projects\\sichuan-mahjong-sim\\target\\hca-refresh-6d3173b\\build-fp\\release\\examples\\heuristic_bench.pdb",
+            "size": 2781184,
+            "sha256": "932e3e7a218268cd0a408d0978ed9223b220e80e5fc4b44d9041090745c03868"
+          }
+        ]
+      },
+      "nofp": {
+        "rustflags": "-C debuginfo=2",
+        "files": [
+          {
+            "path": "E:\\Home\\projects\\sichuan-mahjong-sim\\target\\hca-refresh-6d3173b\\build-nofp\\release\\examples\\heuristic_bench.exe",
+            "size": 260608,
+            "sha256": "b078f305792331690f13d400808c176f3fa2cfbab1e63017ecaca706690185ae"
+          },
+          {
+            "path": "E:\\Home\\projects\\sichuan-mahjong-sim\\target\\hca-refresh-6d3173b\\build-nofp\\release\\examples\\heuristic_bench.pdb",
+            "size": 2781184,
+            "sha256": "a5bfb1554d1b748f433b4827ebaaaa1d6c8a4b336bad11b83bb76a5615e77780"
+          }
+        ]
+      }
+    }
+  },
+  "collection_local_date": "2026-11-05",
+  "environment": {
+    "os": "Windows 10 Pro 10.0.19045 x64",
+    "cpu": "AMD Ryzen 7 3700X; 8 cores / 16 logical CPUs",
+    "dbghelp": "Windows Kits 10.0.26100.9457",
+    "cpu_affinity": "not pinned",
+    "measurement_order": "3 interleaved rounds: default/fp/nofp, nofp/fp/default, fp/default/nofp, each followed by default seed 10007; then default seed 7 repetitions 4/5; unsampled controls; seven serial samples; final fp seed 7 long control",
+    "sampling_tools_revision": "6d3173b2857f42ff2681061e5d9f203172b52d20 (unchanged archived scripts)"
+  },
+  "benchmarks": {
+    "baseline-default-s10007-r1": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "10007",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "9987",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "115351",
+      "total_time_seconds": "6.710023",
+      "policy_time_seconds": "6.596667",
+      "rules_time_seconds": "0.089610",
+      "games_per_sec": "298.062",
+      "decisions_per_sec": "17190.851",
+      "mean_policy_us_per_decision": "57.188",
+      "three_winners": "1727",
+      "wall_exhausted": "273",
+      "score_totals": "[618, 117, -87, -648]",
+      "score_sum": "0",
+      "winners": "[1466, 1430, 1399, 1348]"
+    },
+    "baseline-default-s10007-r2": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "10007",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "9987",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "115351",
+      "total_time_seconds": "6.593407",
+      "policy_time_seconds": "6.482127",
+      "rules_time_seconds": "0.087505",
+      "games_per_sec": "303.333",
+      "decisions_per_sec": "17494.900",
+      "mean_policy_us_per_decision": "56.195",
+      "three_winners": "1727",
+      "wall_exhausted": "273",
+      "score_totals": "[618, 117, -87, -648]",
+      "score_sum": "0",
+      "winners": "[1466, 1430, 1399, 1348]"
+    },
+    "baseline-default-s10007-r3": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "10007",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "9987",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "115351",
+      "total_time_seconds": "6.615957",
+      "policy_time_seconds": "6.504026",
+      "rules_time_seconds": "0.088514",
+      "games_per_sec": "302.299",
+      "decisions_per_sec": "17435.272",
+      "mean_policy_us_per_decision": "56.385",
+      "three_winners": "1727",
+      "wall_exhausted": "273",
+      "score_totals": "[618, 117, -87, -648]",
+      "score_sum": "0",
+      "winners": "[1466, 1430, 1399, 1348]"
+    },
+    "baseline-default-s7-r1": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.415755",
+      "policy_time_seconds": "6.303224",
+      "rules_time_seconds": "0.085200",
+      "games_per_sec": "311.733",
+      "decisions_per_sec": "17743.977",
+      "mean_policy_us_per_decision": "55.369",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-default-s7-r2": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.516660",
+      "policy_time_seconds": "6.403713",
+      "rules_time_seconds": "0.089157",
+      "games_per_sec": "306.906",
+      "decisions_per_sec": "17469.226",
+      "mean_policy_us_per_decision": "56.251",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-default-s7-r3": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.402077",
+      "policy_time_seconds": "6.292949",
+      "rules_time_seconds": "0.085638",
+      "games_per_sec": "312.399",
+      "decisions_per_sec": "17781.885",
+      "mean_policy_us_per_decision": "55.278",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-default-s7-r4": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.623493",
+      "policy_time_seconds": "6.508138",
+      "rules_time_seconds": "0.090897",
+      "games_per_sec": "301.955",
+      "decisions_per_sec": "17187.458",
+      "mean_policy_us_per_decision": "57.169",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-default-s7-r5": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.500741",
+      "policy_time_seconds": "6.388596",
+      "rules_time_seconds": "0.088271",
+      "games_per_sec": "307.657",
+      "decisions_per_sec": "17512.003",
+      "mean_policy_us_per_decision": "56.119",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-fp-s7-r1": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.875845",
+      "policy_time_seconds": "6.752644",
+      "rules_time_seconds": "0.094185",
+      "games_per_sec": "290.873",
+      "decisions_per_sec": "16556.657",
+      "mean_policy_us_per_decision": "59.316",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-fp-s7-r2": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.757903",
+      "policy_time_seconds": "6.642383",
+      "rules_time_seconds": "0.091419",
+      "games_per_sec": "295.950",
+      "decisions_per_sec": "16845.609",
+      "mean_policy_us_per_decision": "58.348",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-fp-s7-r3": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.868172",
+      "policy_time_seconds": "6.749155",
+      "rules_time_seconds": "0.094057",
+      "games_per_sec": "291.198",
+      "decisions_per_sec": "16575.152",
+      "mean_policy_us_per_decision": "59.286",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-nofp-s7-r1": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.655709",
+      "policy_time_seconds": "6.538204",
+      "rules_time_seconds": "0.089020",
+      "games_per_sec": "300.494",
+      "decisions_per_sec": "17104.264",
+      "mean_policy_us_per_decision": "57.433",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-nofp-s7-r2": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.805236",
+      "policy_time_seconds": "6.688531",
+      "rules_time_seconds": "0.092287",
+      "games_per_sec": "293.891",
+      "decisions_per_sec": "16728.444",
+      "mean_policy_us_per_decision": "58.753",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "baseline-nofp-s7-r3": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "20",
+      "warmup_first_seed": "18446744073709551603",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.906836",
+      "policy_time_seconds": "6.789366",
+      "rules_time_seconds": "0.092754",
+      "games_per_sec": "289.568",
+      "decisions_per_sec": "16482.366",
+      "mean_policy_us_per_decision": "59.639",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "control-fp-s7-long": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "10000",
+      "warmup_games": "0",
+      "warmup_first_seed": "none",
+      "decision_limit_per_game": "10000",
+      "completed_games": "10000",
+      "decisions": "573529",
+      "total_time_seconds": "33.079780",
+      "policy_time_seconds": "32.529873",
+      "rules_time_seconds": "0.438708",
+      "games_per_sec": "302.299",
+      "decisions_per_sec": "17337.751",
+      "mean_policy_us_per_decision": "56.719",
+      "three_winners": "8751",
+      "wall_exhausted": "1249",
+      "score_totals": "[2624, 1075, -1003, -2696]",
+      "score_sum": "0",
+      "winners": "[7386, 7286, 6984, 6773]"
+    },
+    "control-fp-s7-w0": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "2000",
+      "warmup_games": "0",
+      "warmup_first_seed": "none",
+      "decision_limit_per_game": "10000",
+      "completed_games": "2000",
+      "decisions": "113841",
+      "total_time_seconds": "6.732570",
+      "policy_time_seconds": "6.616929",
+      "rules_time_seconds": "0.091633",
+      "games_per_sec": "297.063",
+      "decisions_per_sec": "16908.996",
+      "mean_policy_us_per_decision": "58.124",
+      "three_winners": "1781",
+      "wall_exhausted": "219",
+      "score_totals": "[439, 58, -51, -446]",
+      "score_sum": "0",
+      "winners": "[1470, 1465, 1419, 1366]"
+    },
+    "control-fp-s777-long": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "777",
+      "games": "10000",
+      "warmup_games": "0",
+      "warmup_first_seed": "none",
+      "decision_limit_per_game": "10000",
+      "completed_games": "10000",
+      "decisions": "573932",
+      "total_time_seconds": "33.399853",
+      "policy_time_seconds": "32.834690",
+      "rules_time_seconds": "0.450347",
+      "games_per_sec": "299.403",
+      "decisions_per_sec": "17183.668",
+      "mean_policy_us_per_decision": "57.210",
+      "three_winners": "8726",
+      "wall_exhausted": "1274",
+      "score_totals": "[2568, 1070, -963, -2675]",
+      "score_sum": "0",
+      "winners": "[7377, 7273, 6981, 6763]"
+    },
+    "control-nofp-s7-long": {
+      "protocol": "heuristic-benchmark-v1",
+      "policy": "heuristic",
+      "seats": "4",
+      "seat_order": "[0, 1, 2, 3]",
+      "seed": "7",
+      "games": "10000",
+      "warmup_games": "0",
+      "warmup_first_seed": "none",
+      "decision_limit_per_game": "10000",
+      "completed_games": "10000",
+      "decisions": "573529",
+      "total_time_seconds": "33.248954",
+      "policy_time_seconds": "32.692261",
+      "rules_time_seconds": "0.442106",
+      "games_per_sec": "300.761",
+      "decisions_per_sec": "17249.535",
+      "mean_policy_us_per_decision": "57.002",
+      "three_winners": "8751",
+      "wall_exhausted": "1249",
+      "score_totals": "[2624, 1075, -1003, -2696]",
+      "score_sum": "0",
+      "winners": "[7386, 7286, 6984, 6773]"
+    }
+  },
+  "sampling": {
+    "sample-fp-s10007": {
+      "build": "fp",
+      "report": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "warmup_games": "0",
+        "warmup_first_seed": "none",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "total_time_seconds": "6.627767",
+        "policy_time_seconds": "6.511402",
+        "rules_time_seconds": "0.092573",
+        "games_per_sec": "301.761",
+        "decisions_per_sec": "17404.203",
+        "mean_policy_us_per_decision": "56.449",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      },
+      "samples": 1082,
+      "sampling_wall_s": 6.256861199857667,
+      "complete_chains": 657,
+      "interval_ms": "1.0",
+      "startup_skip_ms": "150.0",
+      "max_depth": "48",
+      "hold_suspended": "0",
+      "cadence_ms": 5.782681330737216,
+      "target_exit_code": 0,
+      "self_suit_table": 530,
+      "self_suit_table_with_mask": 364,
+      "self_standard_deficit": 11,
+      "self_standard_deficit_with_mask": 23,
+      "contexts": {
+        "suit_table": {
+          "policy_complete": 354,
+          "unknown_incomplete": 165,
+          "policy_incomplete": 11
+        },
+        "deficit_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 392,
+          "<ntdll.dll+0x20000>": 1,
+          "<no-module>": 100,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 16
+        },
+        "suit_table_with_mask": {
+          "policy_complete": 245,
+          "unknown_incomplete": 112,
+          "policy_incomplete": 7
+        },
+        "ukeire_outer_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 264,
+          "<no-module>": 71,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 26,
+          "__ImageBase": 1
+        },
+        "allocator": {
+          "unknown_incomplete": 32,
+          "policy_complete": 13
+        },
+        "os_wait": {
+          "unknown_incomplete": 24,
+          "policy_complete": 2
+        },
+        "hash": {
+          "policy_complete": 9,
+          "unknown_incomplete": 22
+        },
+        "shared_rules_eval": {
+          "unknown_incomplete": 9
+        }
+      },
+      "inclusive_outer_including_self": {
+        "sichuan_mahjong_sim::policy::heuristic::rank_discards": 685,
+        "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 673,
+        "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit": 564,
+        "sichuan_mahjong_sim::policy::analysis::ukeire": 419
+      },
+      "top_dp_lines": {
+        "suit_table_with_mask analysis.rs:543": 83,
+        "suit_table analysis.rs:467": 79,
+        "suit_table analysis.rs:486": 69,
+        "suit_table analysis.rs:465": 61,
+        "suit_table_with_mask analysis.rs:573": 41,
+        "suit_table_with_mask analysis.rs:596": 39,
+        "suit_table_with_mask analysis.rs:582": 36,
+        "suit_table analysis.rs:471": 36,
+        "suit_table analysis.rs:483": 34,
+        "suit_table analysis.rs:482": 31
+      },
+      "quarters": [
+        {
+          "samples": 262,
+          "suit_table": 131,
+          "suit_table_with_mask": 85
+        },
+        {
+          "samples": 268,
+          "suit_table": 120,
+          "suit_table_with_mask": 97
+        },
+        {
+          "samples": 285,
+          "suit_table": 142,
+          "suit_table_with_mask": 95
+        },
+        {
+          "samples": 267,
+          "suit_table": 137,
+          "suit_table_with_mask": 87
+        }
+      ],
+      "outer_inner_dp": [
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table",
+          "samples": 530
+        },
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::ukeire",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table_with_mask",
+          "samples": 364
+        }
+      ]
+    },
+    "sample-fp-s7-held": {
+      "build": "fp",
+      "report": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "10000",
+        "warmup_games": "0",
+        "warmup_first_seed": "none",
+        "decision_limit_per_game": "10000",
+        "completed_games": "10000",
+        "decisions": "573529",
+        "total_time_seconds": "70.125617",
+        "policy_time_seconds": "68.750482",
+        "rules_time_seconds": "1.183610",
+        "games_per_sec": "142.601",
+        "decisions_per_sec": "8178.595",
+        "mean_policy_us_per_decision": "119.873",
+        "three_winners": "8751",
+        "wall_exhausted": "1249",
+        "score_totals": "[2624, 1075, -1003, -2696]",
+        "score_sum": "0",
+        "winners": "[7386, 7286, 6984, 6773]"
+      },
+      "samples": 5908,
+      "sampling_wall_s": 69.71277470001951,
+      "complete_chains": 5699,
+      "interval_ms": "5.0",
+      "startup_skip_ms": "150.0",
+      "max_depth": "48",
+      "hold_suspended": "1",
+      "cadence_ms": 11.799724898446092,
+      "target_exit_code": 0,
+      "self_suit_table": 2581,
+      "self_suit_table_with_mask": 2079,
+      "self_standard_deficit": 53,
+      "self_standard_deficit_with_mask": 89,
+      "contexts": {
+        "suit_table": {
+          "policy_complete": 2581
+        },
+        "deficit_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 2578,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 99,
+          "sichuan_mahjong_sim::policy::heuristic::evaluate_open_kong": 5
+        },
+        "suit_table_with_mask": {
+          "policy_complete": 2079
+        },
+        "ukeire_outer_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 2071,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 151,
+          "sichuan_mahjong_sim::policy::heuristic::evaluate_open_kong": 4
+        },
+        "os_wait": {
+          "unknown_incomplete": 205,
+          "policy_complete": 52,
+          "nonpolicy_complete": 7
+        },
+        "allocator": {
+          "policy_complete": 230
+        },
+        "hash": {
+          "policy_complete": 199
+        },
+        "shared_rules_eval": {
+          "policy_complete": 34,
+          "nonpolicy_complete": 46
+        }
+      },
+      "inclusive_outer_including_self": {
+        "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 5562,
+        "sichuan_mahjong_sim::policy::heuristic::rank_discards": 5237,
+        "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit": 2988,
+        "sichuan_mahjong_sim::policy::analysis::ukeire": 2452
+      },
+      "top_dp_lines": {
+        "suit_table analysis.rs:467": 405,
+        "suit_table analysis.rs:486": 342,
+        "suit_table_with_mask analysis.rs:543": 331,
+        "suit_table analysis.rs:465": 272,
+        "suit_table_with_mask analysis.rs:573": 237,
+        "suit_table_with_mask analysis.rs:571": 214,
+        "suit_table_with_mask analysis.rs:582": 212,
+        "suit_table analysis.rs:483": 199,
+        "suit_table_with_mask analysis.rs:596": 190,
+        "suit_table analysis.rs:471": 180
+      },
+      "quarters": [
+        {
+          "samples": 1476,
+          "suit_table": 645,
+          "suit_table_with_mask": 522
+        },
+        {
+          "samples": 1510,
+          "suit_table": 654,
+          "suit_table_with_mask": 515
+        },
+        {
+          "samples": 1458,
+          "suit_table": 650,
+          "suit_table_with_mask": 511
+        },
+        {
+          "samples": 1464,
+          "suit_table": 632,
+          "suit_table_with_mask": 531
+        }
+      ],
+      "outer_inner_dp": [
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table",
+          "samples": 2581
+        },
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::ukeire",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table_with_mask",
+          "samples": 2079
+        }
+      ]
+    },
+    "sample-fp-s7-r1": {
+      "build": "fp",
+      "report": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "0",
+        "warmup_first_seed": "none",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": "6.569739",
+        "policy_time_seconds": "6.454029",
+        "rules_time_seconds": "0.091698",
+        "games_per_sec": "304.426",
+        "decisions_per_sec": "17328.086",
+        "mean_policy_us_per_decision": "56.693",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      },
+      "samples": 1040,
+      "sampling_wall_s": 6.145052600186318,
+      "complete_chains": 657,
+      "interval_ms": "1.0",
+      "startup_skip_ms": "150.0",
+      "max_depth": "48",
+      "hold_suspended": "0",
+      "cadence_ms": 5.908704423256075,
+      "target_exit_code": 0,
+      "self_suit_table": 490,
+      "self_suit_table_with_mask": 373,
+      "self_standard_deficit": 9,
+      "self_standard_deficit_with_mask": 12,
+      "contexts": {
+        "suit_table_with_mask": {
+          "policy_complete": 244,
+          "unknown_incomplete": 122,
+          "policy_incomplete": 7
+        },
+        "ukeire_outer_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 249,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 37,
+          "<no-module>": 75,
+          "__ImageBase": 1
+        },
+        "hash": {
+          "unknown_incomplete": 23,
+          "policy_complete": 4
+        },
+        "suit_table": {
+          "policy_complete": 355,
+          "unknown_incomplete": 124,
+          "policy_incomplete": 11
+        },
+        "deficit_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 374,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 23,
+          "<no-module>": 84
+        },
+        "allocator": {
+          "unknown_incomplete": 36,
+          "policy_complete": 14,
+          "nonpolicy_complete": 1
+        },
+        "shared_rules_eval": {
+          "unknown_incomplete": 12,
+          "policy_complete": 1
+        },
+        "os_wait": {
+          "unknown_incomplete": 18
+        }
+      },
+      "inclusive_outer_including_self": {
+        "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 671,
+        "sichuan_mahjong_sim::policy::heuristic::rank_discards": 649,
+        "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit": 524,
+        "sichuan_mahjong_sim::policy::analysis::ukeire": 417
+      },
+      "top_dp_lines": {
+        "suit_table analysis.rs:467": 85,
+        "suit_table analysis.rs:486": 68,
+        "suit_table_with_mask analysis.rs:543": 65,
+        "suit_table_with_mask analysis.rs:596": 40,
+        "suit_table_with_mask analysis.rs:573": 38,
+        "suit_table_with_mask analysis.rs:582": 37,
+        "suit_table analysis.rs:471": 35,
+        "suit_table analysis.rs:454": 34,
+        "suit_table analysis.rs:444": 33,
+        "suit_table analysis.rs:483": 33
+      },
+      "quarters": [
+        {
+          "samples": 238,
+          "suit_table": 106,
+          "suit_table_with_mask": 87
+        },
+        {
+          "samples": 264,
+          "suit_table": 128,
+          "suit_table_with_mask": 97
+        },
+        {
+          "samples": 258,
+          "suit_table": 115,
+          "suit_table_with_mask": 100
+        },
+        {
+          "samples": 280,
+          "suit_table": 141,
+          "suit_table_with_mask": 89
+        }
+      ],
+      "outer_inner_dp": [
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::ukeire",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table_with_mask",
+          "samples": 373
+        },
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table",
+          "samples": 490
+        }
+      ]
+    },
+    "sample-fp-s7-r2": {
+      "build": "fp",
+      "report": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "0",
+        "warmup_first_seed": "none",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": "6.490163",
+        "policy_time_seconds": "6.378185",
+        "rules_time_seconds": "0.088677",
+        "games_per_sec": "308.159",
+        "decisions_per_sec": "17540.545",
+        "mean_policy_us_per_decision": "56.027",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      },
+      "samples": 1048,
+      "sampling_wall_s": 6.0751783000305295,
+      "complete_chains": 677,
+      "interval_ms": "1.0",
+      "startup_skip_ms": "150.0",
+      "max_depth": "48",
+      "hold_suspended": "0",
+      "cadence_ms": 5.796925858807757,
+      "target_exit_code": 0,
+      "self_suit_table": 504,
+      "self_suit_table_with_mask": 377,
+      "self_standard_deficit": 4,
+      "self_standard_deficit_with_mask": 18,
+      "contexts": {
+        "suit_table": {
+          "unknown_incomplete": 139,
+          "policy_complete": 359,
+          "policy_incomplete": 6
+        },
+        "deficit_direct_caller": {
+          "<no-module>": 94,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 23,
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 368
+        },
+        "suit_table_with_mask": {
+          "unknown_incomplete": 113,
+          "policy_complete": 262,
+          "policy_incomplete": 2
+        },
+        "ukeire_outer_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 264,
+          "<no-module>": 75,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 29
+        },
+        "allocator": {
+          "unknown_incomplete": 30,
+          "policy_complete": 19
+        },
+        "shared_rules_eval": {
+          "unknown_incomplete": 15
+        },
+        "hash": {
+          "unknown_incomplete": 21,
+          "policy_complete": 6
+        },
+        "os_wait": {
+          "unknown_incomplete": 17
+        }
+      },
+      "inclusive_outer_including_self": {
+        "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 682,
+        "sichuan_mahjong_sim::policy::heuristic::rank_discards": 662,
+        "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit": 530,
+        "sichuan_mahjong_sim::policy::analysis::ukeire": 424
+      },
+      "top_dp_lines": {
+        "suit_table analysis.rs:467": 87,
+        "suit_table analysis.rs:486": 82,
+        "suit_table_with_mask analysis.rs:543": 61,
+        "suit_table analysis.rs:465": 43,
+        "suit_table analysis.rs:483": 41,
+        "suit_table_with_mask analysis.rs:582": 40,
+        "suit_table_with_mask analysis.rs:571": 40,
+        "suit_table_with_mask analysis.rs:573": 40,
+        "suit_table_with_mask analysis.rs:596": 36,
+        "suit_table analysis.rs:471": 32
+      },
+      "quarters": [
+        {
+          "samples": 251,
+          "suit_table": 117,
+          "suit_table_with_mask": 95
+        },
+        {
+          "samples": 257,
+          "suit_table": 125,
+          "suit_table_with_mask": 95
+        },
+        {
+          "samples": 272,
+          "suit_table": 126,
+          "suit_table_with_mask": 101
+        },
+        {
+          "samples": 268,
+          "suit_table": 136,
+          "suit_table_with_mask": 86
+        }
+      ],
+      "outer_inner_dp": [
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table",
+          "samples": 504
+        },
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::ukeire",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table_with_mask",
+          "samples": 377
+        }
+      ]
+    },
+    "sample-fp-s7-w20": {
+      "build": "fp",
+      "report": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "warmup_games": "20",
+        "warmup_first_seed": "18446744073709551603",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "total_time_seconds": "6.365093",
+        "policy_time_seconds": "6.254653",
+        "rules_time_seconds": "0.087273",
+        "games_per_sec": "314.214",
+        "decisions_per_sec": "17885.207",
+        "mean_policy_us_per_decision": "54.942",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      },
+      "samples": 1045,
+      "sampling_wall_s": 6.040538500063121,
+      "complete_chains": 670,
+      "interval_ms": "1.0",
+      "startup_skip_ms": "150.0",
+      "max_depth": "48",
+      "hold_suspended": "0",
+      "cadence_ms": 5.7804196172852835,
+      "target_exit_code": 0,
+      "self_suit_table": 496,
+      "self_suit_table_with_mask": 371,
+      "self_standard_deficit": 11,
+      "self_standard_deficit_with_mask": 21,
+      "contexts": {
+        "suit_table": {
+          "policy_complete": 361,
+          "unknown_incomplete": 127,
+          "policy_incomplete": 8
+        },
+        "deficit_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 384,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 23,
+          "<no-module>": 91
+        },
+        "suit_table_with_mask": {
+          "policy_complete": 238,
+          "unknown_incomplete": 127,
+          "policy_incomplete": 6
+        },
+        "ukeire_outer_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 254,
+          "<no-module>": 85,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 30
+        },
+        "allocator": {
+          "unknown_incomplete": 26,
+          "policy_complete": 15
+        },
+        "hash": {
+          "unknown_incomplete": 14,
+          "policy_complete": 8
+        },
+        "os_wait": {
+          "unknown_incomplete": 19
+        },
+        "shared_rules_eval": {
+          "unknown_incomplete": 13
+        }
+      },
+      "inclusive_outer_including_self": {
+        "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 681,
+        "sichuan_mahjong_sim::policy::heuristic::rank_discards": 666,
+        "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit": 536,
+        "sichuan_mahjong_sim::policy::analysis::ukeire": 420
+      },
+      "top_dp_lines": {
+        "suit_table analysis.rs:467": 73,
+        "suit_table analysis.rs:486": 71,
+        "suit_table_with_mask analysis.rs:543": 65,
+        "suit_table analysis.rs:483": 46,
+        "suit_table_with_mask analysis.rs:582": 45,
+        "suit_table analysis.rs:465": 42,
+        "suit_table_with_mask analysis.rs:571": 41,
+        "suit_table analysis.rs:471": 36,
+        "suit_table_with_mask analysis.rs:573": 35,
+        "suit_table_with_mask analysis.rs:596": 32
+      },
+      "quarters": [
+        {
+          "samples": 261,
+          "suit_table": 132,
+          "suit_table_with_mask": 88
+        },
+        {
+          "samples": 271,
+          "suit_table": 127,
+          "suit_table_with_mask": 90
+        },
+        {
+          "samples": 256,
+          "suit_table": 125,
+          "suit_table_with_mask": 89
+        },
+        {
+          "samples": 257,
+          "suit_table": 112,
+          "suit_table_with_mask": 104
+        }
+      ],
+      "outer_inner_dp": [
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table",
+          "samples": 496
+        },
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::ukeire",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table_with_mask",
+          "samples": 371
+        }
+      ]
+    },
+    "sample-fp-s777-long": {
+      "build": "fp",
+      "report": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "777",
+        "games": "10000",
+        "warmup_games": "0",
+        "warmup_first_seed": "none",
+        "decision_limit_per_game": "10000",
+        "completed_games": "10000",
+        "decisions": "573932",
+        "total_time_seconds": "33.330094",
+        "policy_time_seconds": "32.760207",
+        "rules_time_seconds": "0.455080",
+        "games_per_sec": "300.029",
+        "decisions_per_sec": "17219.633",
+        "mean_policy_us_per_decision": "57.080",
+        "three_winners": "8726",
+        "wall_exhausted": "1274",
+        "score_totals": "[2568, 1070, -963, -2675]",
+        "score_sum": "0",
+        "winners": "[7377, 7273, 6981, 6763]"
+      },
+      "samples": 5480,
+      "sampling_wall_s": 32.95947419991717,
+      "complete_chains": 3547,
+      "interval_ms": "1.0",
+      "startup_skip_ms": "150.0",
+      "max_depth": "48",
+      "hold_suspended": "0",
+      "cadence_ms": 6.01450259122576,
+      "target_exit_code": 0,
+      "self_suit_table": 2701,
+      "self_suit_table_with_mask": 1931,
+      "self_standard_deficit": 44,
+      "self_standard_deficit_with_mask": 64,
+      "contexts": {
+        "suit_table_with_mask": {
+          "policy_complete": 1327,
+          "unknown_incomplete": 584,
+          "policy_incomplete": 20
+        },
+        "ukeire_outer_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 1357,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 163,
+          "<no-module>": 375,
+          "__ImageBase": 1
+        },
+        "suit_table": {
+          "policy_incomplete": 27,
+          "unknown_incomplete": 740,
+          "policy_complete": 1934
+        },
+        "deficit_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 2017,
+          "<no-module>": 480,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 121,
+          "alloc::raw_vec::RawVecInner<alloc::alloc::Global>::finish_grow<alloc::alloc::Global>": 1
+        },
+        "hash": {
+          "unknown_incomplete": 115,
+          "policy_complete": 28
+        },
+        "os_wait": {
+          "unknown_incomplete": 101,
+          "policy_complete": 1
+        },
+        "shared_rules_eval": {
+          "unknown_incomplete": 57,
+          "policy_incomplete": 1,
+          "policy_complete": 1
+        },
+        "allocator": {
+          "policy_complete": 88,
+          "unknown_incomplete": 131,
+          "policy_incomplete": 1
+        }
+      },
+      "inclusive_outer_including_self": {
+        "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 3588,
+        "sichuan_mahjong_sim::policy::heuristic::rank_discards": 3511,
+        "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit": 2879,
+        "sichuan_mahjong_sim::policy::analysis::ukeire": 2133
+      },
+      "top_dp_lines": {
+        "suit_table analysis.rs:467": 446,
+        "suit_table analysis.rs:486": 352,
+        "suit_table_with_mask analysis.rs:543": 349,
+        "suit_table analysis.rs:465": 275,
+        "suit_table analysis.rs:483": 207,
+        "suit_table_with_mask analysis.rs:596": 206,
+        "suit_table analysis.rs:471": 204,
+        "suit_table_with_mask analysis.rs:573": 197,
+        "suit_table_with_mask analysis.rs:571": 195,
+        "suit_table_with_mask analysis.rs:582": 191
+      },
+      "quarters": [
+        {
+          "samples": 1411,
+          "suit_table": 685,
+          "suit_table_with_mask": 502
+        },
+        {
+          "samples": 1353,
+          "suit_table": 654,
+          "suit_table_with_mask": 478
+        },
+        {
+          "samples": 1360,
+          "suit_table": 694,
+          "suit_table_with_mask": 465
+        },
+        {
+          "samples": 1356,
+          "suit_table": 668,
+          "suit_table_with_mask": 486
+        }
+      ],
+      "outer_inner_dp": [
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::ukeire",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table_with_mask",
+          "samples": 1931
+        },
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table",
+          "samples": 2701
+        }
+      ]
+    },
+    "sample-nofp-s7-long": {
+      "build": "nofp",
+      "report": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "10000",
+        "warmup_games": "0",
+        "warmup_first_seed": "none",
+        "decision_limit_per_game": "10000",
+        "completed_games": "10000",
+        "decisions": "573529",
+        "total_time_seconds": "32.664243",
+        "policy_time_seconds": "32.110983",
+        "rules_time_seconds": "0.439287",
+        "games_per_sec": "306.145",
+        "decisions_per_sec": "17558.313",
+        "mean_policy_us_per_decision": "55.988",
+        "three_winners": "8751",
+        "wall_exhausted": "1249",
+        "score_totals": "[2624, 1075, -1003, -2696]",
+        "score_sum": "0",
+        "winners": "[7386, 7286, 6984, 6773]"
+      },
+      "samples": 6289,
+      "sampling_wall_s": 32.248864700086415,
+      "complete_chains": 3128,
+      "interval_ms": "1.0",
+      "startup_skip_ms": "150.0",
+      "max_depth": "48",
+      "hold_suspended": "0",
+      "cadence_ms": 5.127820750530516,
+      "target_exit_code": 0,
+      "self_suit_table": 3077,
+      "self_suit_table_with_mask": 2219,
+      "self_standard_deficit": 56,
+      "self_standard_deficit_with_mask": 76,
+      "contexts": {
+        "suit_table_with_mask": {
+          "policy_complete": 1137,
+          "unknown_incomplete": 813,
+          "policy_incomplete": 269
+        },
+        "ukeire_outer_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 1583,
+          "<no-module>": 392,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 182,
+          "__ImageBase": 3,
+          "alloc::raw_vec::RawVec<sichuan_mahjong_sim::tile::Tile,alloc::alloc::Global>::grow_one<sichuan_mahjong_sim::tile::Tile,alloc::alloc::Global>": 1,
+          "<ntdll.dll+0x20000>": 1
+        },
+        "suit_table": {
+          "policy_complete": 1672,
+          "unknown_incomplete": 1113,
+          "policy_incomplete": 292
+        },
+        "deficit_direct_caller": {
+          "sichuan_mahjong_sim::policy::heuristic::rank_discards": 2305,
+          "<no-module>": 482,
+          "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 133,
+          "sichuan_mahjong_sim::policy::heuristic::evaluate_open_kong": 1,
+          "<ntdll.dll+0x2b86b>": 2,
+          "alloc::raw_vec::RawVec<sichuan_mahjong_sim::tile::Tile,alloc::alloc::Global>::grow_one<sichuan_mahjong_sim::tile::Tile,alloc::alloc::Global>": 3,
+          "__ImageBase": 2
+        },
+        "shared_rules_eval": {
+          "unknown_incomplete": 63,
+          "policy_incomplete": 1
+        },
+        "allocator": {
+          "policy_complete": 92,
+          "unknown_incomplete": 148,
+          "policy_incomplete": 15
+        },
+        "hash": {
+          "unknown_incomplete": 110,
+          "policy_complete": 38
+        },
+        "os_wait": {
+          "unknown_incomplete": 97,
+          "policy_complete": 2,
+          "nonpolicy_complete": 1
+        }
+      },
+      "inclusive_outer_including_self": {
+        "sichuan_mahjong_sim::policy::heuristic::rank_discards": 4084,
+        "sichuan_mahjong_sim::policy::heuristic::impl$1::choose": 3726,
+        "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit": 3289,
+        "sichuan_mahjong_sim::policy::analysis::ukeire": 2500
+      },
+      "top_dp_lines": {
+        "suit_table analysis.rs:467": 415,
+        "suit_table_with_mask analysis.rs:543": 388,
+        "suit_table analysis.rs:486": 366,
+        "suit_table analysis.rs:465": 345,
+        "suit_table analysis.rs:483": 290,
+        "suit_table analysis.rs:482": 238,
+        "suit_table_with_mask analysis.rs:571": 214,
+        "suit_table analysis.rs:454": 210,
+        "suit_table_with_mask analysis.rs:587": 201,
+        "suit_table analysis.rs:471": 191
+      },
+      "quarters": [
+        {
+          "samples": 1581,
+          "suit_table": 751,
+          "suit_table_with_mask": 581
+        },
+        {
+          "samples": 1552,
+          "suit_table": 786,
+          "suit_table_with_mask": 534
+        },
+        {
+          "samples": 1577,
+          "suit_table": 793,
+          "suit_table_with_mask": 545
+        },
+        {
+          "samples": 1579,
+          "suit_table": 747,
+          "suit_table_with_mask": 559
+        }
+      ],
+      "outer_inner_dp": [
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::ukeire",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table_with_mask",
+          "samples": 2219
+        },
+        {
+          "outer_symbol": "sichuan_mahjong_sim::policy::analysis::DistanceEvaluator::deficit",
+          "innermost_symbol": "sichuan_mahjong_sim::policy::analysis::suit_table",
+          "samples": 3077
+        }
+      ]
+    }
+  },
+  "workload_checks": [
+    {
+      "result": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "10007",
+        "games": "2000",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "115351",
+        "three_winners": "1727",
+        "wall_exhausted": "273",
+        "score_totals": "[618, 117, -87, -648]",
+        "score_sum": "0",
+        "winners": "[1466, 1430, 1399, 1348]"
+      },
+      "runs": [
+        "baseline-default-s10007-r1",
+        "baseline-default-s10007-r2",
+        "baseline-default-s10007-r3",
+        "sample-fp-s10007"
+      ]
+    },
+    {
+      "result": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "2000",
+        "decision_limit_per_game": "10000",
+        "completed_games": "2000",
+        "decisions": "113841",
+        "three_winners": "1781",
+        "wall_exhausted": "219",
+        "score_totals": "[439, 58, -51, -446]",
+        "score_sum": "0",
+        "winners": "[1470, 1465, 1419, 1366]"
+      },
+      "runs": [
+        "baseline-default-s7-r1",
+        "baseline-default-s7-r2",
+        "baseline-default-s7-r3",
+        "baseline-default-s7-r4",
+        "baseline-default-s7-r5",
+        "baseline-fp-s7-r1",
+        "baseline-fp-s7-r2",
+        "baseline-fp-s7-r3",
+        "baseline-nofp-s7-r1",
+        "baseline-nofp-s7-r2",
+        "baseline-nofp-s7-r3",
+        "control-fp-s7-w0",
+        "sample-fp-s7-r1",
+        "sample-fp-s7-r2",
+        "sample-fp-s7-w20"
+      ]
+    },
+    {
+      "result": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "7",
+        "games": "10000",
+        "decision_limit_per_game": "10000",
+        "completed_games": "10000",
+        "decisions": "573529",
+        "three_winners": "8751",
+        "wall_exhausted": "1249",
+        "score_totals": "[2624, 1075, -1003, -2696]",
+        "score_sum": "0",
+        "winners": "[7386, 7286, 6984, 6773]"
+      },
+      "runs": [
+        "control-fp-s7-long",
+        "control-nofp-s7-long",
+        "sample-fp-s7-held",
+        "sample-nofp-s7-long"
+      ]
+    },
+    {
+      "result": {
+        "protocol": "heuristic-benchmark-v1",
+        "policy": "heuristic",
+        "seats": "4",
+        "seat_order": "[0, 1, 2, 3]",
+        "seed": "777",
+        "games": "10000",
+        "decision_limit_per_game": "10000",
+        "completed_games": "10000",
+        "decisions": "573932",
+        "three_winners": "8726",
+        "wall_exhausted": "1274",
+        "score_totals": "[2568, 1070, -963, -2675]",
+        "score_sum": "0",
+        "winners": "[7377, 7273, 6981, 6763]"
+      },
+      "runs": [
+        "control-fp-s777-long",
+        "sample-fp-s777-long"
+      ]
+    }
+  ]
+}

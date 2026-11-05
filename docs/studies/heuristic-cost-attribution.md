@@ -1,5 +1,8 @@
 # 启发式策略成本归因
 
+> 本文保留优化前的历史结论。七对子/花色 DP 与 one-pass ukeire 优化后的
+> `6d3173b` 测量见[优化后复测](heuristic-cost-attribution-refresh.md)。
+
 ## 结论
 
 第一次启发式策略优化应优先关注 **`policy::analysis::suit_table` 的逐花色精确 DP 计算**，而不是哈希、分配器或规则判定。
