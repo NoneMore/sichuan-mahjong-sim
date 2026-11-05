@@ -217,8 +217,13 @@ impl<'a> DistanceEvaluator<'a> {
 ///
 /// At rank `r`, `a` and `b` count sequences started at `r - 2` and `r - 1`;
 /// `sequences` starts new sequences at `r`, and `triplets` chooses triplets.
-/// The pair may be placed at any rank. A transition is rejected when the resulting per-rank
-/// target count exceeds the four-copy capacity or the total set budget.
+/// The pair may be placed at any rank. Capacity is charged before enumerating
+/// the candidates that add tiles at this rank: the pending tails `a + b` are
+/// mandatory target tiles, so a state that cannot pay them is dropped, and the
+/// leftover capacity bounds the new sequences and triplets. The pair is still
+/// enumerated in the innermost loop and only rejected when the resulting
+/// per-rank count exceeds that rank's capacity, so the traversal order and
+/// every legal transition are unchanged.
 fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTable {
     // Flat state: (((a * 5 + b) * 5 + sets) * 2 + pair_used).
     const STRIDE_A: usize = 5;
@@ -243,6 +248,7 @@ fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTab
         let mut next_active = [0u16; STATES];
         let mut next_len = 0usize;
         let max_new_sequences = if rank <= 6 { target_sets } else { 0 };
+        let rank_capacity = capacity[rank] as usize;
 
         for &active_state in &active[..active_len] {
             let state = active_state as usize;
@@ -254,16 +260,29 @@ fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTab
             let b = rest % STRIDE_B;
             let a = rest / STRIDE_B;
 
+            // Tails carried from earlier ranks are mandatory tiles here.
+            let reserved = a + b;
+            if reserved > rank_capacity {
+                continue;
+            }
+            let free = rank_capacity - reserved;
             let set_budget = target_sets - sets;
-            let max_sequences = set_budget.min(max_new_sequences);
+            let max_sequences = set_budget.min(max_new_sequences).min(free);
             for sequences in 0..=max_sequences {
+                let after_sequences = free - sequences;
                 for triplets in 0..=(set_budget - sequences) {
+                    // The pair only raises the count, so once the triplet count
+                    // alone overflows the free capacity no pair choice can fit
+                    // and the increasing triplet count cannot recover.
+                    if 3 * triplets > after_sequences {
+                        break;
+                    }
                     for pair in 0..=1 {
                         if pair == 1 && pair_used == 1 {
                             continue;
                         }
-                        let count = 3 * triplets + sequences + a + b + 2 * pair;
-                        if count > capacity[rank] as usize {
+                        let count = 3 * triplets + sequences + reserved + 2 * pair;
+                        if count > rank_capacity {
                             continue;
                         }
                         let extra = (count as u8).saturating_sub(hand[rank]);
@@ -377,6 +396,8 @@ pub(crate) fn max_discard_fan(hand: &Hand, melds: &[Meld], missing: Suit) -> u8 
     best
 }
 
+#[cfg(test)]
+mod optimization_a2_tests;
 #[cfg(test)]
 mod optimization_b_tests;
 #[cfg(test)]

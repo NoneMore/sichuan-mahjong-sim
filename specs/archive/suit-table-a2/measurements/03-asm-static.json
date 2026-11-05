@@ -1,0 +1,3903 @@
+{
+  "protocol": "suit-table-a2-asm-v1",
+  "static_only": true,
+  "note": "Static instruction/branch/loop structure only. Assembly was generated before measurement with the same release profile, toolchain and flags but by a separate `--emit=asm` invocation. It does not observe runtime branches, so no branch-hit, misprediction or dynamic count claim follows from it.",
+  "mainline": "5ad75404a5dea07971779d163d47a05da3b66e73",
+  "symbols_by_variant": {
+    "M": {
+      "count": 433,
+      "project_symbols": [
+        "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator7deficit"
+      ]
+    },
+    "MA": {
+      "count": 433,
+      "project_symbols": [
+        "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator7deficit"
+      ]
+    },
+    "A2": {
+      "count": 433,
+      "project_symbols": [
+        "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator7deficit"
+      ]
+    }
+  },
+  "logical_functions_by_variant": {
+    "M": [
+      "\"?dtor$103@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$10@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic14claim_position@4HA\"",
+      "\"?dtor$117@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$120@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$120@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$123@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$126@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$129@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$12@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner6random@4HA\"",
+      "\"?dtor$12@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$141@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$146@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$15@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong@4HA\"",
+      "\"?dtor$16@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$18@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$190@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$19@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong@4HA\"",
+      "\"?dtor$20@?0?_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator3new@4HA\"",
+      "\"?dtor$20@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch@4HA\"",
+      "\"?dtor$20@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$25@?0?_RNvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB5_13RawTableInner15rehash_in_place@4HA\"",
+      "\"?dtor$27@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner5drive@4HA\"",
+      "\"?dtor$27@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$291@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance@4HA\"",
+      "\"?dtor$294@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance@4HA\"",
+      "\"?dtor$2@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner7run_new@4HA\"",
+      "\"?dtor$40@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$44@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$48@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$4@?0?_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEB1f_@4HA\"",
+      "\"?dtor$51@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$52@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$5@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13waiting_tiles@4HA\"",
+      "\"?dtor$67@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$67@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$6@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch@4HA\"",
+      "\"?dtor$70@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$73@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$73@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$75@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate@4HA\"",
+      "\"?dtor$7@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules19max_discard_win_fan@4HA\"",
+      "\"?dtor$81@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$84@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$87@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate@4HA\"",
+      "\"?dtor$88@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$8@?0?_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEEB1z_@4HA\"",
+      "_RINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB6_8RawTableTAhj1b_hEE14reserve_rehashNCINvNtB8_3map11make_hasherBQ_hNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB6_8RawTableTThAhj9_EAAhj2_j5_EE14reserve_rehashNCINvNtB8_3map11make_hasherBQ_BY_NtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB6_13RawTableInner22fallible_with_capacityNtNtCsckSb6QcKe7J_5alloc5alloc6GlobalECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueAINtNtCsckSb6QcKe7J_5alloc3vec3VecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldEj4_EB1d_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc3vec3VecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldEEEB1w_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEEB1z_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCs5zImONXtN8M_9hashbrown10scopeguard10ScopeGuardQNtNtBG_3raw13RawTableInnerNCNvMsa_B1v_B1t_15rehash_in_place0EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEB1f_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtNtNtCsbSQC797JefK_3std11collections4hash3map7HashMapThAhj9_EAAhj2_j5_EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game4GameEBF_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysis17DistanceEvaluatorEBH_",
+      "_RINvNvMs2_NtCsckSb6QcKe7J_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvXs2J_NtNtCs9OCfJ4KTcUD_4core5slice4iterINtB7_4IterNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldENtNtNtNtBb_4iter6traits8iterator8Iterator3anyNCNvMs3_NtBU_4gameNtB2x_4Game14debug_validates1_0EBU_",
+      "_RINvYNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateNtNtCs9OCfJ4KTcUD_4core4hash11BuildHasher8hash_oneRAhj1b_ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvYNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateNtNtCs9OCfJ4KTcUD_4core4hash11BuildHasher8hash_oneRThAhj9_EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNCINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB8_8RawTableTAhj1b_hEE14reserve_rehashNCINvNtBa_3map11make_hasherBS_hNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0E0Cs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNCINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB8_8RawTableTThAhj9_EAAhj2_j5_EE14reserve_rehashNCINvNtBa_3map11make_hasherBS_B10_NtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0E0Cs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvMNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB2_11BatchReport9score_sum",
+      "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator3new",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner11first_legal",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner5drive",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner6random",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner7run_new",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner8run_game",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game13next_decision",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14can_hu_on_tile",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game16draw_replacement",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game17apply_turn_action",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game17debug_tile_counts",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game18pay_kong_opponents",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game21apply_response_action",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game21start_next_turn_after",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game6submit",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game10KongRecordE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game11DiscardInfoE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runner14DecisionRecordE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic10KongChoiceE8grow_oneBS_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13ScoredDiscardE8grow_oneBS_",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand10suit_count",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand13has_only_suit",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand5total",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand8has_suit",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand8is_empty",
+      "_RNvMs5_NtCsckSb6QcKe7J_5alloc7raw_vecNtB5_11RawVecInner11finish_growCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB5_13RawTableInner15rehash_in_place",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval10is_winning",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13can_form_sets",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13waiting_tiles",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval14is_seven_pairs",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval19is_standard_winning",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval9is_tenpai",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval9win_shape",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules10root_count",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules11can_discard",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules11win_payment",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules12is_all_pungs",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules12is_pure_suit",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules13can_open_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules14can_added_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules17can_exchange_suit",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules17is_valid_exchange",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules18can_concealed_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules19max_discard_win_fan",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22has_missing_suit_tiles",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules6can_hu",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules7win_fan",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules8can_peng",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy17fallback_exchange",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy21choose_exchange_tiles",
+      "_RNvNtCs9OCfJ4KTcUD_4core3ptr25swap_nonoverlapping_bytes",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysis6ukeire",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic11base_public",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic14claim_position",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic19choose_missing_suit",
+      "_RNvXs0_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6actionNtB5_9MeldErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4TileNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policyNtB5_12RandomPolicyNtB5_6Policy6choose",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRANtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4Tilej3_NtB6_5Debug3fmtBB_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4SuitNtB6_5Debug3fmtBA_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileNtB6_5Debug3fmtBA_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action6ActionNtB6_5Debug3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game9GameErrorNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4seat4SeatNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4HandNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRjNtB6_7Display3fmtCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRyNtB6_7Display3fmtCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvXs2_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4TileNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs2_NtNtCsbSQC797JefK_3std4hash6randomNtB5_13DefaultHasherNtNtCs9OCfJ4KTcUD_4core4hash6Hasher5write",
+      "_RNvXs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_9HandErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs7_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4HandNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs8_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4HandNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs9_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rulesNtB5_9WinMethodNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB4_9GameErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4seatNtB4_4SeatNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB4_4SuitNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policyNtB4_16FirstLegalPolicyNtB4_6Policy6choose",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB4_11RunnerErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy12missing_onlyNtB4_17MissingOnlyPolicyNtB6_6Policy6choose",
+      "_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose",
+      "_RNvXsf_NtNtCs9OCfJ4KTcUD_4core5slice3cmpNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action6ActionNtB5_13SliceContains14slice_containsBG_",
+      "_RNvXsy_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_9HandErrorNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "deficit",
+      "switch.table._RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB4_4SuitNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt.319"
+    ],
+    "MA": [
+      "\"?dtor$103@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$10@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic14claim_position@4HA\"",
+      "\"?dtor$117@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$120@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$120@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$123@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$126@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$129@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$12@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner6random@4HA\"",
+      "\"?dtor$12@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$141@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$146@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$15@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong@4HA\"",
+      "\"?dtor$16@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$18@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$190@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$19@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong@4HA\"",
+      "\"?dtor$20@?0?_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator3new@4HA\"",
+      "\"?dtor$20@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch@4HA\"",
+      "\"?dtor$20@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$25@?0?_RNvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB5_13RawTableInner15rehash_in_place@4HA\"",
+      "\"?dtor$27@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner5drive@4HA\"",
+      "\"?dtor$27@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$291@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance@4HA\"",
+      "\"?dtor$294@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance@4HA\"",
+      "\"?dtor$2@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner7run_new@4HA\"",
+      "\"?dtor$40@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$44@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$48@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$4@?0?_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEB1f_@4HA\"",
+      "\"?dtor$51@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$52@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$5@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13waiting_tiles@4HA\"",
+      "\"?dtor$67@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$67@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$6@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch@4HA\"",
+      "\"?dtor$70@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$73@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$73@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$75@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate@4HA\"",
+      "\"?dtor$7@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules19max_discard_win_fan@4HA\"",
+      "\"?dtor$81@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$84@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$87@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate@4HA\"",
+      "\"?dtor$88@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$8@?0?_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEEB1z_@4HA\"",
+      "_RINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB6_8RawTableTAhj1b_hEE14reserve_rehashNCINvNtB8_3map11make_hasherBQ_hNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB6_8RawTableTThAhj9_EAAhj2_j5_EE14reserve_rehashNCINvNtB8_3map11make_hasherBQ_BY_NtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB6_13RawTableInner22fallible_with_capacityNtNtCsckSb6QcKe7J_5alloc5alloc6GlobalECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueAINtNtCsckSb6QcKe7J_5alloc3vec3VecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldEj4_EB1d_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc3vec3VecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldEEEB1w_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEEB1z_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCs5zImONXtN8M_9hashbrown10scopeguard10ScopeGuardQNtNtBG_3raw13RawTableInnerNCNvMsa_B1v_B1t_15rehash_in_place0EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEB1f_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtNtNtCsbSQC797JefK_3std11collections4hash3map7HashMapThAhj9_EAAhj2_j5_EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game4GameEBF_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysis17DistanceEvaluatorEBH_",
+      "_RINvNvMs2_NtCsckSb6QcKe7J_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvXs2J_NtNtCs9OCfJ4KTcUD_4core5slice4iterINtB7_4IterNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldENtNtNtNtBb_4iter6traits8iterator8Iterator3anyNCNvMs3_NtBU_4gameNtB2x_4Game14debug_validates1_0EBU_",
+      "_RINvYNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateNtNtCs9OCfJ4KTcUD_4core4hash11BuildHasher8hash_oneRAhj1b_ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvYNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateNtNtCs9OCfJ4KTcUD_4core4hash11BuildHasher8hash_oneRThAhj9_EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNCINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB8_8RawTableTAhj1b_hEE14reserve_rehashNCINvNtBa_3map11make_hasherBS_hNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0E0Cs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNCINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB8_8RawTableTThAhj9_EAAhj2_j5_EE14reserve_rehashNCINvNtBa_3map11make_hasherBS_B10_NtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0E0Cs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvMNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB2_11BatchReport9score_sum",
+      "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator3new",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner11first_legal",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner5drive",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner6random",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner7run_new",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner8run_game",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game13next_decision",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14can_hu_on_tile",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game16draw_replacement",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game17apply_turn_action",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game17debug_tile_counts",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game18pay_kong_opponents",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game21apply_response_action",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game21start_next_turn_after",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game6submit",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game10KongRecordE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game11DiscardInfoE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runner14DecisionRecordE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic10KongChoiceE8grow_oneBS_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13ScoredDiscardE8grow_oneBS_",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand10suit_count",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand13has_only_suit",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand5total",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand8has_suit",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand8is_empty",
+      "_RNvMs5_NtCsckSb6QcKe7J_5alloc7raw_vecNtB5_11RawVecInner11finish_growCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB5_13RawTableInner15rehash_in_place",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval10is_winning",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13can_form_sets",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13waiting_tiles",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval14is_seven_pairs",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval19is_standard_winning",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval9is_tenpai",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval9win_shape",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules10root_count",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules11can_discard",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules11win_payment",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules12is_all_pungs",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules12is_pure_suit",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules13can_open_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules14can_added_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules17can_exchange_suit",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules17is_valid_exchange",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules18can_concealed_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules19max_discard_win_fan",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22has_missing_suit_tiles",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules6can_hu",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules7win_fan",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules8can_peng",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy17fallback_exchange",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy21choose_exchange_tiles",
+      "_RNvNtCs9OCfJ4KTcUD_4core3ptr25swap_nonoverlapping_bytes",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysis6ukeire",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic11base_public",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic14claim_position",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic19choose_missing_suit",
+      "_RNvXs0_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6actionNtB5_9MeldErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4TileNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policyNtB5_12RandomPolicyNtB5_6Policy6choose",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRANtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4Tilej3_NtB6_5Debug3fmtBB_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4SuitNtB6_5Debug3fmtBA_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileNtB6_5Debug3fmtBA_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action6ActionNtB6_5Debug3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game9GameErrorNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4seat4SeatNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4HandNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRjNtB6_7Display3fmtCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRyNtB6_7Display3fmtCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvXs2_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4TileNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs2_NtNtCsbSQC797JefK_3std4hash6randomNtB5_13DefaultHasherNtNtCs9OCfJ4KTcUD_4core4hash6Hasher5write",
+      "_RNvXs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_9HandErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs7_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4HandNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs8_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4HandNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs9_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rulesNtB5_9WinMethodNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB4_9GameErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4seatNtB4_4SeatNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB4_4SuitNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policyNtB4_16FirstLegalPolicyNtB4_6Policy6choose",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB4_11RunnerErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy12missing_onlyNtB4_17MissingOnlyPolicyNtB6_6Policy6choose",
+      "_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose",
+      "_RNvXsf_NtNtCs9OCfJ4KTcUD_4core5slice3cmpNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action6ActionNtB5_13SliceContains14slice_containsBG_",
+      "_RNvXsy_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_9HandErrorNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "deficit",
+      "switch.table._RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB4_4SuitNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt.319"
+    ],
+    "A2": [
+      "\"?dtor$103@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$10@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic14claim_position@4HA\"",
+      "\"?dtor$117@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$120@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$120@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$123@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$126@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$129@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards@4HA\"",
+      "\"?dtor$12@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner6random@4HA\"",
+      "\"?dtor$12@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$141@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$146@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$15@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong@4HA\"",
+      "\"?dtor$16@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$18@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$190@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$19@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong@4HA\"",
+      "\"?dtor$20@?0?_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator3new@4HA\"",
+      "\"?dtor$20@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch@4HA\"",
+      "\"?dtor$20@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$25@?0?_RNvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB5_13RawTableInner15rehash_in_place@4HA\"",
+      "\"?dtor$27@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner5drive@4HA\"",
+      "\"?dtor$27@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$291@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance@4HA\"",
+      "\"?dtor$294@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance@4HA\"",
+      "\"?dtor$2@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner7run_new@4HA\"",
+      "\"?dtor$40@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new@4HA\"",
+      "\"?dtor$44@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$48@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$4@?0?_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEB1f_@4HA\"",
+      "\"?dtor$51@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand@4HA\"",
+      "\"?dtor$52@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$5@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13waiting_tiles@4HA\"",
+      "\"?dtor$67@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$67@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$6@?0?_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch@4HA\"",
+      "\"?dtor$70@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$73@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$73@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$75@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate@4HA\"",
+      "\"?dtor$7@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules19max_discard_win_fan@4HA\"",
+      "\"?dtor$81@?0?_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion@4HA\"",
+      "\"?dtor$84@?0?_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng@4HA\"",
+      "\"?dtor$87@?0?_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate@4HA\"",
+      "\"?dtor$88@?0?_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose@4HA\"",
+      "\"?dtor$8@?0?_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEEB1z_@4HA\"",
+      "_RINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB6_8RawTableTAhj1b_hEE14reserve_rehashNCINvNtB8_3map11make_hasherBQ_hNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB6_8RawTableTThAhj9_EAAhj2_j5_EE14reserve_rehashNCINvNtB8_3map11make_hasherBQ_BY_NtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB6_13RawTableInner22fallible_with_capacityNtNtCsckSb6QcKe7J_5alloc5alloc6GlobalECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueAINtNtCsckSb6QcKe7J_5alloc3vec3VecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldEj4_EB1d_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc3vec3VecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldEEEB1w_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtB4_5array5GuardINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEEB1z_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCs5zImONXtN8M_9hashbrown10scopeguard10ScopeGuardQNtNtBG_3raw13RawTableInnerNCNvMsa_B1v_B1t_15rehash_in_place0EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtCsckSb6QcKe7J_5alloc5boxed3BoxDNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy6PolicyEL_EEB1f_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueINtNtNtNtCsbSQC797JefK_3std11collections4hash3map7HashMapThAhj9_EAAhj2_j5_EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game4GameEBF_",
+      "_RINvNtCs9OCfJ4KTcUD_4core3ptr9drop_glueNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysis17DistanceEvaluatorEBH_",
+      "_RINvNvMs2_NtCsckSb6QcKe7J_5alloc7raw_vecINtB8_11RawVecInnerpE7reserve21do_reserve_and_handleNtNtBa_5alloc6GlobalECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvXs2J_NtNtCs9OCfJ4KTcUD_4core5slice4iterINtB7_4IterNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldENtNtNtNtBb_4iter6traits8iterator8Iterator3anyNCNvMs3_NtBU_4gameNtB2x_4Game14debug_validates1_0EBU_",
+      "_RINvYNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateNtNtCs9OCfJ4KTcUD_4core4hash11BuildHasher8hash_oneRAhj1b_ECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RINvYNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateNtNtCs9OCfJ4KTcUD_4core4hash11BuildHasher8hash_oneRThAhj9_EECs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNCINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB8_8RawTableTAhj1b_hEE14reserve_rehashNCINvNtBa_3map11make_hasherBS_hNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0E0Cs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNCINvMs6_NtCs5zImONXtN8M_9hashbrown3rawINtB8_8RawTableTThAhj9_EAAhj2_j5_EE14reserve_rehashNCINvNtBa_3map11make_hasherBS_B10_NtNtNtCsbSQC797JefK_3std4hash6random11RandomStateE0E0Cs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvMNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB2_11BatchReport9score_sum",
+      "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator3new",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner11first_legal",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner5drive",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner6random",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner7run_new",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner8run_game",
+      "_RNvMs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB5_6Runner9run_batch",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game13next_decision",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14can_hu_on_tile",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game14debug_validate",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game16draw_replacement",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game17apply_turn_action",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game17debug_tile_counts",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game18pay_kong_opponents",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game21apply_response_action",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game21start_next_turn_after",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game3new",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game6submit",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game7advance",
+      "_RNvMs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB5_4Game8end_hand",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game10KongRecordE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game11DiscardInfoE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action4MeldE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runner14DecisionRecordE8grow_oneBQ_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic10KongChoiceE8grow_oneBS_",
+      "_RNvMs4_NtCsckSb6QcKe7J_5alloc7raw_vecINtB5_6RawVecNtNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13ScoredDiscardE8grow_oneBS_",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand10suit_count",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand13has_only_suit",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand5total",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand8has_suit",
+      "_RNvMs5_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4Hand8is_empty",
+      "_RNvMs5_NtCsckSb6QcKe7J_5alloc7raw_vecNtB5_11RawVecInner11finish_growCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvMsa_NtCs5zImONXtN8M_9hashbrown3rawNtB5_13RawTableInner15rehash_in_place",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval10is_winning",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13can_form_sets",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval13waiting_tiles",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval14is_seven_pairs",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval19is_standard_winning",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval9is_tenpai",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4eval9win_shape",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules10root_count",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules11can_discard",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules11win_payment",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules12is_all_pungs",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules12is_pure_suit",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules13can_open_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules14can_added_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules17can_exchange_suit",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules17is_valid_exchange",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules18can_concealed_kong",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules19max_discard_win_fan",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22has_missing_suit_tiles",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules22settle_wall_exhaustion",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules6can_hu",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules7win_fan",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rules8can_peng",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy17fallback_exchange",
+      "_RNvNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy21choose_exchange_tiles",
+      "_RNvNtCs9OCfJ4KTcUD_4core3ptr25swap_nonoverlapping_bytes",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysis6ukeire",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic11base_public",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13evaluate_peng",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic13rank_discards",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic14claim_position",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic18evaluate_open_kong",
+      "_RNvNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristic19choose_missing_suit",
+      "_RNvXs0_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6actionNtB5_9MeldErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4TileNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs1_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policyNtB5_12RandomPolicyNtB5_6Policy6choose",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRANtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4Tilej3_NtB6_5Debug3fmtBB_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4SuitNtB6_5Debug3fmtBA_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileNtB6_5Debug3fmtBA_",
+      "_RNvXs1g_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action6ActionNtB6_5Debug3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4game9GameErrorNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4seat4SeatNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4HandNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tile4TileNtB6_7Display3fmtBA_",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRjNtB6_7Display3fmtCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvXs1i_NtCs9OCfJ4KTcUD_4core3fmtRyNtB6_7Display3fmtCs4DgSkW5ScxR_19sichuan_mahjong_sim",
+      "_RNvXs2_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4TileNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs2_NtNtCsbSQC797JefK_3std4hash6randomNtB5_13DefaultHasherNtNtCs9OCfJ4KTcUD_4core4hash6Hasher5write",
+      "_RNvXs3_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_9HandErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs7_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4HandNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs8_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_4HandNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs9_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim5rulesNtB5_9WinMethodNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4gameNtB4_9GameErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4seatNtB4_4SeatNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB4_4SuitNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policyNtB4_16FirstLegalPolicyNtB4_6Policy6choose",
+      "_RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim6runnerNtB4_11RunnerErrorNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt",
+      "_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy12missing_onlyNtB4_17MissingOnlyPolicyNtB6_6Policy6choose",
+      "_RNvXs_NtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy9heuristicNtB4_15HeuristicPolicyNtB6_6Policy6choose",
+      "_RNvXsf_NtNtCs9OCfJ4KTcUD_4core5slice3cmpNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6action6ActionNtB5_13SliceContains14slice_containsBG_",
+      "_RNvXsy_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB5_9HandErrorNtNtCs9OCfJ4KTcUD_4core3fmt5Debug3fmt",
+      "deficit",
+      "switch.table._RNvXs_NtCs4DgSkW5ScxR_19sichuan_mahjong_sim4tileNtB4_4SuitNtNtCs9OCfJ4KTcUD_4core3fmt7Display3fmt.319"
+    ]
+  },
+  "filled_from_enclosing_caller": {},
+  "variants": {
+    "M": {
+      "deficit": {
+        "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator7deficit": {
+          "metrics": {
+            "instructions": 939,
+            "conditional_branches": 90,
+            "unconditional_jumps": 25,
+            "other_branches": 0,
+            "calls": 21,
+            "divisions": 0,
+            "multiplications": 3,
+            "backward_jumps_loop_edges": 32,
+            "unresolved_branch_targets": 0,
+            "loops": [
+              {
+                "label": ".LBB19_3",
+                "start": 39,
+                "end": 62,
+                "body_instructions": 24
+              },
+              {
+                "label": ".LBB19_2",
+                "start": 32,
+                "end": 71,
+                "body_instructions": 40
+              },
+              {
+                "label": ".LBB19_14",
+                "start": 136,
+                "end": 154,
+                "body_instructions": 19
+              },
+              {
+                "label": ".LBB19_13",
+                "start": 129,
+                "end": 164,
+                "body_instructions": 36
+              },
+              {
+                "label": ".LBB19_28",
+                "start": 197,
+                "end": 245,
+                "body_instructions": 49
+              },
+              {
+                "label": ".LBB19_46",
+                "start": 310,
+                "end": 394,
+                "body_instructions": 85
+              },
+              {
+                "label": ".LBB19_24",
+                "start": 240,
+                "end": 397,
+                "body_instructions": 158
+              },
+              {
+                "label": ".LBB19_45",
+                "start": 294,
+                "end": 401,
+                "body_instructions": 108
+              }
+            ]
+          },
+          "evidence": {
+            "add": {
+              "count": 47,
+              "samples": [
+                {
+                  "index": 40,
+                  "context": [
+                    "rep\t\tbsfl\t%r9d, %r11d",
+                    "addq\t%rax, %r11",
+                    "andq\t%rdx, %r11"
+                  ]
+                },
+                {
+                  "index": 68,
+                  "context": [
+                    "jne\t.LBB19_10",
+                    "addq\t%r8, %rax",
+                    "addq\t$16, %rax"
+                  ]
+                },
+                {
+                  "index": 69,
+                  "context": [
+                    "addq\t%r8, %rax",
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r8"
+                  ]
+                },
+                {
+                  "index": 70,
+                  "context": [
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r8",
+                    "jmp\t.LBB19_2"
+                  ]
+                },
+                {
+                  "index": 137,
+                  "context": [
+                    "rep\t\tbsfl\t%r11d, %esi",
+                    "addq\t%rax, %rsi",
+                    "andq\t%rdx, %rsi"
+                  ]
+                },
+                {
+                  "index": 161,
+                  "context": [
+                    "jne\t.LBB19_20",
+                    "addq\t%r10, %rax",
+                    "addq\t$16, %rax"
+                  ]
+                },
+                {
+                  "index": 162,
+                  "context": [
+                    "addq\t%r10, %rax",
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r10"
+                  ]
+                },
+                {
+                  "index": 163,
+                  "context": [
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r10",
+                    "jmp\t.LBB19_13"
+                  ]
+                },
+                {
+                  "index": 167,
+                  "context": [
+                    "movq\t%rax, 200(%rsp)",
+                    "addq\t192(%rsp), %r14",
+                    "movq\t%r14, 224(%rsp)"
+                  ]
+                },
+                {
+                  "index": 235,
+                  "context": [
+                    "leaq\t(%rsp,%rbx,2), %rax",
+                    "addq\t$1058, %rax",
+                    "movq\t%rax, 232(%rsp)"
+                  ]
+                },
+                {
+                  "index": 241,
+                  "context": [
+                    "movq\t240(%rsp), %rax",
+                    "addq\t$2, %rax",
+                    "cmpq\t232(%rsp), %rax"
+                  ]
+                },
+                {
+                  "index": 281,
+                  "context": [
+                    "cmovaeq\t%r8, %r10",
+                    "addb\t%al, %dl",
+                    "movzbl\t%dl, %edx"
+                  ]
+                },
+                {
+                  "index": 302,
+                  "context": [
+                    "movq\t152(%rsp), %rax",
+                    "addq\t%rcx, %rax",
+                    "leaq\t(%rax,%rax,4), %r14"
+                  ]
+                },
+                {
+                  "index": 306,
+                  "context": [
+                    "movq\t%rcx, 256(%rsp)",
+                    "addq\t%rcx, %rax",
+                    "addq\t%rax, %r14"
+                  ]
+                },
+                {
+                  "index": 307,
+                  "context": [
+                    "addq\t%rcx, %rax",
+                    "addq\t%rax, %r14",
+                    "xorl\t%r12d, %r12d"
+                  ]
+                },
+                {
+                  "index": 315,
+                  "context": [
+                    "leaq\t(%r14,%r12), %r10",
+                    "addq\t%r10, %r10",
+                    "leaq\t(%r8,%rax), %r13"
+                  ]
+                },
+                {
+                  "index": 317,
+                  "context": [
+                    "leaq\t(%r8,%rax), %r13",
+                    "addq\t$2, %r13",
+                    "cmpq\t%rsi, %r13"
+                  ]
+                },
+                {
+                  "index": 326,
+                  "context": [
+                    "cmovbl\t%ecx, %eax",
+                    "addb\t%r11b, %al",
+                    "movzbl\t%al, %eax"
+                  ]
+                },
+                {
+                  "index": 348,
+                  "context": [
+                    "cmovbl\t%r15d, %eax",
+                    "addb\t%r11b, %al",
+                    "movzbl\t%al, %eax"
+                  ]
+                },
+                {
+                  "index": 373,
+                  "context": [
+                    "cmovbl\t%ecx, %eax",
+                    "addb\t%r11b, %al",
+                    "movzbl\t%al, %eax"
+                  ]
+                },
+                {
+                  "index": 412,
+                  "context": [
+                    "movq\t152(%rsp), %rcx",
+                    "addq\t%rdx, %rcx",
+                    "leaq\t(%rcx,%rcx,4), %r10"
+                  ]
+                },
+                {
+                  "index": 415,
+                  "context": [
+                    "movq\t176(%rsp), %rcx",
+                    "addq\t%rdx, %rcx",
+                    "addq\t%rcx, %r10"
+                  ]
+                },
+                {
+                  "index": 416,
+                  "context": [
+                    "addq\t%rdx, %rcx",
+                    "addq\t%rcx, %r10",
+                    "xorl\t%r14d, %r14d"
+                  ]
+                },
+                {
+                  "index": 422,
+                  "context": [
+                    "leaq\t(%r14,%r14,2), %r12",
+                    "addq\t%r9, %r12",
+                    "cmpq\t%rsi, %r12"
+                  ]
+                }
+              ]
+            },
+            "branch": {
+              "count": 88,
+              "samples": [
+                {
+                  "index": 16,
+                  "context": [
+                    "movq\t%rcx, 48(%rsp)",
+                    "je\t.LBB19_10",
+                    "movq\t80(%r10), %rcx"
+                  ]
+                },
+                {
+                  "index": 38,
+                  "context": [
+                    "testl\t%r9d, %r9d",
+                    "je\t.LBB19_5",
+                    "rep\t\tbsfl\t%r9d, %r11d"
+                  ]
+                },
+                {
+                  "index": 57,
+                  "context": [
+                    "cmpl\t$65535, %r11d",
+                    "je\t.LBB19_130",
+                    "leal\t-1(%r9), %r10d"
+                  ]
+                },
+                {
+                  "index": 62,
+                  "context": [
+                    "movq\t48(%rsp), %r10",
+                    "jne\t.LBB19_3",
+                    "pcmpeqb\t%xmm1, %xmm2"
+                  ]
+                },
+                {
+                  "index": 67,
+                  "context": [
+                    "movq\t80(%rsp), %r11",
+                    "jne\t.LBB19_10",
+                    "addq\t%r8, %rax"
+                  ]
+                },
+                {
+                  "index": 94,
+                  "context": [
+                    "movq\t48(%rsp), %r10",
+                    "je\t.LBB19_7",
+                    "movq\t%r14, 120(%rsp)"
+                  ]
+                },
+                {
+                  "index": 113,
+                  "context": [
+                    "movq\t%r10, %rsi",
+                    "je\t.LBB19_20",
+                    "movq\t32(%rsi), %rcx"
+                  ]
+                },
+                {
+                  "index": 135,
+                  "context": [
+                    "testl\t%r11d, %r11d",
+                    "je\t.LBB19_17",
+                    "rep\t\tbsfl\t%r11d, %esi"
+                  ]
+                },
+                {
+                  "index": 143,
+                  "context": [
+                    "cmpb\t-20(%rcx,%rsi,4), %bl",
+                    "jne\t.LBB19_16",
+                    "movzbl\t-11(%rcx,%rsi,4), %edi"
+                  ]
+                },
+                {
+                  "index": 150,
+                  "context": [
+                    "orq\t%rbx, %rdi",
+                    "je\t.LBB19_19",
+                    "leal\t-1(%r11), %esi"
+                  ]
+                },
+                {
+                  "index": 154,
+                  "context": [
+                    "movl\t%esi, %r11d",
+                    "jne\t.LBB19_14",
+                    "pcmpeqb\t%xmm7, %xmm1"
+                  ]
+                },
+                {
+                  "index": 160,
+                  "context": [
+                    "movq\t48(%rsp), %rsi",
+                    "jne\t.LBB19_20",
+                    "addq\t%r10, %rax"
+                  ]
+                },
+                {
+                  "index": 207,
+                  "context": [
+                    "testq\t%rbx, %rbx",
+                    "je\t.LBB19_29",
+                    "cmpq\t$9, %rdi"
+                  ]
+                },
+                {
+                  "index": 209,
+                  "context": [
+                    "cmpq\t$9, %rdi",
+                    "je\t.LBB19_29",
+                    "movdqu\t%xmm7, 522(%rsp)"
+                  ]
+                },
+                {
+                  "index": 231,
+                  "context": [
+                    "cmpq\t$251, %rbx",
+                    "jae\t.LBB19_152",
+                    "leaq\t1(%rdi), %rax"
+                  ]
+                },
+                {
+                  "index": 245,
+                  "context": [
+                    "movq\t56(%rsp), %rbx",
+                    "je\t.LBB19_28",
+                    "movzwl\t(%rax), %ecx"
+                  ]
+                },
+                {
+                  "index": 248,
+                  "context": [
+                    "cmpq\t$250, %rcx",
+                    "jae\t.LBB19_70",
+                    "movq\t%rax, 240(%rsp)"
+                  ]
+                },
+                {
+                  "index": 291,
+                  "context": [
+                    "movq\t%r10, 144(%rsp)",
+                    "jne\t.LBB19_27",
+                    "xorl\t%ecx, %ecx"
+                  ]
+                },
+                {
+                  "index": 319,
+                  "context": [
+                    "cmpq\t%rsi, %r13",
+                    "jbe\t.LBB19_47",
+                    "cmpq\t%rsi, %rbx"
+                  ]
+                },
+                {
+                  "index": 321,
+                  "context": [
+                    "cmpq\t%rsi, %rbx",
+                    "ja\t.LBB19_66",
+                    "subb\t104(%rsp,%rdi), %bl"
+                  ]
+                },
+                {
+                  "index": 331,
+                  "context": [
+                    "cmpq\t$249, %r10",
+                    "ja\t.LBB19_61",
+                    "movzbl\t288(%rsp,%r10), %ecx"
+                  ]
+                },
+                {
+                  "index": 334,
+                  "context": [
+                    "cmpb\t%cl, %al",
+                    "jae\t.LBB19_66",
+                    "cmpb\t$-1, %cl"
+                  ]
+                },
+                {
+                  "index": 336,
+                  "context": [
+                    "cmpb\t$-1, %cl",
+                    "jne\t.LBB19_65",
+                    "jmp\t.LBB19_57"
+                  ]
+                },
+                {
+                  "index": 354,
+                  "context": [
+                    "cmpq\t$249, %r10",
+                    "ja\t.LBB19_62",
+                    "movzbl\t288(%rsp,%rcx), %r15d"
+                  ]
+                }
+              ]
+            },
+            "cmp": {
+              "count": 86,
+              "samples": [
+                {
+                  "index": 13,
+                  "context": [
+                    "movq\t%rcx, %r10",
+                    "cmpq\t$0, 72(%rcx)",
+                    "movq\t%rdx, 80(%rsp)"
+                  ]
+                },
+                {
+                  "index": 56,
+                  "context": [
+                    "pmovmskb\t%xmm3, %r11d",
+                    "cmpl\t$65535, %r11d",
+                    "je\t.LBB19_130"
+                  ]
+                },
+                {
+                  "index": 91,
+                  "context": [
+                    "movq\t%rax, 88(%rsp)",
+                    "cmpq\t$3, %r14",
+                    "movq\t80(%rsp), %r11"
+                  ]
+                },
+                {
+                  "index": 111,
+                  "context": [
+                    "movb\t%al, 134(%rsp)",
+                    "cmpq\t$0, 24(%r10)",
+                    "movq\t%r10, %rsi"
+                  ]
+                },
+                {
+                  "index": 142,
+                  "context": [
+                    "movzbl\t47(%rsp), %ebx",
+                    "cmpb\t-20(%rcx,%rsi,4), %bl",
+                    "jne\t.LBB19_16"
+                  ]
+                },
+                {
+                  "index": 208,
+                  "context": [
+                    "je\t.LBB19_29",
+                    "cmpq\t$9, %rdi",
+                    "je\t.LBB19_29"
+                  ]
+                },
+                {
+                  "index": 230,
+                  "context": [
+                    "callq\tmemset",
+                    "cmpq\t$251, %rbx",
+                    "jae\t.LBB19_152"
+                  ]
+                },
+                {
+                  "index": 242,
+                  "context": [
+                    "addq\t$2, %rax",
+                    "cmpq\t232(%rsp), %rax",
+                    "movq\t216(%rsp), %rsi"
+                  ]
+                },
+                {
+                  "index": 247,
+                  "context": [
+                    "movzwl\t(%rax), %ecx",
+                    "cmpq\t$250, %rcx",
+                    "jae\t.LBB19_70"
+                  ]
+                },
+                {
+                  "index": 273,
+                  "context": [
+                    "subq\t%r9, %r10",
+                    "cmpq\t%r10, %rsi",
+                    "movq\t%r10, 168(%rsp)"
+                  ]
+                },
+                {
+                  "index": 276,
+                  "context": [
+                    "cmovbq\t%rsi, %r10",
+                    "cmpq\t$7, %rdi",
+                    "movzbl\t1558(%rsp,%rcx), %r11d"
+                  ]
+                },
+                {
+                  "index": 294,
+                  "context": [
+                    "xorl\t%eax, %eax",
+                    "cmpq\t%r10, %rcx",
+                    "adcq\t$0, %rax"
+                  ]
+                },
+                {
+                  "index": 310,
+                  "context": [
+                    "xorl\t%edx, %edx",
+                    "cmpq\t%r9, %r12",
+                    "adcq\t$0, %rdx"
+                  ]
+                },
+                {
+                  "index": 318,
+                  "context": [
+                    "addq\t$2, %r13",
+                    "cmpq\t%rsi, %r13",
+                    "jbe\t.LBB19_47"
+                  ]
+                },
+                {
+                  "index": 320,
+                  "context": [
+                    "jbe\t.LBB19_47",
+                    "cmpq\t%rsi, %rbx",
+                    "ja\t.LBB19_66"
+                  ]
+                },
+                {
+                  "index": 330,
+                  "context": [
+                    "cmovbl\t%ecx, %eax",
+                    "cmpq\t$249, %r10",
+                    "ja\t.LBB19_61"
+                  ]
+                },
+                {
+                  "index": 333,
+                  "context": [
+                    "movzbl\t288(%rsp,%r10), %ecx",
+                    "cmpb\t%cl, %al",
+                    "jae\t.LBB19_66"
+                  ]
+                },
+                {
+                  "index": 335,
+                  "context": [
+                    "jae\t.LBB19_66",
+                    "cmpb\t$-1, %cl",
+                    "jne\t.LBB19_65"
+                  ]
+                },
+                {
+                  "index": 339,
+                  "context": [
+                    "xorl\t%ecx, %ecx",
+                    "cmpq\t%rsi, %rbx",
+                    "seta\t%cl"
+                  ]
+                },
+                {
+                  "index": 353,
+                  "context": [
+                    "orq\t%r10, %rcx",
+                    "cmpq\t$249, %r10",
+                    "ja\t.LBB19_62"
+                  ]
+                },
+                {
+                  "index": 356,
+                  "context": [
+                    "movzbl\t288(%rsp,%rcx), %r15d",
+                    "cmpb\t%r15b, %al",
+                    "jae\t.LBB19_53"
+                  ]
+                },
+                {
+                  "index": 358,
+                  "context": [
+                    "jae\t.LBB19_53",
+                    "cmpb\t$-1, %r15b",
+                    "jne\t.LBB19_52"
+                  ]
+                },
+                {
+                  "index": 361,
+                  "context": [
+                    "movq\t56(%rsp), %r15",
+                    "cmpq\t$249, %r15",
+                    "ja\t.LBB19_58"
+                  ]
+                },
+                {
+                  "index": 367,
+                  "context": [
+                    "movb\t%al, 288(%rsp,%rcx)",
+                    "cmpq\t%rsi, %rbx",
+                    "ja\t.LBB19_66"
+                  ]
+                }
+              ]
+            },
+            "lea": {
+              "count": 69,
+              "samples": [
+                {
+                  "index": 44,
+                  "context": [
+                    "negq\t%r10",
+                    "leaq\t(%r10,%r10,8), %r10",
+                    "leaq\t(%r10,%r10,2), %r10"
+                  ]
+                },
+                {
+                  "index": 45,
+                  "context": [
+                    "leaq\t(%r10,%r10,8), %r10",
+                    "leaq\t(%r10,%r10,2), %r10",
+                    "subq\t%r11, %r10"
+                  ]
+                },
+                {
+                  "index": 58,
+                  "context": [
+                    "je\t.LBB19_130",
+                    "leal\t-1(%r9), %r10d",
+                    "andw\t%r9w, %r10w"
+                  ]
+                },
+                {
+                  "index": 79,
+                  "context": [
+                    "movb\t$2, 282(%rsp)",
+                    "leaq\t120(%r10), %rax",
+                    "movq\t%rax, 192(%rsp)"
+                  ]
+                },
+                {
+                  "index": 82,
+                  "context": [
+                    "pcmpeqd\t%xmm7, %xmm7",
+                    "leaq\t32(%r10), %rax",
+                    "movq\t%rax, 184(%rsp)"
+                  ]
+                },
+                {
+                  "index": 99,
+                  "context": [
+                    "movzbl\t%al, %eax",
+                    "leaq\t(%rax,%rax,8), %r8",
+                    "movzbl\t8(%r11,%r8), %ecx"
+                  ]
+                },
+                {
+                  "index": 105,
+                  "context": [
+                    "movzbl\t8(%r11,%r8), %ecx",
+                    "leaq\t135(%rsp), %rdx",
+                    "movb\t%cl, 8(%rdx)"
+                  ]
+                },
+                {
+                  "index": 116,
+                  "context": [
+                    "movq\t40(%rsi), %rdx",
+                    "leaq\t134(%rsp), %r8",
+                    "callq\t_RINvYNtNtNtCsbSQC797JefK_3std4hash6random11RandomStateNtNtCs9OCfJ4KTcUD_4core4hash11BuildHasher8hash_oneRThAhj9_EECs4DgSkW5ScxR_19sichuan_mahjong_sim"
+                  ]
+                },
+                {
+                  "index": 140,
+                  "context": [
+                    "negq\t%rsi",
+                    "leaq\t(%rsi,%rsi,4), %rsi",
+                    "movzbl\t47(%rsp), %ebx"
+                  ]
+                },
+                {
+                  "index": 151,
+                  "context": [
+                    "je\t.LBB19_19",
+                    "leal\t-1(%r11), %esi",
+                    "andw\t%r11w, %si"
+                  ]
+                },
+                {
+                  "index": 165,
+                  "context": [
+                    "jmp\t.LBB19_13",
+                    "leaq\t(%r11,%r14), %rax",
+                    "movq\t%rax, 200(%rsp)"
+                  ]
+                },
+                {
+                  "index": 170,
+                  "context": [
+                    "movq\t112(%rsi), %rsi",
+                    "leaq\t1559(%rsp), %rax",
+                    "movdqu\t%xmm7, 233(%rax)"
+                  ]
+                },
+                {
+                  "index": 188,
+                  "context": [
+                    "movl\t$498, %r8d",
+                    "leaq\t1060(%rsp), %rcx",
+                    "xorl\t%edx, %edx"
+                  ]
+                },
+                {
+                  "index": 198,
+                  "context": [
+                    "movl\t$250, %r8d",
+                    "leaq\t1558(%rsp), %rcx",
+                    "leaq\t288(%rsp), %rdx"
+                  ]
+                },
+                {
+                  "index": 199,
+                  "context": [
+                    "leaq\t1558(%rsp), %rcx",
+                    "leaq\t288(%rsp), %rdx",
+                    "callq\tmemcpy"
+                  ]
+                },
+                {
+                  "index": 202,
+                  "context": [
+                    "movl\t$500, %r8d",
+                    "leaq\t1058(%rsp), %rcx",
+                    "leaq\t552(%rsp), %rdx"
+                  ]
+                },
+                {
+                  "index": 203,
+                  "context": [
+                    "leaq\t1058(%rsp), %rcx",
+                    "leaq\t552(%rsp), %rdx",
+                    "callq\tmemcpy"
+                  ]
+                },
+                {
+                  "index": 227,
+                  "context": [
+                    "movl\t$500, %r8d",
+                    "leaq\t552(%rsp), %rcx",
+                    "xorl\t%edx, %edx"
+                  ]
+                },
+                {
+                  "index": 232,
+                  "context": [
+                    "jae\t.LBB19_152",
+                    "leaq\t1(%rdi), %rax",
+                    "movq\t%rax, 208(%rsp)"
+                  ]
+                },
+                {
+                  "index": 234,
+                  "context": [
+                    "movq\t%rax, 208(%rsp)",
+                    "leaq\t(%rsp,%rbx,2), %rax",
+                    "addq\t$1058, %rax"
+                  ]
+                },
+                {
+                  "index": 237,
+                  "context": [
+                    "movq\t%rax, 232(%rsp)",
+                    "leaq\t1058(%rsp), %rax",
+                    "xorl\t%ebx, %ebx"
+                  ]
+                },
+                {
+                  "index": 256,
+                  "context": [
+                    "shrl\t$10, %edx",
+                    "leal\t(%rdx,%rdx,4), %edx",
+                    "subb\t%dl, %al"
+                  ]
+                },
+                {
+                  "index": 264,
+                  "context": [
+                    "movzbl\t%dh, %edx",
+                    "leal\t(%rdx,%rdx,4), %edx",
+                    "subb\t%dl, %al"
+                  ]
+                },
+                {
+                  "index": 266,
+                  "context": [
+                    "subb\t%dl, %al",
+                    "leal\t(%rcx,%rcx,4), %edx",
+                    "leal\t(%rcx,%rdx,8), %edx"
+                  ]
+                }
+              ]
+            },
+            "mul": {
+              "count": 3,
+              "samples": [
+                {
+                  "index": 253,
+                  "context": [
+                    "shrl\t%eax",
+                    "imull\t$205, %eax, %edx",
+                    "movzwl\t%dx, %edx"
+                  ]
+                },
+                {
+                  "index": 259,
+                  "context": [
+                    "movzbl\t%al, %r9d",
+                    "imull\t$205, %ecx, %eax",
+                    "movzwl\t%ax, %eax"
+                  ]
+                },
+                {
+                  "index": 262,
+                  "context": [
+                    "shrl\t$11, %eax",
+                    "imull\t$52, %eax, %edx",
+                    "movzbl\t%dh, %edx"
+                  ]
+                }
+              ]
+            },
+            "sub": {
+              "count": 17,
+              "samples": [
+                {
+                  "index": 8,
+                  "context": [
+                    "pushq\t%rbx",
+                    "subq\t$1848, %rsp",
+                    "movdqa\t%xmm7, 1824(%rsp)"
+                  ]
+                },
+                {
+                  "index": 46,
+                  "context": [
+                    "leaq\t(%r10,%r10,2), %r10",
+                    "subq\t%r11, %r10",
+                    "movq\t80(%rsp), %r11"
+                  ]
+                },
+                {
+                  "index": 257,
+                  "context": [
+                    "leal\t(%rdx,%rdx,4), %edx",
+                    "subb\t%dl, %al",
+                    "movzbl\t%al, %r9d"
+                  ]
+                },
+                {
+                  "index": 265,
+                  "context": [
+                    "leal\t(%rdx,%rdx,4), %edx",
+                    "subb\t%dl, %al",
+                    "leal\t(%rcx,%rcx,4), %edx"
+                  ]
+                },
+                {
+                  "index": 272,
+                  "context": [
+                    "movq\t%r9, 176(%rsp)",
+                    "subq\t%r9, %r10",
+                    "cmpq\t%r10, %rsi"
+                  ]
+                },
+                {
+                  "index": 298,
+                  "context": [
+                    "movq\t168(%rsp), %r9",
+                    "subq\t%rcx, %r9",
+                    "movq\t160(%rsp), %rax"
+                  ]
+                },
+                {
+                  "index": 322,
+                  "context": [
+                    "ja\t.LBB19_66",
+                    "subb\t104(%rsp,%rdi), %bl",
+                    "movzbl\t%bl, %eax"
+                  ]
+                },
+                {
+                  "index": 344,
+                  "context": [
+                    "movzbl\t104(%rsp,%rdi), %ebp",
+                    "subb\t%bpl, %al",
+                    "movzbl\t%al, %eax"
+                  ]
+                },
+                {
+                  "index": 369,
+                  "context": [
+                    "ja\t.LBB19_66",
+                    "subb\t%bpl, %r13b",
+                    "movzbl\t%r13b, %eax"
+                  ]
+                },
+                {
+                  "index": 408,
+                  "context": [
+                    "movq\t168(%rsp), %r8",
+                    "subq\t%rdx, %r8",
+                    "movq\t160(%rsp), %rcx"
+                  ]
+                },
+                {
+                  "index": 428,
+                  "context": [
+                    "addq\t%r15, %r15",
+                    "subb\t104(%rsp,%rdi), %r12b",
+                    "movzbl\t%r12b, %ebp"
+                  ]
+                },
+                {
+                  "index": 573,
+                  "context": [
+                    "movq\t%rcx, %r11",
+                    "subq\t%rax, %r11",
+                    "seta\t%r8b"
+                  ]
+                },
+                {
+                  "index": 742,
+                  "context": [
+                    "movl\t%r10d, %ecx",
+                    "subb\t$9, %cl",
+                    "cmpb\t$9, %cl"
+                  ]
+                },
+                {
+                  "index": 772,
+                  "context": [
+                    "movb\t$7, %r8b",
+                    "subb\t%al, %r8b",
+                    "movzbl\t%r8b, %eax"
+                  ]
+                },
+                {
+                  "index": 776,
+                  "context": [
+                    "movl\t%eax, %r8d",
+                    "subb\t%dl, %r8b",
+                    "movzbl\t%r8b, %edx"
+                  ]
+                },
+                {
+                  "index": 819,
+                  "context": [
+                    "leaq\t(%r14,%r14,2), %r14",
+                    "subq\t%r15, %r14",
+                    "movq\t80(%rsp), %r15"
+                  ]
+                },
+                {
+                  "index": 876,
+                  "context": [
+                    "leaq\t(%rdx,%rdx,2), %rdx",
+                    "subq\t%r9, %rdx",
+                    "movq\t80(%rsp), %r8"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "MA": {
+      "deficit": {
+        "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator7deficit": {
+          "metrics": {
+            "instructions": 879,
+            "conditional_branches": 74,
+            "unconditional_jumps": 23,
+            "other_branches": 0,
+            "calls": 21,
+            "divisions": 0,
+            "multiplications": 4,
+            "backward_jumps_loop_edges": 28,
+            "unresolved_branch_targets": 0,
+            "loops": [
+              {
+                "label": ".LBB19_3",
+                "start": 38,
+                "end": 60,
+                "body_instructions": 23
+              },
+              {
+                "label": ".LBB19_2",
+                "start": 31,
+                "end": 68,
+                "body_instructions": 38
+              },
+              {
+                "label": ".LBB19_14",
+                "start": 137,
+                "end": 155,
+                "body_instructions": 19
+              },
+              {
+                "label": ".LBB19_13",
+                "start": 130,
+                "end": 164,
+                "body_instructions": 35
+              },
+              {
+                "label": ".LBB19_29",
+                "start": 197,
+                "end": 240,
+                "body_instructions": 44
+              },
+              {
+                "label": ".LBB19_24",
+                "start": 239,
+                "end": 259,
+                "body_instructions": 21
+              },
+              {
+                "label": ".LBB19_55",
+                "start": 343,
+                "end": 373,
+                "body_instructions": 31
+              },
+              {
+                "label": ".LBB19_54",
+                "start": 321,
+                "end": 377,
+                "body_instructions": 57
+              }
+            ]
+          },
+          "evidence": {
+            "add": {
+              "count": 39,
+              "samples": [
+                {
+                  "index": 39,
+                  "context": [
+                    "rep\t\tbsfl\t%r9d, %r11d",
+                    "addq\t%rax, %r11",
+                    "andq\t%rdx, %r11"
+                  ]
+                },
+                {
+                  "index": 65,
+                  "context": [
+                    "jne\t.LBB19_10",
+                    "addq\t%r8, %rax",
+                    "addq\t$16, %rax"
+                  ]
+                },
+                {
+                  "index": 66,
+                  "context": [
+                    "addq\t%r8, %rax",
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r8"
+                  ]
+                },
+                {
+                  "index": 67,
+                  "context": [
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r8",
+                    "jmp\t.LBB19_2"
+                  ]
+                },
+                {
+                  "index": 138,
+                  "context": [
+                    "rep\t\tbsfl\t%r11d, %esi",
+                    "addq\t%rax, %rsi",
+                    "andq\t%rdx, %rsi"
+                  ]
+                },
+                {
+                  "index": 161,
+                  "context": [
+                    "jne\t.LBB19_20",
+                    "addq\t%r10, %rax",
+                    "addq\t$16, %rax"
+                  ]
+                },
+                {
+                  "index": 162,
+                  "context": [
+                    "addq\t%r10, %rax",
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r10"
+                  ]
+                },
+                {
+                  "index": 163,
+                  "context": [
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r10",
+                    "jmp\t.LBB19_13"
+                  ]
+                },
+                {
+                  "index": 167,
+                  "context": [
+                    "movq\t%rax, 176(%rsp)",
+                    "addq\t168(%rsp), %r13",
+                    "movq\t%r13, 192(%rsp)"
+                  ]
+                },
+                {
+                  "index": 236,
+                  "context": [
+                    "leaq\t(%rsp,%r15,2), %r10",
+                    "addq\t$1090, %r10",
+                    "xorl\t%r15d, %r15d"
+                  ]
+                },
+                {
+                  "index": 244,
+                  "context": [
+                    "jae\t.LBB19_45",
+                    "addq\t$2, %r11",
+                    "imull\t$205, %ecx, %eax"
+                  ]
+                },
+                {
+                  "index": 256,
+                  "context": [
+                    "shrl\t$11, %edx",
+                    "addb\t%al, %dl",
+                    "movl\t%r9d, %r8d"
+                  ]
+                },
+                {
+                  "index": 334,
+                  "context": [
+                    "movq\t280(%rsp), %rax",
+                    "addq\t%r10, %rax",
+                    "movq\t256(%rsp), %rcx"
+                  ]
+                },
+                {
+                  "index": 336,
+                  "context": [
+                    "movq\t256(%rsp), %rcx",
+                    "addq\t%r10, %rcx",
+                    "leaq\t(%rcx,%rcx,4), %r14"
+                  ]
+                },
+                {
+                  "index": 339,
+                  "context": [
+                    "movq\t272(%rsp), %rcx",
+                    "addq\t%r10, %rcx",
+                    "addq\t%rcx, %r14"
+                  ]
+                },
+                {
+                  "index": 340,
+                  "context": [
+                    "addq\t%r10, %rcx",
+                    "addq\t%rcx, %r14",
+                    "xorl\t%ebp, %ebp"
+                  ]
+                },
+                {
+                  "index": 346,
+                  "context": [
+                    "leal\t(%rbp,%rbp,2), %ecx",
+                    "addl\t%eax, %ecx",
+                    "subb\t%r9b, %cl"
+                  ]
+                },
+                {
+                  "index": 351,
+                  "context": [
+                    "cmovbl\t%esi, %ecx",
+                    "addb\t%r11b, %cl",
+                    "movzbl\t%cl, %r13d"
+                  ]
+                },
+                {
+                  "index": 453,
+                  "context": [
+                    "rep\t\tbsfl\t%r14d, %esi",
+                    "addq\t%rax, %rsi",
+                    "andq\t%r8, %rsi"
+                  ]
+                },
+                {
+                  "index": 479,
+                  "context": [
+                    "rep\t\tbsfl\t%r9d, %r9d",
+                    "addq\t%rax, %r9",
+                    "andq\t%r8, %r9"
+                  ]
+                },
+                {
+                  "index": 488,
+                  "context": [
+                    "xorl\t%ebx, %ebx",
+                    "addq\t%rdi, %rax",
+                    "addq\t$16, %rax"
+                  ]
+                },
+                {
+                  "index": 489,
+                  "context": [
+                    "addq\t%rdi, %rax",
+                    "addq\t$16, %rax",
+                    "addq\t$16, %rdi"
+                  ]
+                },
+                {
+                  "index": 490,
+                  "context": [
+                    "addq\t$16, %rax",
+                    "addq\t$16, %rdi",
+                    "jmp\t.LBB19_38"
+                  ]
+                },
+                {
+                  "index": 500,
+                  "context": [
+                    "leaq\t(,%r15,4), %rax",
+                    "addq\t%r13, %rax",
+                    "movzwl\t56(%rsp), %ecx"
+                  ]
+                }
+              ]
+            },
+            "branch": {
+              "count": 72,
+              "samples": [
+                {
+                  "index": 15,
+                  "context": [
+                    "movq\t%rcx, 40(%rsp)",
+                    "je\t.LBB19_10",
+                    "movq\t80(%r11), %rcx"
+                  ]
+                },
+                {
+                  "index": 37,
+                  "context": [
+                    "testl\t%r9d, %r9d",
+                    "je\t.LBB19_5",
+                    "rep\t\tbsfl\t%r9d, %r11d"
+                  ]
+                },
+                {
+                  "index": 55,
+                  "context": [
+                    "cmpl\t$65535, %r11d",
+                    "je\t.LBB19_108",
+                    "leal\t-1(%r9), %r10d"
+                  ]
+                },
+                {
+                  "index": 60,
+                  "context": [
+                    "movq\t40(%rsp), %r11",
+                    "jne\t.LBB19_3",
+                    "pcmpeqb\t%xmm1, %xmm2"
+                  ]
+                },
+                {
+                  "index": 64,
+                  "context": [
+                    "testl\t%r9d, %r9d",
+                    "jne\t.LBB19_10",
+                    "addq\t%r8, %rax"
+                  ]
+                },
+                {
+                  "index": 93,
+                  "context": [
+                    "movq\t40(%rsp), %r11",
+                    "je\t.LBB19_7",
+                    "leaq\t1(%rax), %rcx"
+                  ]
+                },
+                {
+                  "index": 113,
+                  "context": [
+                    "cmpq\t$0, 24(%r11)",
+                    "je\t.LBB19_20",
+                    "movq\t32(%r11), %rcx"
+                  ]
+                },
+                {
+                  "index": 136,
+                  "context": [
+                    "testl\t%r11d, %r11d",
+                    "je\t.LBB19_17",
+                    "rep\t\tbsfl\t%r11d, %esi"
+                  ]
+                },
+                {
+                  "index": 144,
+                  "context": [
+                    "cmpb\t-20(%rcx,%rdi,4), %bl",
+                    "jne\t.LBB19_16",
+                    "movzbl\t-11(%rcx,%rdi,4), %esi"
+                  ]
+                },
+                {
+                  "index": 151,
+                  "context": [
+                    "orq\t%rbx, %rsi",
+                    "je\t.LBB19_19",
+                    "leal\t-1(%r11), %esi"
+                  ]
+                },
+                {
+                  "index": 155,
+                  "context": [
+                    "movl\t%esi, %r11d",
+                    "jne\t.LBB19_14",
+                    "pcmpeqb\t%xmm7, %xmm1"
+                  ]
+                },
+                {
+                  "index": 160,
+                  "context": [
+                    "movq\t40(%rsp), %r11",
+                    "jne\t.LBB19_20",
+                    "addq\t%r10, %rax"
+                  ]
+                },
+                {
+                  "index": 207,
+                  "context": [
+                    "testq\t%r15, %r15",
+                    "je\t.LBB19_30",
+                    "cmpq\t$9, %rdi"
+                  ]
+                },
+                {
+                  "index": 209,
+                  "context": [
+                    "cmpq\t$9, %rdi",
+                    "je\t.LBB19_30",
+                    "movdqu\t%xmm7, 554(%rsp)"
+                  ]
+                },
+                {
+                  "index": 231,
+                  "context": [
+                    "cmpq\t$251, %r15",
+                    "jae\t.LBB19_130",
+                    "leaq\t1(%rdi), %rbx"
+                  ]
+                },
+                {
+                  "index": 240,
+                  "context": [
+                    "cmpq\t%r10, %r11",
+                    "je\t.LBB19_29",
+                    "movzwl\t(%r11), %ecx"
+                  ]
+                },
+                {
+                  "index": 243,
+                  "context": [
+                    "cmpq\t$250, %rcx",
+                    "jae\t.LBB19_45",
+                    "addq\t$2, %r11"
+                  ]
+                },
+                {
+                  "index": 259,
+                  "context": [
+                    "subb\t%dl, %r8b",
+                    "jb\t.LBB19_24",
+                    "movq\t%r11, 112(%rsp)"
+                  ]
+                },
+                {
+                  "index": 358,
+                  "context": [
+                    "cmpq\t$249, %rcx",
+                    "ja\t.LBB19_131",
+                    "movzbl\t320(%rsp,%rcx), %esi"
+                  ]
+                },
+                {
+                  "index": 361,
+                  "context": [
+                    "cmpb\t%sil, %r13b",
+                    "jae\t.LBB19_57",
+                    "cmpb\t$-1, %sil"
+                  ]
+                },
+                {
+                  "index": 363,
+                  "context": [
+                    "cmpb\t$-1, %sil",
+                    "jne\t.LBB19_62",
+                    "cmpq\t$249, %r15"
+                  ]
+                },
+                {
+                  "index": 365,
+                  "context": [
+                    "cmpq\t$249, %r15",
+                    "ja\t.LBB19_132",
+                    "movw\t%cx, 584(%rsp,%r15,2)"
+                  ]
+                },
+                {
+                  "index": 370,
+                  "context": [
+                    "cmpq\t%rdx, %rbp",
+                    "jae\t.LBB19_52",
+                    "movq\t%r8, %rbp"
+                  ]
+                },
+                {
+                  "index": 373,
+                  "context": [
+                    "cmpq\t%rdx, %r8",
+                    "jbe\t.LBB19_55",
+                    "cmpq\t%rbx, %r10"
+                  ]
+                }
+              ]
+            },
+            "cmp": {
+              "count": 71,
+              "samples": [
+                {
+                  "index": 13,
+                  "context": [
+                    "movq\t%rcx, %r11",
+                    "cmpq\t$0, 72(%rcx)",
+                    "movq\t%rcx, 40(%rsp)"
+                  ]
+                },
+                {
+                  "index": 54,
+                  "context": [
+                    "pmovmskb\t%xmm3, %r11d",
+                    "cmpl\t$65535, %r11d",
+                    "je\t.LBB19_108"
+                  ]
+                },
+                {
+                  "index": 91,
+                  "context": [
+                    "movq\t184(%rsp), %rax",
+                    "cmpq\t$3, %rax",
+                    "movq\t40(%rsp), %r11"
+                  ]
+                },
+                {
+                  "index": 112,
+                  "context": [
+                    "movb\t%al, 94(%rsp)",
+                    "cmpq\t$0, 24(%r11)",
+                    "je\t.LBB19_20"
+                  ]
+                },
+                {
+                  "index": 143,
+                  "context": [
+                    "movzbl\t38(%rsp), %ebx",
+                    "cmpb\t-20(%rcx,%rdi,4), %bl",
+                    "jne\t.LBB19_16"
+                  ]
+                },
+                {
+                  "index": 208,
+                  "context": [
+                    "je\t.LBB19_30",
+                    "cmpq\t$9, %rdi",
+                    "je\t.LBB19_30"
+                  ]
+                },
+                {
+                  "index": 230,
+                  "context": [
+                    "callq\tmemset",
+                    "cmpq\t$251, %r15",
+                    "jae\t.LBB19_130"
+                  ]
+                },
+                {
+                  "index": 239,
+                  "context": [
+                    "movq\t%r12, %r11",
+                    "cmpq\t%r10, %r11",
+                    "je\t.LBB19_29"
+                  ]
+                },
+                {
+                  "index": 242,
+                  "context": [
+                    "movzwl\t(%r11), %ecx",
+                    "cmpq\t$250, %rcx",
+                    "jae\t.LBB19_45"
+                  ]
+                },
+                {
+                  "index": 286,
+                  "context": [
+                    "shrl\t%ecx",
+                    "cmpq\t%r10, %rcx",
+                    "cmovbq\t%rcx, %r10"
+                  ]
+                },
+                {
+                  "index": 288,
+                  "context": [
+                    "cmovbq\t%rcx, %r10",
+                    "cmpq\t%r8, %rsi",
+                    "movq\t%r8, 264(%rsp)"
+                  ]
+                },
+                {
+                  "index": 301,
+                  "context": [
+                    "movq\t%rax, %rcx",
+                    "cmpq\t%r10, %rax",
+                    "adcq\t$0, %rax"
+                  ]
+                },
+                {
+                  "index": 308,
+                  "context": [
+                    "movq\t208(%rsp), %rbx",
+                    "cmpq\t%rbx, %rdx",
+                    "movq\t%rdx, 288(%rsp)"
+                  ]
+                },
+                {
+                  "index": 311,
+                  "context": [
+                    "cmovbq\t%rdx, %rbx",
+                    "cmpq\t$7, %rdi",
+                    "movl\t$0, %eax"
+                  ]
+                },
+                {
+                  "index": 322,
+                  "context": [
+                    "movq\t%rdi, %r10",
+                    "cmpq\t%rbx, %rdi",
+                    "adcq\t$0, %rdi"
+                  ]
+                },
+                {
+                  "index": 331,
+                  "context": [
+                    "shrq\t%rdx",
+                    "cmpq\t%rcx, %rdx",
+                    "cmovaeq\t%rcx, %rdx"
+                  ]
+                },
+                {
+                  "index": 343,
+                  "context": [
+                    "xorl\t%r8d, %r8d",
+                    "cmpq\t%rdx, %rbp",
+                    "adcq\t$0, %r8"
+                  ]
+                },
+                {
+                  "index": 357,
+                  "context": [
+                    "leaq\t(%r12,%rcx,2), %rcx",
+                    "cmpq\t$249, %rcx",
+                    "ja\t.LBB19_131"
+                  ]
+                },
+                {
+                  "index": 360,
+                  "context": [
+                    "movzbl\t320(%rsp,%rcx), %esi",
+                    "cmpb\t%sil, %r13b",
+                    "jae\t.LBB19_57"
+                  ]
+                },
+                {
+                  "index": 362,
+                  "context": [
+                    "jae\t.LBB19_57",
+                    "cmpb\t$-1, %sil",
+                    "jne\t.LBB19_62"
+                  ]
+                },
+                {
+                  "index": 364,
+                  "context": [
+                    "jne\t.LBB19_62",
+                    "cmpq\t$249, %r15",
+                    "ja\t.LBB19_132"
+                  ]
+                },
+                {
+                  "index": 369,
+                  "context": [
+                    "movb\t%r13b, 320(%rsp,%rcx)",
+                    "cmpq\t%rdx, %rbp",
+                    "jae\t.LBB19_52"
+                  ]
+                },
+                {
+                  "index": 372,
+                  "context": [
+                    "movq\t%r8, %rbp",
+                    "cmpq\t%rdx, %r8",
+                    "jbe\t.LBB19_55"
+                  ]
+                },
+                {
+                  "index": 374,
+                  "context": [
+                    "jbe\t.LBB19_55",
+                    "cmpq\t%rbx, %r10",
+                    "jae\t.LBB19_47"
+                  ]
+                }
+              ]
+            },
+            "lea": {
+              "count": 68,
+              "samples": [
+                {
+                  "index": 43,
+                  "context": [
+                    "negq\t%r10",
+                    "leaq\t(%r10,%r10,8), %r10",
+                    "leaq\t(%r10,%r10,2), %r10"
+                  ]
+                },
+                {
+                  "index": 44,
+                  "context": [
+                    "leaq\t(%r10,%r10,8), %r10",
+                    "leaq\t(%r10,%r10,2), %r10",
+                    "subq\t%r11, %r10"
+                  ]
+                },
+                {
+                  "index": 56,
+                  "context": [
+                    "je\t.LBB19_108",
+                    "leal\t-1(%r9), %r10d",
+                    "andw\t%r9w, %r10w"
+                  ]
+                },
+                {
+                  "index": 75,
+                  "context": [
+                    "movb\t$2, 314(%rsp)",
+                    "leaq\t120(%r11), %rax",
+                    "movq\t%rax, 168(%rsp)"
+                  ]
+                },
+                {
+                  "index": 78,
+                  "context": [
+                    "pcmpeqd\t%xmm7, %xmm7",
+                    "leaq\t1090(%rsp), %r12",
+                    "leaq\t32(%r11), %rax"
+                  ]
+                },
+                {
+                  "index": 79,
+                  "context": [
+                    "leaq\t1090(%rsp), %r12",
+                    "leaq\t32(%r11), %rax",
+                    "movq\t%rax, 160(%rsp)"
+                  ]
+                },
+                {
+                  "index": 82,
+                  "context": [
+                    "movaps\t__xmm@ffffffffffffffff0000000000000000(%rip), %xmm6",
+                    "leaq\t584(%rsp), %r14",
+                    "xorl\t%eax, %eax"
+                  ]
+                },
+                {
+                  "index": 94,
+                  "context": [
+                    "je\t.LBB19_7",
+                    "leaq\t1(%rax), %rcx",
+                    "movq\t%rcx, 184(%rsp)"
+                  ]
+                },
+                {
+                  "index": 100,
+                  "context": [
+                    "movzbl\t%al, %eax",
+                    "leaq\t(%rax,%rax,8), %r8",
+                    "movzbl\t8(%r15,%r8), %ecx"
+                  ]
+                },
+                {
+                  "index": 106,
+                  "context": [
+                    "movzbl\t8(%r15,%r8), %ecx",
+                    "leaq\t95(%rsp), %rdx",
+                    "movb\t%cl, 8(%rdx)"
+                  ]
+                },
+                {
+                  "index": 116,
+                  "context": [
+                    "movq\t40(%r11), %rdx",
+                    "leaq\t94(%rsp), %r8",
+                    "movq\t%r11, %rsi"
+                  ]
+                },
+                {
+                  "index": 141,
+                  "context": [
+                    "negq\t%rsi",
+                    "leaq\t(%rsi,%rsi,4), %rdi",
+                    "movzbl\t38(%rsp), %ebx"
+                  ]
+                },
+                {
+                  "index": 152,
+                  "context": [
+                    "je\t.LBB19_19",
+                    "leal\t-1(%r11), %esi",
+                    "andw\t%r11w, %si"
+                  ]
+                },
+                {
+                  "index": 165,
+                  "context": [
+                    "jmp\t.LBB19_13",
+                    "leaq\t(%r15,%r13), %rax",
+                    "movq\t%rax, 176(%rsp)"
+                  ]
+                },
+                {
+                  "index": 170,
+                  "context": [
+                    "movq\t112(%r11), %rsi",
+                    "leaq\t1591(%rsp), %rax",
+                    "movdqu\t%xmm7, 233(%rax)"
+                  ]
+                },
+                {
+                  "index": 188,
+                  "context": [
+                    "movl\t$498, %r8d",
+                    "leaq\t1092(%rsp), %rcx",
+                    "xorl\t%edx, %edx"
+                  ]
+                },
+                {
+                  "index": 198,
+                  "context": [
+                    "movl\t$250, %r8d",
+                    "leaq\t1590(%rsp), %rcx",
+                    "leaq\t320(%rsp), %rdx"
+                  ]
+                },
+                {
+                  "index": 199,
+                  "context": [
+                    "leaq\t1590(%rsp), %rcx",
+                    "leaq\t320(%rsp), %rdx",
+                    "callq\tmemcpy"
+                  ]
+                },
+                {
+                  "index": 232,
+                  "context": [
+                    "jae\t.LBB19_130",
+                    "leaq\t1(%rdi), %rbx",
+                    "movq\t192(%rsp), %rax"
+                  ]
+                },
+                {
+                  "index": 235,
+                  "context": [
+                    "movzbl\t(%rax,%rdi), %r9d",
+                    "leaq\t(%rsp,%r15,2), %r10",
+                    "addq\t$1090, %r10"
+                  ]
+                },
+                {
+                  "index": 250,
+                  "context": [
+                    "movzbl\t%dh, %edx",
+                    "leal\t(%rdx,%rdx,4), %edx",
+                    "subb\t%dl, %al"
+                  ]
+                },
+                {
+                  "index": 252,
+                  "context": [
+                    "subb\t%dl, %al",
+                    "leal\t(%rcx,%rcx,4), %edx",
+                    "leal\t(%rcx,%rdx,8), %edx"
+                  ]
+                },
+                {
+                  "index": 253,
+                  "context": [
+                    "leal\t(%rcx,%rcx,4), %edx",
+                    "leal\t(%rcx,%rdx,8), %edx",
+                    "movzwl\t%dx, %edx"
+                  ]
+                },
+                {
+                  "index": 272,
+                  "context": [
+                    "shrl\t$10, %r9d",
+                    "leal\t(%r9,%r9,4), %r9d",
+                    "subb\t%r9b, %cl"
+                  ]
+                }
+              ]
+            },
+            "mul": {
+              "count": 4,
+              "samples": [
+                {
+                  "index": 245,
+                  "context": [
+                    "addq\t$2, %r11",
+                    "imull\t$205, %ecx, %eax",
+                    "movzwl\t%ax, %eax"
+                  ]
+                },
+                {
+                  "index": 248,
+                  "context": [
+                    "shrl\t$11, %eax",
+                    "imull\t$52, %eax, %edx",
+                    "movzbl\t%dh, %edx"
+                  ]
+                },
+                {
+                  "index": 269,
+                  "context": [
+                    "shrl\t%ecx",
+                    "imull\t$205, %ecx, %r9d",
+                    "movzwl\t%r9w, %r9d"
+                  ]
+                },
+                {
+                  "index": 329,
+                  "context": [
+                    "movabsq\t$-6148914691236517205, %rdx",
+                    "mulq\t%rdx",
+                    "shrq\t%rdx"
+                  ]
+                }
+              ]
+            },
+            "sub": {
+              "count": 17,
+              "samples": [
+                {
+                  "index": 8,
+                  "context": [
+                    "pushq\t%rbx",
+                    "subq\t$1880, %rsp",
+                    "movdqa\t%xmm7, 1856(%rsp)"
+                  ]
+                },
+                {
+                  "index": 45,
+                  "context": [
+                    "leaq\t(%r10,%r10,2), %r10",
+                    "subq\t%r11, %r10",
+                    "movdqu\t(%r15), %xmm3"
+                  ]
+                },
+                {
+                  "index": 251,
+                  "context": [
+                    "leal\t(%rdx,%rdx,4), %edx",
+                    "subb\t%dl, %al",
+                    "leal\t(%rcx,%rcx,4), %edx"
+                  ]
+                },
+                {
+                  "index": 258,
+                  "context": [
+                    "movl\t%r9d, %r8d",
+                    "subb\t%dl, %r8b",
+                    "jb\t.LBB19_24"
+                  ]
+                },
+                {
+                  "index": 273,
+                  "context": [
+                    "leal\t(%r9,%r9,4), %r9d",
+                    "subb\t%r9b, %cl",
+                    "movzbl\t%cl, %r9d"
+                  ]
+                },
+                {
+                  "index": 280,
+                  "context": [
+                    "movq\t%r9, 272(%rsp)",
+                    "subq\t%r9, %r8",
+                    "movq\t%r10, 232(%rsp)"
+                  ]
+                },
+                {
+                  "index": 305,
+                  "context": [
+                    "movq\t216(%rsp), %rdx",
+                    "subq\t%rcx, %rdx",
+                    "subq\t%rcx, %rdx"
+                  ]
+                },
+                {
+                  "index": 306,
+                  "context": [
+                    "subq\t%rcx, %rdx",
+                    "subq\t%rcx, %rdx",
+                    "movq\t208(%rsp), %rbx"
+                  ]
+                },
+                {
+                  "index": 325,
+                  "context": [
+                    "movq\t288(%rsp), %rax",
+                    "subq\t%r10, %rax",
+                    "movq\t264(%rsp), %rcx"
+                  ]
+                },
+                {
+                  "index": 327,
+                  "context": [
+                    "movq\t264(%rsp), %rcx",
+                    "subq\t%r10, %rcx",
+                    "movabsq\t$-6148914691236517205, %rdx"
+                  ]
+                },
+                {
+                  "index": 347,
+                  "context": [
+                    "addl\t%eax, %ecx",
+                    "subb\t%r9b, %cl",
+                    "movzbl\t%cl, %ecx"
+                  ]
+                },
+                {
+                  "index": 545,
+                  "context": [
+                    "movq\t%rcx, %r11",
+                    "subq\t%rax, %r11",
+                    "seta\t%r8b"
+                  ]
+                },
+                {
+                  "index": 682,
+                  "context": [
+                    "movl\t%r10d, %ecx",
+                    "subb\t$9, %cl",
+                    "cmpb\t$9, %cl"
+                  ]
+                },
+                {
+                  "index": 712,
+                  "context": [
+                    "movb\t$7, %r8b",
+                    "subb\t%al, %r8b",
+                    "movzbl\t%r8b, %eax"
+                  ]
+                },
+                {
+                  "index": 716,
+                  "context": [
+                    "movl\t%eax, %r8d",
+                    "subb\t%dl, %r8b",
+                    "movzbl\t%r8b, %edx"
+                  ]
+                },
+                {
+                  "index": 758,
+                  "context": [
+                    "leaq\t(%r14,%r14,2), %r14",
+                    "subq\t%r15, %r14",
+                    "movq\t80(%rsp), %r15"
+                  ]
+                },
+                {
+                  "index": 816,
+                  "context": [
+                    "leaq\t(%rdx,%rdx,2), %rdx",
+                    "subq\t%r9, %rdx",
+                    "movdqu\t(%r15), %xmm0"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "A2": {
+      "deficit": {
+        "_RNvMNtNtCs4DgSkW5ScxR_19sichuan_mahjong_sim6policy8analysisNtB2_17DistanceEvaluator7deficit": {
+          "metrics": {
+            "instructions": 980,
+            "conditional_branches": 96,
+            "unconditional_jumps": 25,
+            "other_branches": 0,
+            "calls": 21,
+            "divisions": 0,
+            "multiplications": 3,
+            "backward_jumps_loop_edges": 27,
+            "unresolved_branch_targets": 0,
+            "loops": [
+              {
+                "label": ".LBB19_3",
+                "start": 38,
+                "end": 61,
+                "body_instructions": 24
+              },
+              {
+                "label": ".LBB19_2",
+                "start": 31,
+                "end": 70,
+                "body_instructions": 40
+              },
+              {
+                "label": ".LBB19_12",
+                "start": 138,
+                "end": 156,
+                "body_instructions": 19
+              },
+              {
+                "label": ".LBB19_11",
+                "start": 131,
+                "end": 166,
+                "body_instructions": 36
+              },
+              {
+                "label": ".LBB19_18",
+                "start": 199,
+                "end": 247,
+                "body_instructions": 49
+              },
+              {
+                "label": ".LBB19_22",
+                "start": 246,
+                "end": 265,
+                "body_instructions": 20
+              },
+              {
+                "label": ".LBB19_28",
+                "start": 322,
+                "end": 423,
+                "body_instructions": 102
+              },
+              {
+                "label": ".LBB19_27",
+                "start": 304,
+                "end": 431,
+                "body_instructions": 128
+              }
+            ]
+          },
+          "evidence": {
+            "add": {
+              "count": 49,
+              "samples": [
+                {
+                  "index": 39,
+                  "context": [
+                    "rep\t\tbsfl\t%r9d, %r11d",
+                    "addq\t%rax, %r11",
+                    "andq\t%rdx, %r11"
+                  ]
+                },
+                {
+                  "index": 67,
+                  "context": [
+                    "jne\t.LBB19_7",
+                    "addq\t%rsi, %rax",
+                    "addq\t$16, %rax"
+                  ]
+                },
+                {
+                  "index": 68,
+                  "context": [
+                    "addq\t%rsi, %rax",
+                    "addq\t$16, %rax",
+                    "addq\t$16, %rsi"
+                  ]
+                },
+                {
+                  "index": 69,
+                  "context": [
+                    "addq\t$16, %rax",
+                    "addq\t$16, %rsi",
+                    "jmp\t.LBB19_2"
+                  ]
+                },
+                {
+                  "index": 139,
+                  "context": [
+                    "rep\t\tbsfl\t%r11d, %esi",
+                    "addq\t%rax, %rsi",
+                    "andq\t%rdx, %rsi"
+                  ]
+                },
+                {
+                  "index": 163,
+                  "context": [
+                    "jne\t.LBB19_17",
+                    "addq\t%r10, %rax",
+                    "addq\t$16, %rax"
+                  ]
+                },
+                {
+                  "index": 164,
+                  "context": [
+                    "addq\t%r10, %rax",
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r10"
+                  ]
+                },
+                {
+                  "index": 165,
+                  "context": [
+                    "addq\t$16, %rax",
+                    "addq\t$16, %r10",
+                    "jmp\t.LBB19_11"
+                  ]
+                },
+                {
+                  "index": 169,
+                  "context": [
+                    "movq\t%rax, 232(%rsp)",
+                    "addq\t224(%rsp), %r12",
+                    "movq\t%r12, 248(%rsp)"
+                  ]
+                },
+                {
+                  "index": 242,
+                  "context": [
+                    "leaq\t(%rsp,%r14,2), %rax",
+                    "addq\t$1074, %rax",
+                    "movq\t%rax, 272(%rsp)"
+                  ]
+                },
+                {
+                  "index": 251,
+                  "context": [
+                    "jae\t.LBB19_152",
+                    "addq\t$2, %r11",
+                    "imull\t$205, %ecx, %eax"
+                  ]
+                },
+                {
+                  "index": 263,
+                  "context": [
+                    "shrl\t$11, %r8d",
+                    "addb\t%al, %r8b",
+                    "cmpb\t63(%rsp), %r8b"
+                  ]
+                },
+                {
+                  "index": 314,
+                  "context": [
+                    "movq\t176(%rsp), %rax",
+                    "addq\t%r8, %rax",
+                    "leaq\t(%rax,%rax,4), %rax"
+                  ]
+                },
+                {
+                  "index": 318,
+                  "context": [
+                    "movq\t%r8, 264(%rsp)",
+                    "addq\t%r8, %rcx",
+                    "addq\t%rcx, %rax"
+                  ]
+                },
+                {
+                  "index": 319,
+                  "context": [
+                    "addq\t%r8, %rcx",
+                    "addq\t%rcx, %rax",
+                    "xorl\t%r13d, %r13d"
+                  ]
+                },
+                {
+                  "index": 325,
+                  "context": [
+                    "leaq\t(,%r13,2), %rcx",
+                    "addq\t%r13, %rcx",
+                    "cmpq\t%r14, %rcx"
+                  ]
+                },
+                {
+                  "index": 330,
+                  "context": [
+                    "leaq\t(%rax,%r13), %r10",
+                    "addq\t%r10, %r10",
+                    "leaq\t(%r11,%rcx), %r15"
+                  ]
+                },
+                {
+                  "index": 332,
+                  "context": [
+                    "leaq\t(%r11,%rcx), %r15",
+                    "addq\t$2, %r15",
+                    "cmpq\t%rdx, %r15"
+                  ]
+                },
+                {
+                  "index": 341,
+                  "context": [
+                    "cmovbl\t%r8d, %ecx",
+                    "addb\t%r12b, %cl",
+                    "movzbl\t%cl, %ecx"
+                  ]
+                },
+                {
+                  "index": 372,
+                  "context": [
+                    "cmovbl\t%edi, %r8d",
+                    "addb\t%r12b, %r8b",
+                    "movzbl\t%r8b, %edi"
+                  ]
+                },
+                {
+                  "index": 397,
+                  "context": [
+                    "cmovbl\t%r8d, %ecx",
+                    "addb\t%r12b, %cl",
+                    "movzbl\t%cl, %ecx"
+                  ]
+                },
+                {
+                  "index": 444,
+                  "context": [
+                    "movq\t176(%rsp), %rcx",
+                    "addq\t%r8, %rcx",
+                    "leaq\t(%rcx,%rcx,4), %r14"
+                  ]
+                },
+                {
+                  "index": 447,
+                  "context": [
+                    "movq\t208(%rsp), %rcx",
+                    "addq\t%r8, %rcx",
+                    "addq\t%rcx, %r14"
+                  ]
+                },
+                {
+                  "index": 448,
+                  "context": [
+                    "addq\t%r8, %rcx",
+                    "addq\t%rcx, %r14",
+                    "xorl\t%ebp, %ebp"
+                  ]
+                }
+              ]
+            },
+            "branch": {
+              "count": 94,
+              "samples": [
+                {
+                  "index": 16,
+                  "context": [
+                    "movq\t%rcx, 48(%rsp)",
+                    "je\t.LBB19_7",
+                    "movq\t80(%r11), %rcx"
+                  ]
+                },
+                {
+                  "index": 37,
+                  "context": [
+                    "testl\t%r9d, %r9d",
+                    "je\t.LBB19_5",
+                    "rep\t\tbsfl\t%r9d, %r11d"
+                  ]
+                },
+                {
+                  "index": 56,
+                  "context": [
+                    "cmpl\t$65535, %r11d",
+                    "je\t.LBB19_127",
+                    "leal\t-1(%r9), %r10d"
+                  ]
+                },
+                {
+                  "index": 61,
+                  "context": [
+                    "movq\t48(%rsp), %r11",
+                    "jne\t.LBB19_3",
+                    "pcmpeqb\t%xmm1, %xmm2"
+                  ]
+                },
+                {
+                  "index": 66,
+                  "context": [
+                    "movq\t88(%rsp), %r8",
+                    "jne\t.LBB19_7",
+                    "addq\t%rsi, %rax"
+                  ]
+                },
+                {
+                  "index": 94,
+                  "context": [
+                    "movq\t48(%rsp), %r11",
+                    "je\t.LBB19_120",
+                    "leaq\t1(%rax), %rcx"
+                  ]
+                },
+                {
+                  "index": 114,
+                  "context": [
+                    "cmpq\t$0, 24(%r11)",
+                    "je\t.LBB19_17",
+                    "movq\t32(%r11), %rcx"
+                  ]
+                },
+                {
+                  "index": 137,
+                  "context": [
+                    "testl\t%r11d, %r11d",
+                    "je\t.LBB19_15",
+                    "rep\t\tbsfl\t%r11d, %esi"
+                  ]
+                },
+                {
+                  "index": 145,
+                  "context": [
+                    "cmpb\t-20(%rcx,%rsi,4), %r8b",
+                    "jne\t.LBB19_14",
+                    "movzbl\t-11(%rcx,%rsi,4), %edi"
+                  ]
+                },
+                {
+                  "index": 152,
+                  "context": [
+                    "orq\t%rbx, %rdi",
+                    "je\t.LBB19_88",
+                    "leal\t-1(%r11), %esi"
+                  ]
+                },
+                {
+                  "index": 156,
+                  "context": [
+                    "movl\t%esi, %r11d",
+                    "jne\t.LBB19_12",
+                    "pcmpeqb\t%xmm7, %xmm1"
+                  ]
+                },
+                {
+                  "index": 162,
+                  "context": [
+                    "movq\t48(%rsp), %r11",
+                    "jne\t.LBB19_17",
+                    "addq\t%r10, %rax"
+                  ]
+                },
+                {
+                  "index": 209,
+                  "context": [
+                    "testq\t%r14, %r14",
+                    "je\t.LBB19_70",
+                    "cmpq\t$9, %rax"
+                  ]
+                },
+                {
+                  "index": 211,
+                  "context": [
+                    "cmpq\t$9, %rax",
+                    "je\t.LBB19_70",
+                    "movq\t%rax, 96(%rsp)"
+                  ]
+                },
+                {
+                  "index": 234,
+                  "context": [
+                    "cmpq\t$251, %r14",
+                    "jae\t.LBB19_146",
+                    "movq\t96(%rsp), %rcx"
+                  ]
+                },
+                {
+                  "index": 247,
+                  "context": [
+                    "cmpq\t272(%rsp), %r11",
+                    "je\t.LBB19_18",
+                    "movzwl\t(%r11), %ecx"
+                  ]
+                },
+                {
+                  "index": 250,
+                  "context": [
+                    "cmpq\t$250, %rcx",
+                    "jae\t.LBB19_152",
+                    "addq\t$2, %r11"
+                  ]
+                },
+                {
+                  "index": 265,
+                  "context": [
+                    "cmpb\t63(%rsp), %r8b",
+                    "ja\t.LBB19_22",
+                    "movq\t%r12, 128(%rsp)"
+                  ]
+                },
+                {
+                  "index": 301,
+                  "context": [
+                    "movq\t%rsi, 160(%rsp)",
+                    "jne\t.LBB19_55",
+                    "xorl\t%r8d, %r8d"
+                  ]
+                },
+                {
+                  "index": 327,
+                  "context": [
+                    "cmpq\t%r14, %rcx",
+                    "ja\t.LBB19_53",
+                    "leaq\t(%r11,%rcx), %rbx"
+                  ]
+                },
+                {
+                  "index": 334,
+                  "context": [
+                    "cmpq\t%rdx, %r15",
+                    "jbe\t.LBB19_37",
+                    "cmpq\t%rdx, %rbx"
+                  ]
+                },
+                {
+                  "index": 336,
+                  "context": [
+                    "cmpq\t%rdx, %rbx",
+                    "ja\t.LBB19_50",
+                    "subb\t136(%rsp,%r9), %bl"
+                  ]
+                },
+                {
+                  "index": 346,
+                  "context": [
+                    "cmpq\t$249, %r10",
+                    "ja\t.LBB19_150",
+                    "movzbl\t304(%rsp,%r10), %r8d"
+                  ]
+                },
+                {
+                  "index": 349,
+                  "context": [
+                    "cmpb\t%r8b, %cl",
+                    "jae\t.LBB19_50",
+                    "cmpb\t$-1, %r8b"
+                  ]
+                }
+              ]
+            },
+            "cmp": {
+              "count": 93,
+              "samples": [
+                {
+                  "index": 13,
+                  "context": [
+                    "movq\t%rcx, %r11",
+                    "cmpq\t$0, 72(%rcx)",
+                    "movq\t%rdx, 88(%rsp)"
+                  ]
+                },
+                {
+                  "index": 55,
+                  "context": [
+                    "pmovmskb\t%xmm3, %r11d",
+                    "cmpl\t$65535, %r11d",
+                    "je\t.LBB19_127"
+                  ]
+                },
+                {
+                  "index": 91,
+                  "context": [
+                    "movq\t240(%rsp), %rax",
+                    "cmpq\t$3, %rax",
+                    "movq\t88(%rsp), %r8"
+                  ]
+                },
+                {
+                  "index": 113,
+                  "context": [
+                    "movb\t%al, 150(%rsp)",
+                    "cmpq\t$0, 24(%r11)",
+                    "je\t.LBB19_17"
+                  ]
+                },
+                {
+                  "index": 144,
+                  "context": [
+                    "movzbl\t47(%rsp), %r8d",
+                    "cmpb\t-20(%rcx,%rsi,4), %r8b",
+                    "jne\t.LBB19_14"
+                  ]
+                },
+                {
+                  "index": 210,
+                  "context": [
+                    "je\t.LBB19_70",
+                    "cmpq\t$9, %rax",
+                    "je\t.LBB19_70"
+                  ]
+                },
+                {
+                  "index": 233,
+                  "context": [
+                    "callq\tmemset",
+                    "cmpq\t$251, %r14",
+                    "jae\t.LBB19_146"
+                  ]
+                },
+                {
+                  "index": 246,
+                  "context": [
+                    "movq\t%r15, %r11",
+                    "cmpq\t272(%rsp), %r11",
+                    "je\t.LBB19_18"
+                  ]
+                },
+                {
+                  "index": 249,
+                  "context": [
+                    "movzwl\t(%r11), %ecx",
+                    "cmpq\t$250, %rcx",
+                    "jae\t.LBB19_152"
+                  ]
+                },
+                {
+                  "index": 264,
+                  "context": [
+                    "addb\t%al, %r8b",
+                    "cmpb\t63(%rsp), %r8b",
+                    "ja\t.LBB19_22"
+                  ]
+                },
+                {
+                  "index": 284,
+                  "context": [
+                    "subq\t%r10, %rsi",
+                    "cmpq\t%rsi, %rdi",
+                    "movq\t%rsi, 184(%rsp)"
+                  ]
+                },
+                {
+                  "index": 287,
+                  "context": [
+                    "cmovbq\t%rdi, %rsi",
+                    "cmpq\t%rsi, %rbx",
+                    "movq\t%rbx, 192(%rsp)"
+                  ]
+                },
+                {
+                  "index": 290,
+                  "context": [
+                    "cmovbq\t%rbx, %rsi",
+                    "cmpq\t$7, %r9",
+                    "movzbl\t1574(%rsp,%rcx), %r12d"
+                  ]
+                },
+                {
+                  "index": 304,
+                  "context": [
+                    "xorl\t%eax, %eax",
+                    "cmpq\t%rsi, %r8",
+                    "adcq\t$0, %rax"
+                  ]
+                },
+                {
+                  "index": 322,
+                  "context": [
+                    "xorl\t%esi, %esi",
+                    "cmpq\t%rbp, %r13",
+                    "adcq\t$0, %rsi"
+                  ]
+                },
+                {
+                  "index": 326,
+                  "context": [
+                    "addq\t%r13, %rcx",
+                    "cmpq\t%r14, %rcx",
+                    "ja\t.LBB19_53"
+                  ]
+                },
+                {
+                  "index": 333,
+                  "context": [
+                    "addq\t$2, %r15",
+                    "cmpq\t%rdx, %r15",
+                    "jbe\t.LBB19_37"
+                  ]
+                },
+                {
+                  "index": 335,
+                  "context": [
+                    "jbe\t.LBB19_37",
+                    "cmpq\t%rdx, %rbx",
+                    "ja\t.LBB19_50"
+                  ]
+                },
+                {
+                  "index": 345,
+                  "context": [
+                    "cmovbl\t%r8d, %ecx",
+                    "cmpq\t$249, %r10",
+                    "ja\t.LBB19_150"
+                  ]
+                },
+                {
+                  "index": 348,
+                  "context": [
+                    "movzbl\t304(%rsp,%r10), %r8d",
+                    "cmpb\t%r8b, %cl",
+                    "jae\t.LBB19_50"
+                  ]
+                },
+                {
+                  "index": 350,
+                  "context": [
+                    "jae\t.LBB19_50",
+                    "cmpb\t$-1, %r8b",
+                    "jne\t.LBB19_36"
+                  ]
+                },
+                {
+                  "index": 353,
+                  "context": [
+                    "movq\t64(%rsp), %r8",
+                    "cmpq\t$249, %r8",
+                    "ja\t.LBB19_149"
+                  ]
+                },
+                {
+                  "index": 359,
+                  "context": [
+                    "movb\t%cl, 304(%rsp,%r10)",
+                    "cmpq\t%rbp, %r13",
+                    "jb\t.LBB19_51"
+                  ]
+                },
+                {
+                  "index": 363,
+                  "context": [
+                    "xorl\t%ecx, %ecx",
+                    "cmpq\t%rdx, %rbx",
+                    "seta\t%cl"
+                  ]
+                }
+              ]
+            },
+            "lea": {
+              "count": 70,
+              "samples": [
+                {
+                  "index": 43,
+                  "context": [
+                    "negq\t%r10",
+                    "leaq\t(%r10,%r10,8), %r10",
+                    "leaq\t(%r10,%r10,2), %r10"
+                  ]
+                },
+                {
+                  "index": 44,
+                  "context": [
+                    "leaq\t(%r10,%r10,8), %r10",
+                    "leaq\t(%r10,%r10,2), %r10",
+                    "subq\t%r11, %r10"
+                  ]
+                },
+                {
+                  "index": 57,
+                  "context": [
+                    "je\t.LBB19_127",
+                    "leal\t-1(%r9), %r10d",
+                    "andw\t%r9w, %r10w"
+                  ]
+                },
+                {
+                  "index": 77,
+                  "context": [
+                    "movb\t$2, 298(%rsp)",
+                    "leaq\t120(%r11), %rax",
+                    "movq\t%rax, 224(%rsp)"
+                  ]
+                },
+                {
+                  "index": 80,
+                  "context": [
+                    "pcmpeqd\t%xmm7, %xmm7",
+                    "leaq\t1074(%rsp), %r15",
+                    "leaq\t32(%r11), %rax"
+                  ]
+                },
+                {
+                  "index": 81,
+                  "context": [
+                    "leaq\t1074(%rsp), %r15",
+                    "leaq\t32(%r11), %rax",
+                    "movq\t%rax, 216(%rsp)"
+                  ]
+                },
+                {
+                  "index": 95,
+                  "context": [
+                    "je\t.LBB19_120",
+                    "leaq\t1(%rax), %rcx",
+                    "movq\t%rcx, 240(%rsp)"
+                  ]
+                },
+                {
+                  "index": 101,
+                  "context": [
+                    "movzbl\t%al, %eax",
+                    "leaq\t(%rax,%rax,8), %r9",
+                    "movzbl\t8(%r8,%r9), %ecx"
+                  ]
+                },
+                {
+                  "index": 107,
+                  "context": [
+                    "movzbl\t8(%r8,%r9), %ecx",
+                    "leaq\t151(%rsp), %rdx",
+                    "movb\t%cl, 8(%rdx)"
+                  ]
+                },
+                {
+                  "index": 117,
+                  "context": [
+                    "movq\t40(%r11), %rdx",
+                    "leaq\t150(%rsp), %r8",
+                    "movq\t%r11, %rsi"
+                  ]
+                },
+                {
+                  "index": 142,
+                  "context": [
+                    "negq\t%rsi",
+                    "leaq\t(%rsi,%rsi,4), %rsi",
+                    "movzbl\t47(%rsp), %r8d"
+                  ]
+                },
+                {
+                  "index": 153,
+                  "context": [
+                    "je\t.LBB19_88",
+                    "leal\t-1(%r11), %esi",
+                    "andw\t%r11w, %si"
+                  ]
+                },
+                {
+                  "index": 167,
+                  "context": [
+                    "jmp\t.LBB19_11",
+                    "leaq\t(%r8,%r12), %rax",
+                    "movq\t%rax, 232(%rsp)"
+                  ]
+                },
+                {
+                  "index": 172,
+                  "context": [
+                    "movq\t112(%r11), %rdi",
+                    "leaq\t1575(%rsp), %rax",
+                    "movdqu\t%xmm7, 233(%rax)"
+                  ]
+                },
+                {
+                  "index": 190,
+                  "context": [
+                    "movl\t$498, %r8d",
+                    "leaq\t1076(%rsp), %rcx",
+                    "xorl\t%edx, %edx"
+                  ]
+                },
+                {
+                  "index": 200,
+                  "context": [
+                    "movl\t$250, %r8d",
+                    "leaq\t1574(%rsp), %rcx",
+                    "leaq\t304(%rsp), %rdx"
+                  ]
+                },
+                {
+                  "index": 201,
+                  "context": [
+                    "leaq\t1574(%rsp), %rcx",
+                    "leaq\t304(%rsp), %rdx",
+                    "callq\tmemcpy"
+                  ]
+                },
+                {
+                  "index": 205,
+                  "context": [
+                    "movq\t%r15, %rcx",
+                    "leaq\t568(%rsp), %rdx",
+                    "callq\tmemcpy"
+                  ]
+                },
+                {
+                  "index": 230,
+                  "context": [
+                    "movl\t$500, %r8d",
+                    "leaq\t568(%rsp), %rcx",
+                    "xorl\t%edx, %edx"
+                  ]
+                },
+                {
+                  "index": 236,
+                  "context": [
+                    "movq\t96(%rsp), %rcx",
+                    "leaq\t1(%rcx), %r12",
+                    "movq\t248(%rsp), %rax"
+                  ]
+                },
+                {
+                  "index": 241,
+                  "context": [
+                    "movzbl\t%al, %edx",
+                    "leaq\t(%rsp,%r14,2), %rax",
+                    "addq\t$1074, %rax"
+                  ]
+                },
+                {
+                  "index": 257,
+                  "context": [
+                    "movzbl\t%bh, %esi",
+                    "leal\t(%rsi,%rsi,4), %r8d",
+                    "subb\t%r8b, %al"
+                  ]
+                },
+                {
+                  "index": 259,
+                  "context": [
+                    "subb\t%r8b, %al",
+                    "leal\t(%rcx,%rcx,4), %r8d",
+                    "leal\t(%rcx,%r8,8), %r8d"
+                  ]
+                },
+                {
+                  "index": 260,
+                  "context": [
+                    "leal\t(%rcx,%rcx,4), %r8d",
+                    "leal\t(%rcx,%r8,8), %r8d",
+                    "movzwl\t%r8w, %r8d"
+                  ]
+                }
+              ]
+            },
+            "mul": {
+              "count": 3,
+              "samples": [
+                {
+                  "index": 252,
+                  "context": [
+                    "addq\t$2, %r11",
+                    "imull\t$205, %ecx, %eax",
+                    "movzwl\t%ax, %eax"
+                  ]
+                },
+                {
+                  "index": 255,
+                  "context": [
+                    "shrl\t$11, %eax",
+                    "imull\t$52, %eax, %ebx",
+                    "movzbl\t%bh, %esi"
+                  ]
+                },
+                {
+                  "index": 270,
+                  "context": [
+                    "shrl\t%r9d",
+                    "imull\t$205, %r9d, %r10d",
+                    "movzwl\t%r10w, %r10d"
+                  ]
+                }
+              ]
+            },
+            "sub": {
+              "count": 20,
+              "samples": [
+                {
+                  "index": 8,
+                  "context": [
+                    "pushq\t%rbx",
+                    "subq\t$1864, %rsp",
+                    "movdqa\t%xmm7, 1840(%rsp)"
+                  ]
+                },
+                {
+                  "index": 45,
+                  "context": [
+                    "leaq\t(%r10,%r10,2), %r10",
+                    "subq\t%r11, %r10",
+                    "movq\t88(%rsp), %r8"
+                  ]
+                },
+                {
+                  "index": 258,
+                  "context": [
+                    "leal\t(%rsi,%rsi,4), %r8d",
+                    "subb\t%r8b, %al",
+                    "leal\t(%rcx,%rcx,4), %r8d"
+                  ]
+                },
+                {
+                  "index": 274,
+                  "context": [
+                    "leal\t(%r10,%r10,4), %r10d",
+                    "subb\t%r10b, %r9b",
+                    "movzbl\t%r9b, %r10d"
+                  ]
+                },
+                {
+                  "index": 280,
+                  "context": [
+                    "movq\t%rsi, 200(%rsp)",
+                    "subq\t%rsi, %rbx",
+                    "movq\t%rdi, %rsi"
+                  ]
+                },
+                {
+                  "index": 283,
+                  "context": [
+                    "movq\t%r10, 208(%rsp)",
+                    "subq\t%r10, %rsi",
+                    "cmpq\t%rsi, %rdi"
+                  ]
+                },
+                {
+                  "index": 308,
+                  "context": [
+                    "movq\t192(%rsp), %r14",
+                    "subq\t%r8, %r14",
+                    "movq\t184(%rsp), %rbp"
+                  ]
+                },
+                {
+                  "index": 310,
+                  "context": [
+                    "movq\t184(%rsp), %rbp",
+                    "subq\t%r8, %rbp",
+                    "movq\t200(%rsp), %rax"
+                  ]
+                },
+                {
+                  "index": 337,
+                  "context": [
+                    "ja\t.LBB19_50",
+                    "subb\t136(%rsp,%r9), %bl",
+                    "movzbl\t%bl, %ecx"
+                  ]
+                },
+                {
+                  "index": 368,
+                  "context": [
+                    "movzbl\t136(%rsp,%r9), %r9d",
+                    "subb\t%r9b, %r8b",
+                    "movzbl\t%r8b, %r8d"
+                  ]
+                },
+                {
+                  "index": 393,
+                  "context": [
+                    "ja\t.LBB19_44",
+                    "subb\t%r9b, %r15b",
+                    "movzbl\t%r15b, %ecx"
+                  ]
+                },
+                {
+                  "index": 438,
+                  "context": [
+                    "movq\t192(%rsp), %r10",
+                    "subq\t%r8, %r10",
+                    "movq\t184(%rsp), %r11"
+                  ]
+                },
+                {
+                  "index": 440,
+                  "context": [
+                    "movq\t184(%rsp), %r11",
+                    "subq\t%r8, %r11",
+                    "movq\t200(%rsp), %rcx"
+                  ]
+                },
+                {
+                  "index": 464,
+                  "context": [
+                    "movq\t96(%rsp), %rbx",
+                    "subb\t136(%rsp,%rbx), %r9b",
+                    "movzbl\t%r9b, %r9d"
+                  ]
+                },
+                {
+                  "index": 645,
+                  "context": [
+                    "movq\t%rcx, %r11",
+                    "subq\t%rax, %r11",
+                    "seta\t%r8b"
+                  ]
+                },
+                {
+                  "index": 760,
+                  "context": [
+                    "movl\t%r10d, %ecx",
+                    "subb\t$9, %cl",
+                    "cmpb\t$9, %cl"
+                  ]
+                },
+                {
+                  "index": 794,
+                  "context": [
+                    "movb\t$7, %r9b",
+                    "subb\t%al, %r9b",
+                    "movzbl\t%r9b, %eax"
+                  ]
+                },
+                {
+                  "index": 798,
+                  "context": [
+                    "movl\t%eax, %r9d",
+                    "subb\t%dl, %r9b",
+                    "movzbl\t%r9b, %edx"
+                  ]
+                },
+                {
+                  "index": 837,
+                  "context": [
+                    "leaq\t(%rdi,%rdi,2), %rdi",
+                    "subq\t%r14, %rdi",
+                    "movq\t88(%rsp), %r14"
+                  ]
+                },
+                {
+                  "index": 894,
+                  "context": [
+                    "leaq\t(%rax,%rax,2), %rax",
+                    "subq\t%r9, %rax",
+                    "movq\t88(%rsp), %rdx"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "comparisons": {
+    "M-vs-MA-deficit": {
+      "diff": "specs\\active\\suit-table-a2\\measurements\\asm\\diff-M-vs-MA-deficit.txt",
+      "added_lines": 552,
+      "removed_lines": 623,
+      "metrics": {
+        "M": {
+          "instructions": 939,
+          "conditional_branches": 90,
+          "unconditional_jumps": 25,
+          "other_branches": 0,
+          "calls": 21,
+          "divisions": 0,
+          "multiplications": 3,
+          "backward_jumps_loop_edges": 32,
+          "unresolved_branch_targets": 0,
+          "loops": [
+            {
+              "label": ".LBB19_3",
+              "start": 39,
+              "end": 62,
+              "body_instructions": 24
+            },
+            {
+              "label": ".LBB19_2",
+              "start": 32,
+              "end": 71,
+              "body_instructions": 40
+            },
+            {
+              "label": ".LBB19_14",
+              "start": 136,
+              "end": 154,
+              "body_instructions": 19
+            },
+            {
+              "label": ".LBB19_13",
+              "start": 129,
+              "end": 164,
+              "body_instructions": 36
+            },
+            {
+              "label": ".LBB19_28",
+              "start": 197,
+              "end": 245,
+              "body_instructions": 49
+            },
+            {
+              "label": ".LBB19_46",
+              "start": 310,
+              "end": 394,
+              "body_instructions": 85
+            },
+            {
+              "label": ".LBB19_24",
+              "start": 240,
+              "end": 397,
+              "body_instructions": 158
+            },
+            {
+              "label": ".LBB19_45",
+              "start": 294,
+              "end": 401,
+              "body_instructions": 108
+            }
+          ]
+        },
+        "MA": {
+          "instructions": 879,
+          "conditional_branches": 74,
+          "unconditional_jumps": 23,
+          "other_branches": 0,
+          "calls": 21,
+          "divisions": 0,
+          "multiplications": 4,
+          "backward_jumps_loop_edges": 28,
+          "unresolved_branch_targets": 0,
+          "loops": [
+            {
+              "label": ".LBB19_3",
+              "start": 38,
+              "end": 60,
+              "body_instructions": 23
+            },
+            {
+              "label": ".LBB19_2",
+              "start": 31,
+              "end": 68,
+              "body_instructions": 38
+            },
+            {
+              "label": ".LBB19_14",
+              "start": 137,
+              "end": 155,
+              "body_instructions": 19
+            },
+            {
+              "label": ".LBB19_13",
+              "start": 130,
+              "end": 164,
+              "body_instructions": 35
+            },
+            {
+              "label": ".LBB19_29",
+              "start": 197,
+              "end": 240,
+              "body_instructions": 44
+            },
+            {
+              "label": ".LBB19_24",
+              "start": 239,
+              "end": 259,
+              "body_instructions": 21
+            },
+            {
+              "label": ".LBB19_55",
+              "start": 343,
+              "end": 373,
+              "body_instructions": 31
+            },
+            {
+              "label": ".LBB19_54",
+              "start": 321,
+              "end": 377,
+              "body_instructions": 57
+            }
+          ]
+        }
+      }
+    },
+    "M-vs-A2-deficit": {
+      "diff": "specs\\active\\suit-table-a2\\measurements\\asm\\diff-M-vs-A2-deficit.txt",
+      "added_lines": 790,
+      "removed_lines": 745,
+      "metrics": {
+        "M": {
+          "instructions": 939,
+          "conditional_branches": 90,
+          "unconditional_jumps": 25,
+          "other_branches": 0,
+          "calls": 21,
+          "divisions": 0,
+          "multiplications": 3,
+          "backward_jumps_loop_edges": 32,
+          "unresolved_branch_targets": 0,
+          "loops": [
+            {
+              "label": ".LBB19_3",
+              "start": 39,
+              "end": 62,
+              "body_instructions": 24
+            },
+            {
+              "label": ".LBB19_2",
+              "start": 32,
+              "end": 71,
+              "body_instructions": 40
+            },
+            {
+              "label": ".LBB19_14",
+              "start": 136,
+              "end": 154,
+              "body_instructions": 19
+            },
+            {
+              "label": ".LBB19_13",
+              "start": 129,
+              "end": 164,
+              "body_instructions": 36
+            },
+            {
+              "label": ".LBB19_28",
+              "start": 197,
+              "end": 245,
+              "body_instructions": 49
+            },
+            {
+              "label": ".LBB19_46",
+              "start": 310,
+              "end": 394,
+              "body_instructions": 85
+            },
+            {
+              "label": ".LBB19_24",
+              "start": 240,
+              "end": 397,
+              "body_instructions": 158
+            },
+            {
+              "label": ".LBB19_45",
+              "start": 294,
+              "end": 401,
+              "body_instructions": 108
+            }
+          ]
+        },
+        "A2": {
+          "instructions": 980,
+          "conditional_branches": 96,
+          "unconditional_jumps": 25,
+          "other_branches": 0,
+          "calls": 21,
+          "divisions": 0,
+          "multiplications": 3,
+          "backward_jumps_loop_edges": 27,
+          "unresolved_branch_targets": 0,
+          "loops": [
+            {
+              "label": ".LBB19_3",
+              "start": 38,
+              "end": 61,
+              "body_instructions": 24
+            },
+            {
+              "label": ".LBB19_2",
+              "start": 31,
+              "end": 70,
+              "body_instructions": 40
+            },
+            {
+              "label": ".LBB19_12",
+              "start": 138,
+              "end": 156,
+              "body_instructions": 19
+            },
+            {
+              "label": ".LBB19_11",
+              "start": 131,
+              "end": 166,
+              "body_instructions": 36
+            },
+            {
+              "label": ".LBB19_18",
+              "start": 199,
+              "end": 247,
+              "body_instructions": 49
+            },
+            {
+              "label": ".LBB19_22",
+              "start": 246,
+              "end": 265,
+              "body_instructions": 20
+            },
+            {
+              "label": ".LBB19_28",
+              "start": 322,
+              "end": 423,
+              "body_instructions": 102
+            },
+            {
+              "label": ".LBB19_27",
+              "start": 304,
+              "end": 431,
+              "body_instructions": 128
+            }
+          ]
+        }
+      }
+    }
+  },
+  "missing": {},
+  "parser_validation": {
+    "parsed_symbols": 1299,
+    "parsed_instructions": 2798,
+    "functions_with_loop_edges": 3,
+    "unresolved_branch_targets": 0
+  },
+  "comparable_logical_functions": [
+    "deficit"
+  ]
+}

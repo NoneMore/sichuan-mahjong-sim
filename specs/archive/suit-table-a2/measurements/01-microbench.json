@@ -1,0 +1,949 @@
+{
+  "protocol": "suit-table-a2-bench-v1",
+  "mainline": "5ad75404a5dea07971779d163d47a05da3b66e73",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\n",
+  "iters": 10000,
+  "rounds": 5,
+  "warmup": 1000,
+  "inputs": [
+    "empty-cap4-s4",
+    "typical-cap4-s4",
+    "dense-cap4-s4",
+    "wide-cap4-s4",
+    "empty-cap4-s3",
+    "typical-cap4-s2",
+    "typical-cap4-s1",
+    "typical-cap4-s0",
+    "peng-cap1-s4",
+    "gang-cap0-front-s4",
+    "tail-pressure-s4",
+    "missing-suit-cap0-s4"
+  ],
+  "slot_orders": {
+    "1": [
+      "M",
+      "MA",
+      "A2"
+    ],
+    "2": [
+      "MA",
+      "A2",
+      "M"
+    ],
+    "3": [
+      "A2",
+      "M",
+      "MA"
+    ],
+    "4": [
+      "M",
+      "MA",
+      "A2"
+    ],
+    "5": [
+      "MA",
+      "A2",
+      "M"
+    ]
+  },
+  "variants": {
+    "M": {
+      "suit_table_sha256": "d63fc6fd39a438d40125fed5e2047faf5bd04973bc84037c2eac286dc152f4eb",
+      "binary_sha256": {
+        "timing": "b48424484a7fef13306413dc8be9cd1c42530ea54aee13668f30b167cb93b2e3",
+        "count": "bbb079c0e3dfd7d831f88c99ba45aa9122c0a236e8e4eb199aaa0a3160bc23b4"
+      },
+      "commands": {
+        "timing": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro\\M-timing.rs",
+          "-o",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-timing.exe"
+        ],
+        "count": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro\\M-count.rs",
+          "-o",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-count.exe"
+        ]
+      }
+    },
+    "MA": {
+      "suit_table_sha256": "862604a147cccd84b2ef76fd74eb936c4f83ba850b0f31a8fbff72b4bf6360f0",
+      "binary_sha256": {
+        "timing": "1734a843077daf0869a9e6c93e7653e357feaa2a4d3f68434bdcc245e8ffd2ea",
+        "count": "011720337d2a6984a663f3b57a3a9ca8a4d9f5ab51aec1e12321e4448a6ea4b0"
+      },
+      "commands": {
+        "timing": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro\\MA-timing.rs",
+          "-o",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-timing.exe"
+        ],
+        "count": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro\\MA-count.rs",
+          "-o",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-count.exe"
+        ]
+      }
+    },
+    "A2": {
+      "suit_table_sha256": "2c6ecb486885480c2bb4f07b63e84e648650f01427af547c7d3796d5b7432025",
+      "binary_sha256": {
+        "timing": "93f504f930609b94e582708e55bf1654e3ce67f4223e1e9f7416048fe53bae26",
+        "count": "2938f316596793987b379741062122d4df9a01e7e1d3d0757363d142c0f18c03"
+      },
+      "commands": {
+        "timing": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro\\A2-timing.rs",
+          "-o",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-timing.exe"
+        ],
+        "count": [
+          "rustc",
+          "--edition=2021",
+          "-O",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro\\A2-count.rs",
+          "-o",
+          "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-count.exe"
+        ]
+      }
+    }
+  },
+  "environment": {
+    "cpu_count": 16,
+    "platform": "Windows-10-10.0.19045-SP0"
+  },
+  "runs": [
+    {
+      "variant": "M",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:19.452853+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 5425.3700\ntiming empty-cap4-s4 2 5564.0200\ntiming empty-cap4-s4 3 5607.7300\ntiming empty-cap4-s4 4 5510.5500\ntiming empty-cap4-s4 5 5429.0200\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 6337.5500\ntiming typical-cap4-s4 2 6179.1000\ntiming typical-cap4-s4 3 6578.8900\ntiming typical-cap4-s4 4 5870.3100\ntiming typical-cap4-s4 5 6028.6200\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5797.4600\ntiming dense-cap4-s4 2 5924.9200\ntiming dense-cap4-s4 3 5893.0800\ntiming dense-cap4-s4 4 6154.5300\ntiming dense-cap4-s4 5 5740.5900\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 6167.4300\ntiming wide-cap4-s4 2 6451.8400\ntiming wide-cap4-s4 3 7810.4600\ntiming wide-cap4-s4 4 6132.7300\ntiming wide-cap4-s4 5 6160.4900\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3393.5000\ntiming empty-cap4-s3 2 3227.5300\ntiming empty-cap4-s3 3 3539.0100\ntiming empty-cap4-s3 4 4311.8000\ntiming empty-cap4-s3 5 3774.2600\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2649.9100\ntiming typical-cap4-s2 2 2260.3000\ntiming typical-cap4-s2 3 2225.8300\ntiming typical-cap4-s2 4 2585.4300\ntiming typical-cap4-s2 5 1863.6900\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 939.5600\ntiming typical-cap4-s1 2 897.3200\ntiming typical-cap4-s1 3 951.8800\ntiming typical-cap4-s1 4 860.9600\ntiming typical-cap4-s1 5 819.9400\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 394.0200\ntiming typical-cap4-s0 2 406.3800\ntiming typical-cap4-s0 3 347.6200\ntiming typical-cap4-s0 4 471.8800\ntiming typical-cap4-s0 5 396.6500\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 6733.3400\ntiming peng-cap1-s4 2 6015.3600\ntiming peng-cap1-s4 3 6430.9700\ntiming peng-cap1-s4 4 6075.2800\ntiming peng-cap1-s4 5 5516.8200\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 5714.2400\ntiming gang-cap0-front-s4 2 5407.9900\ntiming gang-cap0-front-s4 3 5293.7200\ntiming gang-cap0-front-s4 4 4995.9500\ntiming gang-cap0-front-s4 5 5010.9300\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3059.4300\ntiming tail-pressure-s4 2 3003.6200\ntiming tail-pressure-s4 3 3206.1300\ntiming tail-pressure-s4 4 3183.4000\ntiming tail-pressure-s4 5 3221.1700\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 458.1600\ntiming missing-suit-cap0-s4 2 445.8700\ntiming missing-suit-cap0-s4 3 406.5700\ntiming missing-suit-cap0-s4 4 434.3200\ntiming missing-suit-cap0-s4 5 489.7900\n",
+      "stderr": ""
+    },
+    {
+      "variant": "MA",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:21.836772+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 8684.4700\ntiming empty-cap4-s4 2 7064.6800\ntiming empty-cap4-s4 3 8870.6800\ntiming empty-cap4-s4 4 10819.6600\ntiming empty-cap4-s4 5 7827.0200\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 7642.1000\ntiming typical-cap4-s4 2 7745.6800\ntiming typical-cap4-s4 3 8588.4400\ntiming typical-cap4-s4 4 7294.7200\ntiming typical-cap4-s4 5 7843.6700\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 8110.2600\ntiming dense-cap4-s4 2 7550.5100\ntiming dense-cap4-s4 3 8291.6700\ntiming dense-cap4-s4 4 7914.0200\ntiming dense-cap4-s4 5 8817.0400\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 8540.2400\ntiming wide-cap4-s4 2 7773.0600\ntiming wide-cap4-s4 3 7971.6500\ntiming wide-cap4-s4 4 7355.9400\ntiming wide-cap4-s4 5 7458.2800\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 4469.5800\ntiming empty-cap4-s3 2 4211.4600\ntiming empty-cap4-s3 3 4238.6600\ntiming empty-cap4-s3 4 4286.5900\ntiming empty-cap4-s3 5 4333.8000\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2552.2100\ntiming typical-cap4-s2 2 2579.1400\ntiming typical-cap4-s2 3 2632.9900\ntiming typical-cap4-s2 4 2616.1800\ntiming typical-cap4-s2 5 2800.4300\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 1159.3900\ntiming typical-cap4-s1 2 1088.1000\ntiming typical-cap4-s1 3 1025.9700\ntiming typical-cap4-s1 4 1147.1500\ntiming typical-cap4-s1 5 1053.9300\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 489.1600\ntiming typical-cap4-s0 2 412.3600\ntiming typical-cap4-s0 3 419.5100\ntiming typical-cap4-s0 4 422.7900\ntiming typical-cap4-s0 5 433.3800\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 6537.3700\ntiming peng-cap1-s4 2 6923.7100\ntiming peng-cap1-s4 3 6560.3500\ntiming peng-cap1-s4 4 6244.7800\ntiming peng-cap1-s4 5 6298.6100\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 6091.8100\ntiming gang-cap0-front-s4 2 5927.5000\ntiming gang-cap0-front-s4 3 6092.2900\ntiming gang-cap0-front-s4 4 6319.9400\ntiming gang-cap0-front-s4 5 6606.1500\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3986.5600\ntiming tail-pressure-s4 2 4164.8800\ntiming tail-pressure-s4 3 3762.2700\ntiming tail-pressure-s4 4 3598.7600\ntiming tail-pressure-s4 5 3824.0800\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 351.8700\ntiming missing-suit-cap0-s4 2 296.0800\ntiming missing-suit-cap0-s4 3 333.4600\ntiming missing-suit-cap0-s4 4 297.8700\ntiming missing-suit-cap0-s4 5 296.1200\n",
+      "stderr": ""
+    },
+    {
+      "variant": "A2",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:24.801715+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 5484.5400\ntiming empty-cap4-s4 2 5543.3900\ntiming empty-cap4-s4 3 5860.6400\ntiming empty-cap4-s4 4 5918.0900\ntiming empty-cap4-s4 5 5661.9900\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 5885.8700\ntiming typical-cap4-s4 2 5800.8300\ntiming typical-cap4-s4 3 5804.4400\ntiming typical-cap4-s4 4 5518.8000\ntiming typical-cap4-s4 5 5558.5900\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5709.3600\ntiming dense-cap4-s4 2 5641.7400\ntiming dense-cap4-s4 3 5953.1700\ntiming dense-cap4-s4 4 5588.1800\ntiming dense-cap4-s4 5 5527.3000\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 5692.2800\ntiming wide-cap4-s4 2 5663.1100\ntiming wide-cap4-s4 3 6530.9100\ntiming wide-cap4-s4 4 5670.2100\ntiming wide-cap4-s4 5 6191.2000\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3739.8800\ntiming empty-cap4-s3 2 3341.1900\ntiming empty-cap4-s3 3 3344.8100\ntiming empty-cap4-s3 4 3325.8300\ntiming empty-cap4-s3 5 3770.6100\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2268.1600\ntiming typical-cap4-s2 2 2255.9700\ntiming typical-cap4-s2 3 1853.0900\ntiming typical-cap4-s2 4 1849.4800\ntiming typical-cap4-s2 5 1857.6800\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 849.6800\ntiming typical-cap4-s1 2 907.0800\ntiming typical-cap4-s1 3 880.1000\ntiming typical-cap4-s1 4 833.3600\ntiming typical-cap4-s1 5 847.7500\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 405.7900\ntiming typical-cap4-s0 2 407.0400\ntiming typical-cap4-s0 3 452.3200\ntiming typical-cap4-s0 4 422.6000\ntiming typical-cap4-s0 5 429.4200\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 4906.2700\ntiming peng-cap1-s4 2 4889.8800\ntiming peng-cap1-s4 3 4861.4800\ntiming peng-cap1-s4 4 4923.1300\ntiming peng-cap1-s4 5 4923.9100\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 4688.6400\ntiming gang-cap0-front-s4 2 4635.9000\ntiming gang-cap0-front-s4 3 4591.8500\ntiming gang-cap0-front-s4 4 4652.5400\ntiming gang-cap0-front-s4 5 4667.2200\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 2875.4700\ntiming tail-pressure-s4 2 3023.3800\ntiming tail-pressure-s4 3 2899.5300\ntiming tail-pressure-s4 4 2985.9600\ntiming tail-pressure-s4 5 2966.8300\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 368.7100\ntiming missing-suit-cap0-s4 2 333.8500\ntiming missing-suit-cap0-s4 3 358.5000\ntiming missing-suit-cap0-s4 4 357.5200\ntiming missing-suit-cap0-s4 5 356.7900\n",
+      "stderr": ""
+    },
+    {
+      "variant": "MA",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:26.996276+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 7450.2200\ntiming empty-cap4-s4 2 7117.4600\ntiming empty-cap4-s4 3 7141.4400\ntiming empty-cap4-s4 4 7261.4800\ntiming empty-cap4-s4 5 7957.6300\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 7597.5200\ntiming typical-cap4-s4 2 6992.6700\ntiming typical-cap4-s4 3 7559.7700\ntiming typical-cap4-s4 4 7738.5500\ntiming typical-cap4-s4 5 7143.7500\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 7317.7500\ntiming dense-cap4-s4 2 7333.0400\ntiming dense-cap4-s4 3 7205.8900\ntiming dense-cap4-s4 4 7075.5600\ntiming dense-cap4-s4 5 7102.8000\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 7102.4100\ntiming wide-cap4-s4 2 7254.0000\ntiming wide-cap4-s4 3 7284.7800\ntiming wide-cap4-s4 4 7379.2200\ntiming wide-cap4-s4 5 7556.5500\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 4365.8500\ntiming empty-cap4-s3 2 4482.9100\ntiming empty-cap4-s3 3 4705.6600\ntiming empty-cap4-s3 4 4502.7700\ntiming empty-cap4-s3 5 4831.4200\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2564.1000\ntiming typical-cap4-s2 2 2694.9300\ntiming typical-cap4-s2 3 2660.2000\ntiming typical-cap4-s2 4 2649.9200\ntiming typical-cap4-s2 5 2514.5100\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 1050.8300\ntiming typical-cap4-s1 2 1108.9300\ntiming typical-cap4-s1 3 1252.3700\ntiming typical-cap4-s1 4 1137.0300\ntiming typical-cap4-s1 5 1091.1200\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 422.3900\ntiming typical-cap4-s0 2 419.5800\ntiming typical-cap4-s0 3 425.4100\ntiming typical-cap4-s0 4 424.0800\ntiming typical-cap4-s0 5 435.2800\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 6340.1000\ntiming peng-cap1-s4 2 6329.0500\ntiming peng-cap1-s4 3 6349.1300\ntiming peng-cap1-s4 4 6215.6900\ntiming peng-cap1-s4 5 6248.0400\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 6038.5100\ntiming gang-cap0-front-s4 2 6036.7500\ntiming gang-cap0-front-s4 3 5930.3900\ntiming gang-cap0-front-s4 4 5969.3100\ntiming gang-cap0-front-s4 5 6189.5900\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3600.6000\ntiming tail-pressure-s4 2 3603.8800\ntiming tail-pressure-s4 3 3676.3400\ntiming tail-pressure-s4 4 3719.6100\ntiming tail-pressure-s4 5 3724.2900\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 305.6000\ntiming missing-suit-cap0-s4 2 298.6200\ntiming missing-suit-cap0-s4 3 315.9100\ntiming missing-suit-cap0-s4 4 296.1600\ntiming missing-suit-cap0-s4 5 317.1900\n",
+      "stderr": ""
+    },
+    {
+      "variant": "A2",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:29.781409+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 5973.5400\ntiming empty-cap4-s4 2 5545.1200\ntiming empty-cap4-s4 3 5587.5700\ntiming empty-cap4-s4 4 5859.0000\ntiming empty-cap4-s4 5 5882.0000\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 5783.5900\ntiming typical-cap4-s4 2 6016.0400\ntiming typical-cap4-s4 3 5857.3700\ntiming typical-cap4-s4 4 5990.8700\ntiming typical-cap4-s4 5 5647.8100\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5533.4200\ntiming dense-cap4-s4 2 5482.9700\ntiming dense-cap4-s4 3 5470.5100\ntiming dense-cap4-s4 4 5503.7600\ntiming dense-cap4-s4 5 5502.7700\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 5548.6300\ntiming wide-cap4-s4 2 5549.4600\ntiming wide-cap4-s4 3 5815.5600\ntiming wide-cap4-s4 4 6478.9100\ntiming wide-cap4-s4 5 6003.6100\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3352.3300\ntiming empty-cap4-s3 2 3299.5400\ntiming empty-cap4-s3 3 3278.7600\ntiming empty-cap4-s3 4 3328.6300\ntiming empty-cap4-s3 5 3338.4800\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 1899.3200\ntiming typical-cap4-s2 2 1928.1500\ntiming typical-cap4-s2 3 1920.4800\ntiming typical-cap4-s2 4 1859.5800\ntiming typical-cap4-s2 5 1826.4300\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 831.1900\ntiming typical-cap4-s1 2 834.9400\ntiming typical-cap4-s1 3 834.1500\ntiming typical-cap4-s1 4 839.5100\ntiming typical-cap4-s1 5 834.2300\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 397.5800\ntiming typical-cap4-s0 2 402.3200\ntiming typical-cap4-s0 3 407.1400\ntiming typical-cap4-s0 4 392.4700\ntiming typical-cap4-s0 5 398.4700\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 4872.1700\ntiming peng-cap1-s4 2 4862.1800\ntiming peng-cap1-s4 3 4804.0000\ntiming peng-cap1-s4 4 4918.1300\ntiming peng-cap1-s4 5 5051.5200\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 4828.4300\ntiming gang-cap0-front-s4 2 4821.5400\ntiming gang-cap0-front-s4 3 4853.4700\ntiming gang-cap0-front-s4 4 4645.2200\ntiming gang-cap0-front-s4 5 4626.5000\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 2907.3000\ntiming tail-pressure-s4 2 2887.5000\ntiming tail-pressure-s4 3 2895.9600\ntiming tail-pressure-s4 4 2885.3500\ntiming tail-pressure-s4 5 2840.1000\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 333.5000\ntiming missing-suit-cap0-s4 2 332.1700\ntiming missing-suit-cap0-s4 3 334.8300\ntiming missing-suit-cap0-s4 4 341.0700\ntiming missing-suit-cap0-s4 5 337.5700\n",
+      "stderr": ""
+    },
+    {
+      "variant": "M",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:31.953458+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 5397.3700\ntiming empty-cap4-s4 2 5408.1500\ntiming empty-cap4-s4 3 5433.2800\ntiming empty-cap4-s4 4 5397.1600\ntiming empty-cap4-s4 5 5381.9000\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 5811.7600\ntiming typical-cap4-s4 2 5683.1600\ntiming typical-cap4-s4 3 5812.0000\ntiming typical-cap4-s4 4 5627.5600\ntiming typical-cap4-s4 5 5659.7600\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5670.9700\ntiming dense-cap4-s4 2 5666.5300\ntiming dense-cap4-s4 3 5690.3800\ntiming dense-cap4-s4 4 5647.8500\ntiming dense-cap4-s4 5 5591.2100\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 5684.5900\ntiming wide-cap4-s4 2 6205.1000\ntiming wide-cap4-s4 3 5681.6800\ntiming wide-cap4-s4 4 5683.1200\ntiming wide-cap4-s4 5 5711.7300\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3127.6800\ntiming empty-cap4-s3 2 3179.9900\ntiming empty-cap4-s3 3 3255.2500\ntiming empty-cap4-s3 4 3465.2800\ntiming empty-cap4-s3 5 3680.4800\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2071.4700\ntiming typical-cap4-s2 2 2125.2000\ntiming typical-cap4-s2 3 2012.7700\ntiming typical-cap4-s2 4 1854.0000\ntiming typical-cap4-s2 5 1775.7100\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 765.0300\ntiming typical-cap4-s1 2 742.9700\ntiming typical-cap4-s1 3 828.4200\ntiming typical-cap4-s1 4 773.9600\ntiming typical-cap4-s1 5 795.6100\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 356.2800\ntiming typical-cap4-s0 2 348.0600\ntiming typical-cap4-s0 3 388.1900\ntiming typical-cap4-s0 4 488.3400\ntiming typical-cap4-s0 5 330.6500\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 5881.9400\ntiming peng-cap1-s4 2 5316.8000\ntiming peng-cap1-s4 3 5104.3900\ntiming peng-cap1-s4 4 5004.6800\ntiming peng-cap1-s4 5 4982.1000\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 4855.6300\ntiming gang-cap0-front-s4 2 4807.6300\ntiming gang-cap0-front-s4 3 4810.1200\ntiming gang-cap0-front-s4 4 4821.0200\ntiming gang-cap0-front-s4 5 5826.4300\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3017.4000\ntiming tail-pressure-s4 2 2911.3400\ntiming tail-pressure-s4 3 2922.0600\ntiming tail-pressure-s4 4 2898.1000\ntiming tail-pressure-s4 5 2856.4200\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 404.0700\ntiming missing-suit-cap0-s4 2 406.0500\ntiming missing-suit-cap0-s4 3 412.0500\ntiming missing-suit-cap0-s4 4 398.0100\ntiming missing-suit-cap0-s4 5 398.6800\n",
+      "stderr": ""
+    },
+    {
+      "variant": "A2",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:34.141581+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 5381.3400\ntiming empty-cap4-s4 2 5424.4700\ntiming empty-cap4-s4 3 5549.5400\ntiming empty-cap4-s4 4 5476.0400\ntiming empty-cap4-s4 5 5387.7900\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 5661.1600\ntiming typical-cap4-s4 2 5856.1400\ntiming typical-cap4-s4 3 5813.0700\ntiming typical-cap4-s4 4 5721.1900\ntiming typical-cap4-s4 5 6292.3100\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5888.0000\ntiming dense-cap4-s4 2 6180.0600\ntiming dense-cap4-s4 3 6428.8300\ntiming dense-cap4-s4 4 6524.6000\ntiming dense-cap4-s4 5 5651.3300\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 5860.6800\ntiming wide-cap4-s4 2 5590.0000\ntiming wide-cap4-s4 3 5686.4300\ntiming wide-cap4-s4 4 5792.3500\ntiming wide-cap4-s4 5 5778.3900\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3256.1800\ntiming empty-cap4-s3 2 3349.7300\ntiming empty-cap4-s3 3 3323.9500\ntiming empty-cap4-s3 4 3433.7100\ntiming empty-cap4-s3 5 3423.3600\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 1883.4900\ntiming typical-cap4-s2 2 1857.8000\ntiming typical-cap4-s2 3 1829.2400\ntiming typical-cap4-s2 4 1818.7600\ntiming typical-cap4-s2 5 1861.0300\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 1553.5400\ntiming typical-cap4-s1 2 804.2900\ntiming typical-cap4-s1 3 798.8900\ntiming typical-cap4-s1 4 786.2300\ntiming typical-cap4-s1 5 793.0700\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 357.4700\ntiming typical-cap4-s0 2 358.6300\ntiming typical-cap4-s0 3 358.7100\ntiming typical-cap4-s0 4 366.0300\ntiming typical-cap4-s0 5 362.7000\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 4928.8900\ntiming peng-cap1-s4 2 4885.4500\ntiming peng-cap1-s4 3 4995.8100\ntiming peng-cap1-s4 4 5011.1500\ntiming peng-cap1-s4 5 5515.2800\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 5573.2300\ntiming gang-cap0-front-s4 2 5456.3700\ntiming gang-cap0-front-s4 3 5221.8600\ntiming gang-cap0-front-s4 4 4933.5600\ntiming gang-cap0-front-s4 5 5268.8900\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3008.5700\ntiming tail-pressure-s4 2 2871.3900\ntiming tail-pressure-s4 3 2984.8500\ntiming tail-pressure-s4 4 2910.8500\ntiming tail-pressure-s4 5 2926.9300\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 298.6800\ntiming missing-suit-cap0-s4 2 313.0400\ntiming missing-suit-cap0-s4 3 321.8400\ntiming missing-suit-cap0-s4 4 301.6600\ntiming missing-suit-cap0-s4 5 311.6100\n",
+      "stderr": ""
+    },
+    {
+      "variant": "M",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:36.363637+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 5490.9800\ntiming empty-cap4-s4 2 5526.0100\ntiming empty-cap4-s4 3 5798.2700\ntiming empty-cap4-s4 4 5610.3700\ntiming empty-cap4-s4 5 5387.5600\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 5644.3900\ntiming typical-cap4-s4 2 5931.0300\ntiming typical-cap4-s4 3 5868.9700\ntiming typical-cap4-s4 4 5721.1700\ntiming typical-cap4-s4 5 5721.6700\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5779.8400\ntiming dense-cap4-s4 2 5766.4600\ntiming dense-cap4-s4 3 5777.3300\ntiming dense-cap4-s4 4 5879.8600\ntiming dense-cap4-s4 5 5697.6300\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 5724.0100\ntiming wide-cap4-s4 2 5774.9400\ntiming wide-cap4-s4 3 6300.3700\ntiming wide-cap4-s4 4 5768.9000\ntiming wide-cap4-s4 5 5722.9500\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3340.4700\ntiming empty-cap4-s3 2 3164.2900\ntiming empty-cap4-s3 3 3151.3300\ntiming empty-cap4-s3 4 3173.1500\ntiming empty-cap4-s3 5 3155.9400\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 1795.9600\ntiming typical-cap4-s2 2 1728.6700\ntiming typical-cap4-s2 3 1711.6500\ntiming typical-cap4-s2 4 1738.7700\ntiming typical-cap4-s2 5 1707.0300\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 799.7900\ntiming typical-cap4-s1 2 806.5600\ntiming typical-cap4-s1 3 806.6300\ntiming typical-cap4-s1 4 802.1600\ntiming typical-cap4-s1 5 861.2300\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 398.0200\ntiming typical-cap4-s0 2 392.5900\ntiming typical-cap4-s0 3 394.0200\ntiming typical-cap4-s0 4 400.4800\ntiming typical-cap4-s0 5 386.8300\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 5093.6700\ntiming peng-cap1-s4 2 5087.7100\ntiming peng-cap1-s4 3 5080.6500\ntiming peng-cap1-s4 4 5038.1500\ntiming peng-cap1-s4 5 5104.8900\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 5699.9200\ntiming gang-cap0-front-s4 2 4975.7300\ntiming gang-cap0-front-s4 3 4857.0700\ntiming gang-cap0-front-s4 4 4911.9000\ntiming gang-cap0-front-s4 5 4966.2200\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3151.3900\ntiming tail-pressure-s4 2 2961.7500\ntiming tail-pressure-s4 3 2959.2400\ntiming tail-pressure-s4 4 2932.1800\ntiming tail-pressure-s4 5 2975.8600\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 440.7100\ntiming missing-suit-cap0-s4 2 448.9500\ntiming missing-suit-cap0-s4 3 448.6100\ntiming missing-suit-cap0-s4 4 445.4400\ntiming missing-suit-cap0-s4 5 444.7800\n",
+      "stderr": ""
+    },
+    {
+      "variant": "MA",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:38.553403+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 7045.4300\ntiming empty-cap4-s4 2 6902.0300\ntiming empty-cap4-s4 3 6787.9200\ntiming empty-cap4-s4 4 6818.7700\ntiming empty-cap4-s4 5 6853.5600\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 6998.1000\ntiming typical-cap4-s4 2 7201.1300\ntiming typical-cap4-s4 3 7277.2500\ntiming typical-cap4-s4 4 7171.7200\ntiming typical-cap4-s4 5 7778.0200\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 7250.3000\ntiming dense-cap4-s4 2 7180.6900\ntiming dense-cap4-s4 3 7357.4800\ntiming dense-cap4-s4 4 7744.9200\ntiming dense-cap4-s4 5 7539.5000\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 7405.8600\ntiming wide-cap4-s4 2 7981.8000\ntiming wide-cap4-s4 3 7529.0000\ntiming wide-cap4-s4 4 7754.7600\ntiming wide-cap4-s4 5 7511.4800\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 4495.6200\ntiming empty-cap4-s3 2 4904.4400\ntiming empty-cap4-s3 3 5309.8000\ntiming empty-cap4-s3 4 5269.2600\ntiming empty-cap4-s3 5 5996.2100\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2856.9900\ntiming typical-cap4-s2 2 3025.1000\ntiming typical-cap4-s2 3 2674.4300\ntiming typical-cap4-s2 4 2658.9300\ntiming typical-cap4-s2 5 2790.3100\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 1132.3700\ntiming typical-cap4-s1 2 1150.4200\ntiming typical-cap4-s1 3 1269.7600\ntiming typical-cap4-s1 4 1432.9900\ntiming typical-cap4-s1 5 1253.1000\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 701.0000\ntiming typical-cap4-s0 2 673.5300\ntiming typical-cap4-s0 3 489.7900\ntiming typical-cap4-s0 4 483.1400\ntiming typical-cap4-s0 5 488.4600\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 7342.0700\ntiming peng-cap1-s4 2 7455.9900\ntiming peng-cap1-s4 3 7480.0200\ntiming peng-cap1-s4 4 7935.3800\ntiming peng-cap1-s4 5 8277.1300\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 6947.0700\ntiming gang-cap0-front-s4 2 6835.1900\ntiming gang-cap0-front-s4 3 6066.8100\ntiming gang-cap0-front-s4 4 6321.6200\ntiming gang-cap0-front-s4 5 6429.9000\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 4565.3900\ntiming tail-pressure-s4 2 4280.9000\ntiming tail-pressure-s4 3 4615.7700\ntiming tail-pressure-s4 4 5166.7600\ntiming tail-pressure-s4 5 4193.7300\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 296.1300\ntiming missing-suit-cap0-s4 2 424.6500\ntiming missing-suit-cap0-s4 3 376.9500\ntiming missing-suit-cap0-s4 4 353.4600\ntiming missing-suit-cap0-s4 5 473.8100\n",
+      "stderr": ""
+    },
+    {
+      "variant": "M",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:41.533908+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 6391.2800\ntiming empty-cap4-s4 2 6212.8700\ntiming empty-cap4-s4 3 6485.4200\ntiming empty-cap4-s4 4 6661.9100\ntiming empty-cap4-s4 5 6091.0900\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 6022.8700\ntiming typical-cap4-s4 2 6120.6100\ntiming typical-cap4-s4 3 6339.5800\ntiming typical-cap4-s4 4 6851.8600\ntiming typical-cap4-s4 5 6349.9900\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 6394.7200\ntiming dense-cap4-s4 2 6237.7500\ntiming dense-cap4-s4 3 7139.6100\ntiming dense-cap4-s4 4 6594.4000\ntiming dense-cap4-s4 5 7243.1100\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 6831.6200\ntiming wide-cap4-s4 2 6399.6500\ntiming wide-cap4-s4 3 6100.2500\ntiming wide-cap4-s4 4 6159.9900\ntiming wide-cap4-s4 5 6429.7500\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3391.2900\ntiming empty-cap4-s3 2 3490.9100\ntiming empty-cap4-s3 3 3334.2800\ntiming empty-cap4-s3 4 3601.0900\ntiming empty-cap4-s3 5 3677.8300\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 1993.8700\ntiming typical-cap4-s2 2 1872.0800\ntiming typical-cap4-s2 3 1998.2300\ntiming typical-cap4-s2 4 1806.2600\ntiming typical-cap4-s2 5 1849.6900\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 833.2800\ntiming typical-cap4-s1 2 847.8300\ntiming typical-cap4-s1 3 912.6400\ntiming typical-cap4-s1 4 991.4000\ntiming typical-cap4-s1 5 1016.9700\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 460.0800\ntiming typical-cap4-s0 2 439.7400\ntiming typical-cap4-s0 3 414.3800\ntiming typical-cap4-s0 4 398.2500\ntiming typical-cap4-s0 5 415.4400\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 5457.9000\ntiming peng-cap1-s4 2 5456.5300\ntiming peng-cap1-s4 3 5456.8700\ntiming peng-cap1-s4 4 5145.6500\ntiming peng-cap1-s4 5 5336.7300\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 5635.2700\ntiming gang-cap0-front-s4 2 5519.8300\ntiming gang-cap0-front-s4 3 5773.2800\ntiming gang-cap0-front-s4 4 5189.4600\ntiming gang-cap0-front-s4 5 5240.8800\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3300.9500\ntiming tail-pressure-s4 2 3220.4800\ntiming tail-pressure-s4 3 3102.4200\ntiming tail-pressure-s4 4 3009.2300\ntiming tail-pressure-s4 5 3129.0100\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 437.9900\ntiming missing-suit-cap0-s4 2 504.2700\ntiming missing-suit-cap0-s4 3 441.9900\ntiming missing-suit-cap0-s4 4 497.2100\ntiming missing-suit-cap0-s4 5 438.5000\n",
+      "stderr": ""
+    },
+    {
+      "variant": "MA",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:43.947677+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 8261.6500\ntiming empty-cap4-s4 2 8141.6000\ntiming empty-cap4-s4 3 7189.2300\ntiming empty-cap4-s4 4 7998.3500\ntiming empty-cap4-s4 5 8519.4800\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 8203.3800\ntiming typical-cap4-s4 2 9012.9200\ntiming typical-cap4-s4 3 9302.9600\ntiming typical-cap4-s4 4 8381.8600\ntiming typical-cap4-s4 5 8287.4000\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 7920.7000\ntiming dense-cap4-s4 2 7534.3400\ntiming dense-cap4-s4 3 7662.2500\ntiming dense-cap4-s4 4 7738.0300\ntiming dense-cap4-s4 5 7346.9000\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 7611.3400\ntiming wide-cap4-s4 2 7568.9700\ntiming wide-cap4-s4 3 7158.2000\ntiming wide-cap4-s4 4 7321.9200\ntiming wide-cap4-s4 5 8057.0300\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 4929.7500\ntiming empty-cap4-s3 2 5346.7700\ntiming empty-cap4-s3 3 6009.3400\ntiming empty-cap4-s3 4 5075.8100\ntiming empty-cap4-s3 5 4686.3900\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2701.7400\ntiming typical-cap4-s2 2 2532.2400\ntiming typical-cap4-s2 3 2525.5800\ntiming typical-cap4-s2 4 2508.2200\ntiming typical-cap4-s2 5 2629.1300\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 1120.3200\ntiming typical-cap4-s1 2 1066.5200\ntiming typical-cap4-s1 3 1046.0100\ntiming typical-cap4-s1 4 1072.6700\ntiming typical-cap4-s1 5 1052.7100\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 450.3600\ntiming typical-cap4-s0 2 448.5400\ntiming typical-cap4-s0 3 457.5100\ntiming typical-cap4-s0 4 453.1500\ntiming typical-cap4-s0 5 459.3700\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 6714.9500\ntiming peng-cap1-s4 2 7540.3600\ntiming peng-cap1-s4 3 7044.8200\ntiming peng-cap1-s4 4 7127.8400\ntiming peng-cap1-s4 5 7073.3500\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 7927.5600\ntiming gang-cap0-front-s4 2 7644.3300\ntiming gang-cap0-front-s4 3 7643.2900\ntiming gang-cap0-front-s4 4 8225.0100\ntiming gang-cap0-front-s4 5 8497.0700\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 4999.6800\ntiming tail-pressure-s4 2 4141.7800\ntiming tail-pressure-s4 3 4142.0200\ntiming tail-pressure-s4 4 4322.0500\ntiming tail-pressure-s4 5 4285.4800\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 463.5600\ntiming missing-suit-cap0-s4 2 348.8900\ntiming missing-suit-cap0-s4 3 395.9700\ntiming missing-suit-cap0-s4 4 367.8000\ntiming missing-suit-cap0-s4 5 343.1000\n",
+      "stderr": ""
+    },
+    {
+      "variant": "A2",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:47.071964+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 8179.3500\ntiming empty-cap4-s4 2 6413.6600\ntiming empty-cap4-s4 3 6198.4800\ntiming empty-cap4-s4 4 6151.6800\ntiming empty-cap4-s4 5 6569.0800\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 6877.4200\ntiming typical-cap4-s4 2 6722.4700\ntiming typical-cap4-s4 3 6213.7600\ntiming typical-cap4-s4 4 5747.9800\ntiming typical-cap4-s4 5 5778.2700\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 6272.3000\ntiming dense-cap4-s4 2 6605.0300\ntiming dense-cap4-s4 3 6589.5400\ntiming dense-cap4-s4 4 7340.6300\ntiming dense-cap4-s4 5 5975.6100\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 7098.6600\ntiming wide-cap4-s4 2 5879.2900\ntiming wide-cap4-s4 3 5954.2300\ntiming wide-cap4-s4 4 6099.0700\ntiming wide-cap4-s4 5 5777.5500\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3538.4100\ntiming empty-cap4-s3 2 3359.2500\ntiming empty-cap4-s3 3 3267.6400\ntiming empty-cap4-s3 4 4191.3100\ntiming empty-cap4-s3 5 3343.4200\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 1878.4900\ntiming typical-cap4-s2 2 1884.6600\ntiming typical-cap4-s2 3 1956.5200\ntiming typical-cap4-s2 4 1999.5800\ntiming typical-cap4-s2 5 2235.1400\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 1080.9000\ntiming typical-cap4-s1 2 1090.7400\ntiming typical-cap4-s1 3 1028.0500\ntiming typical-cap4-s1 4 1070.3500\ntiming typical-cap4-s1 5 1100.3600\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 343.5600\ntiming typical-cap4-s0 2 360.9300\ntiming typical-cap4-s0 3 348.5300\ntiming typical-cap4-s0 4 348.8200\ntiming typical-cap4-s0 5 517.0800\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 5339.1300\ntiming peng-cap1-s4 2 5897.3900\ntiming peng-cap1-s4 3 5389.4400\ntiming peng-cap1-s4 4 5539.4000\ntiming peng-cap1-s4 5 4910.1900\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 4900.0600\ntiming gang-cap0-front-s4 2 4885.6800\ntiming gang-cap0-front-s4 3 4808.2300\ntiming gang-cap0-front-s4 4 4608.4200\ntiming gang-cap0-front-s4 5 4622.5800\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 2842.2100\ntiming tail-pressure-s4 2 3013.2600\ntiming tail-pressure-s4 3 2823.7700\ntiming tail-pressure-s4 4 2835.3100\ntiming tail-pressure-s4 5 2856.2100\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 282.2600\ntiming missing-suit-cap0-s4 2 295.8200\ntiming missing-suit-cap0-s4 3 328.4600\ntiming missing-suit-cap0-s4 4 284.4000\ntiming missing-suit-cap0-s4 5 284.8200\n",
+      "stderr": ""
+    },
+    {
+      "variant": "MA",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:49.439770+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 7226.7100\ntiming empty-cap4-s4 2 7158.1700\ntiming empty-cap4-s4 3 7284.1400\ntiming empty-cap4-s4 4 7380.2200\ntiming empty-cap4-s4 5 7201.9100\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 7444.4100\ntiming typical-cap4-s4 2 7157.9300\ntiming typical-cap4-s4 3 7415.4700\ntiming typical-cap4-s4 4 7132.0200\ntiming typical-cap4-s4 5 7362.5300\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 8180.9500\ntiming dense-cap4-s4 2 7843.6200\ntiming dense-cap4-s4 3 8579.0300\ntiming dense-cap4-s4 4 8948.3800\ntiming dense-cap4-s4 5 8665.9600\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 8832.2400\ntiming wide-cap4-s4 2 9009.6200\ntiming wide-cap4-s4 3 7683.1800\ntiming wide-cap4-s4 4 8672.5900\ntiming wide-cap4-s4 5 8599.9000\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 4462.0600\ntiming empty-cap4-s3 2 4858.8700\ntiming empty-cap4-s3 3 4877.1200\ntiming empty-cap4-s3 4 4559.3500\ntiming empty-cap4-s3 5 4391.2300\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 2561.9300\ntiming typical-cap4-s2 2 2616.8200\ntiming typical-cap4-s2 3 2547.3500\ntiming typical-cap4-s2 4 2609.2700\ntiming typical-cap4-s2 5 2553.2500\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 1050.2900\ntiming typical-cap4-s1 2 1053.8100\ntiming typical-cap4-s1 3 1094.0600\ntiming typical-cap4-s1 4 1053.5400\ntiming typical-cap4-s1 5 1042.8300\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 424.5500\ntiming typical-cap4-s0 2 432.6000\ntiming typical-cap4-s0 3 417.2400\ntiming typical-cap4-s0 4 417.6600\ntiming typical-cap4-s0 5 428.3800\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 6278.1400\ntiming peng-cap1-s4 2 6286.6500\ntiming peng-cap1-s4 3 6553.3100\ntiming peng-cap1-s4 4 6445.0500\ntiming peng-cap1-s4 5 6245.9000\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 6019.5000\ntiming gang-cap0-front-s4 2 6082.1700\ntiming gang-cap0-front-s4 3 6484.9800\ntiming gang-cap0-front-s4 4 6080.7900\ntiming gang-cap0-front-s4 5 6597.6600\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 4187.8400\ntiming tail-pressure-s4 2 3965.0000\ntiming tail-pressure-s4 3 3686.2600\ntiming tail-pressure-s4 4 3783.4800\ntiming tail-pressure-s4 5 4422.2100\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 442.2100\ntiming missing-suit-cap0-s4 2 492.0300\ntiming missing-suit-cap0-s4 3 372.0400\ntiming missing-suit-cap0-s4 4 382.4200\ntiming missing-suit-cap0-s4 5 420.1300\n",
+      "stderr": ""
+    },
+    {
+      "variant": "A2",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:52.373005+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 7032.5600\ntiming empty-cap4-s4 2 6987.0000\ntiming empty-cap4-s4 3 5595.6900\ntiming empty-cap4-s4 4 5623.9000\ntiming empty-cap4-s4 5 5871.7200\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 5750.6600\ntiming typical-cap4-s4 2 5646.6600\ntiming typical-cap4-s4 3 5568.1100\ntiming typical-cap4-s4 4 5550.0600\ntiming typical-cap4-s4 5 5663.6200\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5672.8200\ntiming dense-cap4-s4 2 5608.1100\ntiming dense-cap4-s4 3 5666.2400\ntiming dense-cap4-s4 4 5745.5300\ntiming dense-cap4-s4 5 5688.8000\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 5698.5900\ntiming wide-cap4-s4 2 5694.0200\ntiming wide-cap4-s4 3 5677.3900\ntiming wide-cap4-s4 4 5719.2100\ntiming wide-cap4-s4 5 5783.9400\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3447.6000\ntiming empty-cap4-s3 2 3308.0800\ntiming empty-cap4-s3 3 3391.5900\ntiming empty-cap4-s3 4 4008.8800\ntiming empty-cap4-s3 5 3224.4600\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 1996.0400\ntiming typical-cap4-s2 2 1849.8400\ntiming typical-cap4-s2 3 1828.3700\ntiming typical-cap4-s2 4 1822.2700\ntiming typical-cap4-s2 5 1827.4900\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 829.3700\ntiming typical-cap4-s1 2 831.3100\ntiming typical-cap4-s1 3 837.3700\ntiming typical-cap4-s1 4 827.9600\ntiming typical-cap4-s1 5 820.9200\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 398.1300\ntiming typical-cap4-s0 2 399.4700\ntiming typical-cap4-s0 3 401.2700\ntiming typical-cap4-s0 4 391.6500\ntiming typical-cap4-s0 5 397.6100\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 4884.4100\ntiming peng-cap1-s4 2 4918.5900\ntiming peng-cap1-s4 3 4967.8900\ntiming peng-cap1-s4 4 4934.8700\ntiming peng-cap1-s4 5 4943.3900\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 4758.4600\ntiming gang-cap0-front-s4 2 4642.5200\ntiming gang-cap0-front-s4 3 4609.4200\ntiming gang-cap0-front-s4 4 4595.9700\ntiming gang-cap0-front-s4 5 4739.3200\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3186.9700\ntiming tail-pressure-s4 2 3076.9300\ntiming tail-pressure-s4 3 2997.2400\ntiming tail-pressure-s4 4 2950.6500\ntiming tail-pressure-s4 5 2936.5900\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 445.5000\ntiming missing-suit-cap0-s4 2 405.7200\ntiming missing-suit-cap0-s4 3 337.9900\ntiming missing-suit-cap0-s4 4 343.4500\ntiming missing-suit-cap0-s4 5 348.9500\n",
+      "stderr": ""
+    },
+    {
+      "variant": "M",
+      "mode": "timing",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-timing.exe",
+        "--iters",
+        "10000",
+        "--rounds",
+        "5",
+        "--warmup",
+        "1000"
+      ],
+      "utc": "2026-11-05T08:28:54.575243+00:00",
+      "returncode": 0,
+      "stdout": "mode timing iters 10000 rounds 5 warmup 1000\ndigest empty-cap4-s4 e9a895c5877673ff\ntiming empty-cap4-s4 1 5533.4200\ntiming empty-cap4-s4 2 5860.0800\ntiming empty-cap4-s4 3 5742.9300\ntiming empty-cap4-s4 4 5619.1000\ntiming empty-cap4-s4 5 5994.7000\ndigest typical-cap4-s4 71b2adbdc80c3bb4\ntiming typical-cap4-s4 1 6089.2000\ntiming typical-cap4-s4 2 5896.7400\ntiming typical-cap4-s4 3 5915.4700\ntiming typical-cap4-s4 4 5851.2300\ntiming typical-cap4-s4 5 5797.3500\ndigest dense-cap4-s4 69d305cc20f6ec27\ntiming dense-cap4-s4 1 5733.6100\ntiming dense-cap4-s4 2 5644.9400\ntiming dense-cap4-s4 3 5854.7700\ntiming dense-cap4-s4 4 5942.7900\ntiming dense-cap4-s4 5 6046.6900\ndigest wide-cap4-s4 69d306cc20f6edda\ntiming wide-cap4-s4 1 5941.2300\ntiming wide-cap4-s4 2 6003.0900\ntiming wide-cap4-s4 3 6052.7600\ntiming wide-cap4-s4 4 5772.6300\ntiming wide-cap4-s4 5 5685.4800\ndigest empty-cap4-s3 e7c284c585d96903\ntiming empty-cap4-s3 1 3144.0200\ntiming empty-cap4-s3 2 3174.5900\ntiming empty-cap4-s3 3 3211.6900\ntiming empty-cap4-s3 4 3185.7200\ntiming empty-cap4-s3 5 3168.6600\ndigest typical-cap4-s2 087c036f25fb5d4e\ntiming typical-cap4-s2 1 1732.1800\ntiming typical-cap4-s2 2 1733.2500\ntiming typical-cap4-s2 3 1715.6300\ntiming typical-cap4-s2 4 1738.3000\ntiming typical-cap4-s2 5 1731.1900\ndigest typical-cap4-s1 51de5b726b861787\ntiming typical-cap4-s1 1 794.4100\ntiming typical-cap4-s1 2 807.6400\ntiming typical-cap4-s1 3 793.0600\ntiming typical-cap4-s1 4 787.4200\ntiming typical-cap4-s1 5 788.1200\ndigest typical-cap4-s0 0daac4da27aa1df2\ntiming typical-cap4-s0 1 377.8300\ntiming typical-cap4-s0 2 379.1500\ntiming typical-cap4-s0 3 386.2500\ntiming typical-cap4-s0 4 387.8300\ntiming typical-cap4-s0 5 382.3000\ndigest peng-cap1-s4 1c3408cdd645f005\ntiming peng-cap1-s4 1 5059.7300\ntiming peng-cap1-s4 2 5023.6200\ntiming peng-cap1-s4 3 5065.4600\ntiming peng-cap1-s4 4 5070.1600\ntiming peng-cap1-s4 5 5052.5400\ndigest gang-cap0-front-s4 8877b68ad23d7e95\ntiming gang-cap0-front-s4 1 4805.0700\ntiming gang-cap0-front-s4 2 5518.0400\ntiming gang-cap0-front-s4 3 4895.5900\ntiming gang-cap0-front-s4 4 5783.4700\ntiming gang-cap0-front-s4 5 4922.6100\ndigest tail-pressure-s4 e9a895c5877673ff\ntiming tail-pressure-s4 1 3027.2400\ntiming tail-pressure-s4 2 2943.4600\ntiming tail-pressure-s4 3 2937.2800\ntiming tail-pressure-s4 4 3044.1000\ntiming tail-pressure-s4 5 2938.2300\ndigest missing-suit-cap0-s4 2dd38a8b1f5c4fd8\ntiming missing-suit-cap0-s4 1 445.1100\ntiming missing-suit-cap0-s4 2 439.5400\ntiming missing-suit-cap0-s4 3 451.8200\ntiming missing-suit-cap0-s4 4 438.2100\ntiming missing-suit-cap0-s4 5 439.3400\n",
+      "stderr": ""
+    },
+    {
+      "variant": "M",
+      "mode": "count",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-M-count.exe"
+      ],
+      "utc": "2026-11-05T08:28:56.789594+00:00",
+      "returncode": 0,
+      "stdout": "count empty-cap4-s4 1183 3036 e9a895c5877673ff\ncount typical-cap4-s4 1183 3036 71b2adbdc80c3bb4\ncount dense-cap4-s4 1183 3036 69d305cc20f6ec27\ncount wide-cap4-s4 1183 3036 69d306cc20f6edda\ncount empty-cap4-s3 715 1436 e7c284c585d96903\ncount typical-cap4-s2 375 578 087c036f25fb5d4e\ncount typical-cap4-s1 128 180 51de5b726b861787\ncount typical-cap4-s0 26 34 0daac4da27aa1df2\ncount peng-cap1-s4 1042 2708 1c3408cdd645f005\ncount gang-cap0-front-s4 983 2562 8877b68ad23d7e95\ncount tail-pressure-s4 583 1614 e9a895c5877673ff\ncount missing-suit-cap0-s4 9 230 2dd38a8b1f5c4fd8\n",
+      "stderr": ""
+    },
+    {
+      "variant": "MA",
+      "mode": "count",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-MA-count.exe"
+      ],
+      "utc": "2026-11-05T08:28:56.802381+00:00",
+      "returncode": 0,
+      "stdout": "count empty-cap4-s4 1183 573 e9a895c5877673ff\ncount typical-cap4-s4 1183 573 71b2adbdc80c3bb4\ncount dense-cap4-s4 1183 573 69d305cc20f6ec27\ncount wide-cap4-s4 1183 573 69d306cc20f6edda\ncount empty-cap4-s3 715 371 e7c284c585d96903\ncount typical-cap4-s2 375 212 087c036f25fb5d4e\ncount typical-cap4-s1 128 91 51de5b726b861787\ncount typical-cap4-s0 26 26 0daac4da27aa1df2\ncount peng-cap1-s4 1042 507 1c3408cdd645f005\ncount gang-cap0-front-s4 983 482 8877b68ad23d7e95\ncount tail-pressure-s4 583 300 e9a895c5877673ff\ncount missing-suit-cap0-s4 9 9 2dd38a8b1f5c4fd8\n",
+      "stderr": ""
+    },
+    {
+      "variant": "A2",
+      "mode": "count",
+      "command": [
+        "C:\\Users\\HellG\\AppData\\Local\\Temp\\suit-table-a2-builds\\micro-A2-count.exe"
+      ],
+      "utc": "2026-11-05T08:28:56.815902+00:00",
+      "returncode": 0,
+      "stdout": "count empty-cap4-s4 1183 1938 e9a895c5877673ff\ncount typical-cap4-s4 1183 1938 71b2adbdc80c3bb4\ncount dense-cap4-s4 1183 1938 69d305cc20f6ec27\ncount wide-cap4-s4 1183 1938 69d306cc20f6edda\ncount empty-cap4-s3 715 1106 e7c284c585d96903\ncount typical-cap4-s2 375 544 087c036f25fb5d4e\ncount typical-cap4-s1 128 180 51de5b726b861787\ncount typical-cap4-s0 26 34 0daac4da27aa1df2\ncount peng-cap1-s4 1042 1704 1c3408cdd645f005\ncount gang-cap0-front-s4 983 1608 8877b68ad23d7e95\ncount tail-pressure-s4 583 948 e9a895c5877673ff\ncount missing-suit-cap0-s4 9 18 2dd38a8b1f5c4fd8\n",
+      "stderr": ""
+    }
+  ],
+  "summary": {
+    "timing": {
+      "M": {
+        "empty-cap4-s4": {
+          "median_ns_per_call": 5564.02,
+          "min_ns_per_call": 5381.9,
+          "samples": 25
+        },
+        "typical-cap4-s4": {
+          "median_ns_per_call": 5896.74,
+          "min_ns_per_call": 5627.56,
+          "samples": 25
+        },
+        "dense-cap4-s4": {
+          "median_ns_per_call": 5797.46,
+          "min_ns_per_call": 5591.21,
+          "samples": 25
+        },
+        "wide-cap4-s4": {
+          "median_ns_per_call": 6052.76,
+          "min_ns_per_call": 5681.68,
+          "samples": 25
+        },
+        "empty-cap4-s3": {
+          "median_ns_per_call": 3255.25,
+          "min_ns_per_call": 3127.68,
+          "samples": 25
+        },
+        "typical-cap4-s2": {
+          "median_ns_per_call": 1849.69,
+          "min_ns_per_call": 1707.03,
+          "samples": 25
+        },
+        "typical-cap4-s1": {
+          "median_ns_per_call": 807.64,
+          "min_ns_per_call": 742.97,
+          "samples": 25
+        },
+        "typical-cap4-s0": {
+          "median_ns_per_call": 394.02,
+          "min_ns_per_call": 330.65,
+          "samples": 25
+        },
+        "peng-cap1-s4": {
+          "median_ns_per_call": 5104.89,
+          "min_ns_per_call": 4982.1,
+          "samples": 25
+        },
+        "gang-cap0-front-s4": {
+          "median_ns_per_call": 5010.93,
+          "min_ns_per_call": 4805.07,
+          "samples": 25
+        },
+        "tail-pressure-s4": {
+          "median_ns_per_call": 3009.23,
+          "min_ns_per_call": 2856.42,
+          "samples": 25
+        },
+        "missing-suit-cap0-s4": {
+          "median_ns_per_call": 440.71,
+          "min_ns_per_call": 398.01,
+          "samples": 25
+        }
+      },
+      "MA": {
+        "empty-cap4-s4": {
+          "median_ns_per_call": 7261.48,
+          "min_ns_per_call": 6787.92,
+          "samples": 25
+        },
+        "typical-cap4-s4": {
+          "median_ns_per_call": 7559.77,
+          "min_ns_per_call": 6992.67,
+          "samples": 25
+        },
+        "dense-cap4-s4": {
+          "median_ns_per_call": 7662.25,
+          "min_ns_per_call": 7075.56,
+          "samples": 25
+        },
+        "wide-cap4-s4": {
+          "median_ns_per_call": 7568.97,
+          "min_ns_per_call": 7102.41,
+          "samples": 25
+        },
+        "empty-cap4-s3": {
+          "median_ns_per_call": 4686.39,
+          "min_ns_per_call": 4211.46,
+          "samples": 25
+        },
+        "typical-cap4-s2": {
+          "median_ns_per_call": 2616.82,
+          "min_ns_per_call": 2508.22,
+          "samples": 25
+        },
+        "typical-cap4-s1": {
+          "median_ns_per_call": 1091.12,
+          "min_ns_per_call": 1025.97,
+          "samples": 25
+        },
+        "typical-cap4-s0": {
+          "median_ns_per_call": 433.38,
+          "min_ns_per_call": 412.36,
+          "samples": 25
+        },
+        "peng-cap1-s4": {
+          "median_ns_per_call": 6553.31,
+          "min_ns_per_call": 6215.69,
+          "samples": 25
+        },
+        "gang-cap0-front-s4": {
+          "median_ns_per_call": 6319.94,
+          "min_ns_per_call": 5927.5,
+          "samples": 25
+        },
+        "tail-pressure-s4": {
+          "median_ns_per_call": 4141.78,
+          "min_ns_per_call": 3598.76,
+          "samples": 25
+        },
+        "missing-suit-cap0-s4": {
+          "median_ns_per_call": 351.87,
+          "min_ns_per_call": 296.08,
+          "samples": 25
+        }
+      },
+      "A2": {
+        "empty-cap4-s4": {
+          "median_ns_per_call": 5859.0,
+          "min_ns_per_call": 5381.34,
+          "samples": 25
+        },
+        "typical-cap4-s4": {
+          "median_ns_per_call": 5783.59,
+          "min_ns_per_call": 5518.8,
+          "samples": 25
+        },
+        "dense-cap4-s4": {
+          "median_ns_per_call": 5688.8,
+          "min_ns_per_call": 5470.51,
+          "samples": 25
+        },
+        "wide-cap4-s4": {
+          "median_ns_per_call": 5778.39,
+          "min_ns_per_call": 5548.63,
+          "samples": 25
+        },
+        "empty-cap4-s3": {
+          "median_ns_per_call": 3344.81,
+          "min_ns_per_call": 3224.46,
+          "samples": 25
+        },
+        "typical-cap4-s2": {
+          "median_ns_per_call": 1861.03,
+          "min_ns_per_call": 1818.76,
+          "samples": 25
+        },
+        "typical-cap4-s1": {
+          "median_ns_per_call": 834.94,
+          "min_ns_per_call": 786.23,
+          "samples": 25
+        },
+        "typical-cap4-s0": {
+          "median_ns_per_call": 397.61,
+          "min_ns_per_call": 343.56,
+          "samples": 25
+        },
+        "peng-cap1-s4": {
+          "median_ns_per_call": 4923.91,
+          "min_ns_per_call": 4804.0,
+          "samples": 25
+        },
+        "gang-cap0-front-s4": {
+          "median_ns_per_call": 4739.32,
+          "min_ns_per_call": 4591.85,
+          "samples": 25
+        },
+        "tail-pressure-s4": {
+          "median_ns_per_call": 2910.85,
+          "min_ns_per_call": 2823.77,
+          "samples": 25
+        },
+        "missing-suit-cap0-s4": {
+          "median_ns_per_call": 333.85,
+          "min_ns_per_call": 282.26,
+          "samples": 25
+        }
+      }
+    },
+    "counts": {
+      "M": {
+        "empty-cap4-s4": {
+          "accepted": 1183,
+          "considered": 3036,
+          "digest": "e9a895c5877673ff"
+        },
+        "typical-cap4-s4": {
+          "accepted": 1183,
+          "considered": 3036,
+          "digest": "71b2adbdc80c3bb4"
+        },
+        "dense-cap4-s4": {
+          "accepted": 1183,
+          "considered": 3036,
+          "digest": "69d305cc20f6ec27"
+        },
+        "wide-cap4-s4": {
+          "accepted": 1183,
+          "considered": 3036,
+          "digest": "69d306cc20f6edda"
+        },
+        "empty-cap4-s3": {
+          "accepted": 715,
+          "considered": 1436,
+          "digest": "e7c284c585d96903"
+        },
+        "typical-cap4-s2": {
+          "accepted": 375,
+          "considered": 578,
+          "digest": "087c036f25fb5d4e"
+        },
+        "typical-cap4-s1": {
+          "accepted": 128,
+          "considered": 180,
+          "digest": "51de5b726b861787"
+        },
+        "typical-cap4-s0": {
+          "accepted": 26,
+          "considered": 34,
+          "digest": "0daac4da27aa1df2"
+        },
+        "peng-cap1-s4": {
+          "accepted": 1042,
+          "considered": 2708,
+          "digest": "1c3408cdd645f005"
+        },
+        "gang-cap0-front-s4": {
+          "accepted": 983,
+          "considered": 2562,
+          "digest": "8877b68ad23d7e95"
+        },
+        "tail-pressure-s4": {
+          "accepted": 583,
+          "considered": 1614,
+          "digest": "e9a895c5877673ff"
+        },
+        "missing-suit-cap0-s4": {
+          "accepted": 9,
+          "considered": 230,
+          "digest": "2dd38a8b1f5c4fd8"
+        }
+      },
+      "MA": {
+        "empty-cap4-s4": {
+          "accepted": 1183,
+          "considered": 573,
+          "digest": "e9a895c5877673ff"
+        },
+        "typical-cap4-s4": {
+          "accepted": 1183,
+          "considered": 573,
+          "digest": "71b2adbdc80c3bb4"
+        },
+        "dense-cap4-s4": {
+          "accepted": 1183,
+          "considered": 573,
+          "digest": "69d305cc20f6ec27"
+        },
+        "wide-cap4-s4": {
+          "accepted": 1183,
+          "considered": 573,
+          "digest": "69d306cc20f6edda"
+        },
+        "empty-cap4-s3": {
+          "accepted": 715,
+          "considered": 371,
+          "digest": "e7c284c585d96903"
+        },
+        "typical-cap4-s2": {
+          "accepted": 375,
+          "considered": 212,
+          "digest": "087c036f25fb5d4e"
+        },
+        "typical-cap4-s1": {
+          "accepted": 128,
+          "considered": 91,
+          "digest": "51de5b726b861787"
+        },
+        "typical-cap4-s0": {
+          "accepted": 26,
+          "considered": 26,
+          "digest": "0daac4da27aa1df2"
+        },
+        "peng-cap1-s4": {
+          "accepted": 1042,
+          "considered": 507,
+          "digest": "1c3408cdd645f005"
+        },
+        "gang-cap0-front-s4": {
+          "accepted": 983,
+          "considered": 482,
+          "digest": "8877b68ad23d7e95"
+        },
+        "tail-pressure-s4": {
+          "accepted": 583,
+          "considered": 300,
+          "digest": "e9a895c5877673ff"
+        },
+        "missing-suit-cap0-s4": {
+          "accepted": 9,
+          "considered": 9,
+          "digest": "2dd38a8b1f5c4fd8"
+        }
+      },
+      "A2": {
+        "empty-cap4-s4": {
+          "accepted": 1183,
+          "considered": 1938,
+          "digest": "e9a895c5877673ff"
+        },
+        "typical-cap4-s4": {
+          "accepted": 1183,
+          "considered": 1938,
+          "digest": "71b2adbdc80c3bb4"
+        },
+        "dense-cap4-s4": {
+          "accepted": 1183,
+          "considered": 1938,
+          "digest": "69d305cc20f6ec27"
+        },
+        "wide-cap4-s4": {
+          "accepted": 1183,
+          "considered": 1938,
+          "digest": "69d306cc20f6edda"
+        },
+        "empty-cap4-s3": {
+          "accepted": 715,
+          "considered": 1106,
+          "digest": "e7c284c585d96903"
+        },
+        "typical-cap4-s2": {
+          "accepted": 375,
+          "considered": 544,
+          "digest": "087c036f25fb5d4e"
+        },
+        "typical-cap4-s1": {
+          "accepted": 128,
+          "considered": 180,
+          "digest": "51de5b726b861787"
+        },
+        "typical-cap4-s0": {
+          "accepted": 26,
+          "considered": 34,
+          "digest": "0daac4da27aa1df2"
+        },
+        "peng-cap1-s4": {
+          "accepted": 1042,
+          "considered": 1704,
+          "digest": "1c3408cdd645f005"
+        },
+        "gang-cap0-front-s4": {
+          "accepted": 983,
+          "considered": 1608,
+          "digest": "8877b68ad23d7e95"
+        },
+        "tail-pressure-s4": {
+          "accepted": 583,
+          "considered": 948,
+          "digest": "e9a895c5877673ff"
+        },
+        "missing-suit-cap0-s4": {
+          "accepted": 9,
+          "considered": 18,
+          "digest": "2dd38a8b1f5c4fd8"
+        }
+      }
+    },
+    "checks": {
+      "failures": [],
+      "ok": true
+    },
+    "table_digests": {
+      "M": {
+        "empty-cap4-s4": [
+          "e9a895c5877673ff"
+        ],
+        "typical-cap4-s4": [
+          "71b2adbdc80c3bb4"
+        ],
+        "dense-cap4-s4": [
+          "69d305cc20f6ec27"
+        ],
+        "wide-cap4-s4": [
+          "69d306cc20f6edda"
+        ],
+        "empty-cap4-s3": [
+          "e7c284c585d96903"
+        ],
+        "typical-cap4-s2": [
+          "087c036f25fb5d4e"
+        ],
+        "typical-cap4-s1": [
+          "51de5b726b861787"
+        ],
+        "typical-cap4-s0": [
+          "0daac4da27aa1df2"
+        ],
+        "peng-cap1-s4": [
+          "1c3408cdd645f005"
+        ],
+        "gang-cap0-front-s4": [
+          "8877b68ad23d7e95"
+        ],
+        "tail-pressure-s4": [
+          "e9a895c5877673ff"
+        ],
+        "missing-suit-cap0-s4": [
+          "2dd38a8b1f5c4fd8"
+        ]
+      },
+      "MA": {
+        "empty-cap4-s4": [
+          "e9a895c5877673ff"
+        ],
+        "typical-cap4-s4": [
+          "71b2adbdc80c3bb4"
+        ],
+        "dense-cap4-s4": [
+          "69d305cc20f6ec27"
+        ],
+        "wide-cap4-s4": [
+          "69d306cc20f6edda"
+        ],
+        "empty-cap4-s3": [
+          "e7c284c585d96903"
+        ],
+        "typical-cap4-s2": [
+          "087c036f25fb5d4e"
+        ],
+        "typical-cap4-s1": [
+          "51de5b726b861787"
+        ],
+        "typical-cap4-s0": [
+          "0daac4da27aa1df2"
+        ],
+        "peng-cap1-s4": [
+          "1c3408cdd645f005"
+        ],
+        "gang-cap0-front-s4": [
+          "8877b68ad23d7e95"
+        ],
+        "tail-pressure-s4": [
+          "e9a895c5877673ff"
+        ],
+        "missing-suit-cap0-s4": [
+          "2dd38a8b1f5c4fd8"
+        ]
+      },
+      "A2": {
+        "empty-cap4-s4": [
+          "e9a895c5877673ff"
+        ],
+        "typical-cap4-s4": [
+          "71b2adbdc80c3bb4"
+        ],
+        "dense-cap4-s4": [
+          "69d305cc20f6ec27"
+        ],
+        "wide-cap4-s4": [
+          "69d306cc20f6edda"
+        ],
+        "empty-cap4-s3": [
+          "e7c284c585d96903"
+        ],
+        "typical-cap4-s2": [
+          "087c036f25fb5d4e"
+        ],
+        "typical-cap4-s1": [
+          "51de5b726b861787"
+        ],
+        "typical-cap4-s0": [
+          "0daac4da27aa1df2"
+        ],
+        "peng-cap1-s4": [
+          "1c3408cdd645f005"
+        ],
+        "gang-cap0-front-s4": [
+          "8877b68ad23d7e95"
+        ],
+        "tail-pressure-s4": [
+          "e9a895c5877673ff"
+        ],
+        "missing-suit-cap0-s4": [
+          "2dd38a8b1f5c4fd8"
+        ]
+      }
+    },
+    "relative_to_M_percent": {
+      "MA": {
+        "empty-cap4-s4": 30.50779831848194,
+        "typical-cap4-s4": 28.202532246631208,
+        "dense-cap4-s4": 32.16563805528627,
+        "wide-cap4-s4": 25.049894593540788,
+        "empty-cap4-s3": 43.96405806005683,
+        "typical-cap4-s2": 41.47343608929064,
+        "typical-cap4-s1": 35.09979693923033,
+        "typical-cap4-s0": 9.989340642606969,
+        "peng-cap1-s4": 28.373187277296875,
+        "gang-cap0-front-s4": 26.123094914516855,
+        "tail-pressure-s4": 37.63587362880205,
+        "missing-suit-cap0-s4": -20.15838079462685
+      },
+      "A2": {
+        "empty-cap4-s4": 5.301562539315086,
+        "typical-cap4-s4": -1.9188568598920708,
+        "dense-cap4-s4": -1.874269076457613,
+        "wide-cap4-s4": -4.532973387347261,
+        "empty-cap4-s3": 2.7512479840257953,
+        "typical-cap4-s2": 0.6130757045775148,
+        "typical-cap4-s1": 3.380218909415089,
+        "typical-cap4-s0": 0.9111212628800658,
+        "peng-cap1-s4": -3.5452282027624626,
+        "gang-cap0-front-s4": -5.420351112468158,
+        "tail-pressure-s4": -3.2692748643340708,
+        "missing-suit-cap0-s4": -24.247237412357325
+      }
+    }
+  },
+  "verdict": "consistent"
+}

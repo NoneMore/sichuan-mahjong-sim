@@ -199,3 +199,32 @@ are small local observations, not statistical significance or a cross-machine
 promise. See the [full per-run results](../specs/archive/heuristic-analysis-optimization/performance-summary.md)
 and [source/build/environment protocol](../specs/archive/heuristic-analysis-optimization/execution.md)
 for all candidates, ranges, policy times, throughput, decisions and raw evidence.
+
+## Suit-table A2 follow-up
+
+The [A2 experiment and raw evidence](../specs/archive/suit-table-a2/results.md)
+compare the current B-only checkout `5ad7540` with the same checkout plus the
+archived A, and with A2. Only A2 is retained: `suit_table` keeps the original
+`sequences → triplets → pair` order, rejects impossible pending tails early,
+bounds sequence starts by remaining rank capacity, and stops increasing
+triplets once even the pair-free count exceeds capacity. It adds no dynamic
+`/ 3` bound and changes neither DP states nor caching nor the seven-pairs
+formula. All ten `SuitTable` entries and policy behavior are preserved.
+
+Formatting, warning-denied Clippy and all-target tests pass, with **223 tests
+in both debug and release**. Nine new focused tests compare complete tables
+against the original enumeration and an independent concrete-target oracle,
+including seeded random hands and capacities. The final source and all three
+measured variants reproduce the frozen **64-game, 3514-decision** action corpus,
+scores, winners and end reasons.
+
+The same-session, default-release `heuristic_bench` comparison used 2000 games,
+warmup 20, seeds 7 and 10007, three preordered interleaved rounds per seed.
+A2 batch-time medians decreased from 15.924593 to 15.598216 s (**2.05%**) and
+16.297933 to 16.042941 s (**1.56%**); both seed groups satisfy
+`A2 max < original min`, and all six paired times improve. The archived A still
+regresses by about 21%. A2's isolated microbenchmark is mixed, so this is not a
+claim of universal per-call improvement. Enumeration counts, the corrected
+cross-version counting definition, raw timings, release-assembly differences
+and limitations are retained with the experiment; fewer candidates or static
+instructions are not treated as proof of speedup.

@@ -1,0 +1,105 @@
+{
+  "protocol": "suit-table-a2-artifact-verification-v1",
+  "note": "Independent re-hash of every measured artifact after the runs; the fail-closed checks are now part of the scripts.",
+  "variants": {
+    "M": {
+      "builds_json_binary_sha256": "fbb49e7b2b3e2a0014442f470d8f70ecdee4f924e655af63c38b79e4bc7408bc",
+      "actual_binary_sha256": "fbb49e7b2b3e2a0014442f470d8f70ecdee4f924e655af63c38b79e4bc7408bc",
+      "binary_matches": true,
+      "patch_actual_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "patch_matches": true,
+      "source_actual_sha256": "1f0dffb9f1a4b3e08982b74e25dc2a73bc2f2bcdc3ca8fc68d88ccd186bfc9b9",
+      "source_matches": true,
+      "trace_matches_frozen_baseline": true,
+      "trace_normalized_sha256": "e4534ee7968af2b61507f90378f635e42344833e507bcccf920d0cd597ec00b2"
+    },
+    "MA": {
+      "builds_json_binary_sha256": "90ee6b046677525b2e2df567a7eef873e1bdd403f4462c0cf5642cecc8e11460",
+      "actual_binary_sha256": "90ee6b046677525b2e2df567a7eef873e1bdd403f4462c0cf5642cecc8e11460",
+      "binary_matches": true,
+      "patch_actual_sha256": "03bfdd59d5b69b99619d1b86a3cf3cab363330196f7058d4aa3fb97e09aa5c68",
+      "patch_matches": true,
+      "source_actual_sha256": "4e74a01778df1dade5797104ffefac7f3d3b83bd91119135b3dc0836f3d2faf3",
+      "source_matches": true,
+      "trace_matches_frozen_baseline": true,
+      "trace_normalized_sha256": "e4534ee7968af2b61507f90378f635e42344833e507bcccf920d0cd597ec00b2"
+    },
+    "A2": {
+      "builds_json_binary_sha256": "7f023d3400fe42d3431204519662f40c45a3df0759a0d60f69ce0b51784d2913",
+      "actual_binary_sha256": "7f023d3400fe42d3431204519662f40c45a3df0759a0d60f69ce0b51784d2913",
+      "binary_matches": true,
+      "patch_actual_sha256": "d2bff63b24743abd384e9cbf81fbff7fbc78deefe0eee1e1e533c288d7430e09",
+      "patch_matches": true,
+      "source_actual_sha256": "db0935b19a05f885835463c2b1c6cc60a4aa5f030fa61c556e0b50eb24619f97",
+      "source_matches": true,
+      "trace_matches_frozen_baseline": true,
+      "trace_normalized_sha256": "e4534ee7968af2b61507f90378f635e42344833e507bcccf920d0cd597ec00b2"
+    }
+  },
+  "measured_binaries": {
+    "micro-M-timing": {
+      "expected": "b48424484a7fef13306413dc8be9cd1c42530ea54aee13668f30b167cb93b2e3",
+      "actual": "b48424484a7fef13306413dc8be9cd1c42530ea54aee13668f30b167cb93b2e3",
+      "matches": true
+    },
+    "micro-M-count": {
+      "expected": "bbb079c0e3dfd7d831f88c99ba45aa9122c0a236e8e4eb199aaa0a3160bc23b4",
+      "actual": "bbb079c0e3dfd7d831f88c99ba45aa9122c0a236e8e4eb199aaa0a3160bc23b4",
+      "matches": true
+    },
+    "formal-M": {
+      "builds_expected": "fbb49e7b2b3e2a0014442f470d8f70ecdee4f924e655af63c38b79e4bc7408bc",
+      "recorded_in_measurement": "fbb49e7b2b3e2a0014442f470d8f70ecdee4f924e655af63c38b79e4bc7408bc",
+      "actual": "fbb49e7b2b3e2a0014442f470d8f70ecdee4f924e655af63c38b79e4bc7408bc",
+      "matches": true
+    },
+    "micro-MA-timing": {
+      "expected": "1734a843077daf0869a9e6c93e7653e357feaa2a4d3f68434bdcc245e8ffd2ea",
+      "actual": "1734a843077daf0869a9e6c93e7653e357feaa2a4d3f68434bdcc245e8ffd2ea",
+      "matches": true
+    },
+    "micro-MA-count": {
+      "expected": "011720337d2a6984a663f3b57a3a9ca8a4d9f5ab51aec1e12321e4448a6ea4b0",
+      "actual": "011720337d2a6984a663f3b57a3a9ca8a4d9f5ab51aec1e12321e4448a6ea4b0",
+      "matches": true
+    },
+    "formal-MA": {
+      "builds_expected": "90ee6b046677525b2e2df567a7eef873e1bdd403f4462c0cf5642cecc8e11460",
+      "recorded_in_measurement": "90ee6b046677525b2e2df567a7eef873e1bdd403f4462c0cf5642cecc8e11460",
+      "actual": "90ee6b046677525b2e2df567a7eef873e1bdd403f4462c0cf5642cecc8e11460",
+      "matches": true
+    },
+    "micro-A2-timing": {
+      "expected": "93f504f930609b94e582708e55bf1654e3ce67f4223e1e9f7416048fe53bae26",
+      "actual": "93f504f930609b94e582708e55bf1654e3ce67f4223e1e9f7416048fe53bae26",
+      "matches": true
+    },
+    "micro-A2-count": {
+      "expected": "2938f316596793987b379741062122d4df9a01e7e1d3d0757363d142c0f18c03",
+      "actual": "2938f316596793987b379741062122d4df9a01e7e1d3d0757363d142c0f18c03",
+      "matches": true
+    },
+    "formal-A2": {
+      "builds_expected": "7f023d3400fe42d3431204519662f40c45a3df0759a0d60f69ce0b51784d2913",
+      "recorded_in_measurement": "7f023d3400fe42d3431204519662f40c45a3df0759a0d60f69ce0b51784d2913",
+      "actual": "7f023d3400fe42d3431204519662f40c45a3df0759a0d60f69ce0b51784d2913",
+      "matches": true
+    },
+    "extracted-M": {
+      "expected": "d63fc6fd39a438d40125fed5e2047faf5bd04973bc84037c2eac286dc152f4eb",
+      "recorded_in_measurement": "d63fc6fd39a438d40125fed5e2047faf5bd04973bc84037c2eac286dc152f4eb",
+      "matches": true
+    },
+    "extracted-MA": {
+      "expected": "862604a147cccd84b2ef76fd74eb936c4f83ba850b0f31a8fbff72b4bf6360f0",
+      "recorded_in_measurement": "862604a147cccd84b2ef76fd74eb936c4f83ba850b0f31a8fbff72b4bf6360f0",
+      "matches": true
+    },
+    "extracted-A2": {
+      "expected": "2c6ecb486885480c2bb4f07b63e84e648650f01427af547c7d3796d5b7432025",
+      "recorded_in_measurement": "2c6ecb486885480c2bb4f07b63e84e648650f01427af547c7d3796d5b7432025",
+      "matches": true
+    }
+  },
+  "all_matched": true
+}
