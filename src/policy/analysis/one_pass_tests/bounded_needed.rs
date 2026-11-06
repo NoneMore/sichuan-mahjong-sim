@@ -87,6 +87,31 @@ fn bounded_suit_fixtures() -> Vec<(&'static str, [u8; 9], [u8; 9])> {
     ]
 }
 
+/// The pending sequence tails require two distinct future ranks. These
+/// fixtures force the new lower bound to reject a branch before the old
+/// `cost > cutoff` check could reject its individual successors. The
+/// concrete-target oracle must still agree on every surviving table entry.
+#[test]
+fn pending_sequence_suffix_bound_preserves_exact_mask_unions() {
+    let fixtures = [
+        ([1, 0, 0, 0, 0, 0, 0, 0, 0], [4u8; 9]),
+        ([1, 0, 0, 3, 0, 0, 0, 0, 0], [4u8; 9]),
+        ([2, 0, 0, 1, 0, 0, 1, 0, 0], [4u8; 9]),
+        ([1, 1, 0, 1, 0, 0, 0, 0, 0], [4u8; 9]),
+        (
+            [1, 0, 0, 3, 0, 0, 0, 0, 0],
+            [4, 4, 0, 4, 4, 4, 4, 4, 4],
+        ),
+    ];
+    for (hand, capacity) in fixtures {
+        for target_sets in 0..=4 {
+            for cutoff in 0..=4 {
+                assert_bounded_suit_table(&hand, &capacity, target_sets, cutoff);
+            }
+        }
+    }
+}
+
 #[test]
 fn bounded_suit_tables_preserve_the_exact_prefix_for_every_fixture() {
     let cutoffs = [0u8, 1, 2, 3, 4, 5, 8, 13, 14];
