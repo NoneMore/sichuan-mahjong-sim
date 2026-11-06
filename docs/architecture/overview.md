@@ -54,6 +54,16 @@ policy-facing API. See [the game implementation](../../src/game.rs).
 
 ## Reproducibility boundary
 
+Heuristic ukeire bounds only the private Needed-mask suit DP with the exact
+deficit its caller already knows: strictly over-bound successors are discarded,
+while equal-cost paths still contribute their full optimal-mask union. Complete
+suit tables and cutoff-tagged bounded tables stay isolated within the same
+fixed-context evaluator; a bounded table is reused only when it covers the
+requested cutoff and never pollutes the complete-table cache. Ordinary distance
+and Surplus-mask analysis neither read nor allocate the lazily created bounded
+cache, and the full unbounded mask query remains available internally. Policy
+ranking, decisions, and checkpoint semantics are unchanged.
+
 Cloning `Game` preserves the authoritative position and RNG, **not** the
 state held by policies. To continue exactly with stateful policies such as
 `RandomPolicy`, checkpoint their state as well. `HeuristicPolicy` has no logical
@@ -81,6 +91,10 @@ so fresh instances reproduce continuation from a cloned game. The
 - [`src/policy/analysis/one_pass_tests.rs`](../../src/policy/analysis/one_pass_tests.rs)
   and its submodules: optimal-target masks, frozen ukeire/distance reference,
   concrete target oracles, full suit tables, ownership, ties, and cache ordering.
+  [`bounded_needed.rs`](../../src/policy/analysis/one_pass_tests/bounded_needed.rs)
+  checks bounded tables and global masks against those oracles, including strict
+  cutoff equality, zero-distance cases, complete/bounded cache isolation, and
+  cutoff ordering.
 - [`src/policy/analysis/tests.rs`](../../src/policy/analysis/tests.rs),
   [`src/policy/analysis/optimization_b_tests.rs`](../../src/policy/analysis/optimization_b_tests.rs),
   [`src/policy/analysis/optimization_a2_tests.rs`](../../src/policy/analysis/optimization_a2_tests.rs),

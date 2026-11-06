@@ -35,6 +35,7 @@
 //! - Trace-level baseline/candidate policy comparison, benchmark timings, and
 //!   the formal proof are separate deliverables.
 
+mod bounded_needed;
 mod oracle;
 mod states;
 mod suit;
@@ -237,6 +238,15 @@ fn check_state(state: &State, depth: CheckDepth) -> (u8, u32) {
     // production ukeire total must agree.
     let expected_ukeire = spec_ukeire(&state.hand, &state.public, mask);
     let production_ukeire = ukeire(&mut evaluator, &state.hand, &state.public, deficit);
+    // The evaluator above already holds the complete mask. Also exercise the
+    // production bounded calculation cold, rather than only its shared hit.
+    let mut cold = DistanceEvaluator::new(melds, state.missing).expect("at most four melds");
+    assert_eq!(
+        ukeire(&mut cold, &state.hand, &state.public, deficit),
+        expected_ukeire,
+        "{}: cold bounded ukeire differs from the mask/unseen formula",
+        state.label
+    );
     assert_eq!(
         production_ukeire, expected_ukeire,
         "{}: production ukeire differs from the mask/unseen formula",

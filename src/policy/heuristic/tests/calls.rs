@@ -494,6 +494,88 @@ fn added_kong_path_is_evaluated_and_can_be_chosen() {
 }
 
 #[test]
+fn concealed_added_kong_and_robbing_response_cover_hidden_analysis_paths() {
+    let missing = Suit::Tiao;
+    let source = Seat::new(1).expect("seat");
+
+    // The fixed self-play corpus never reaches a concealed kong. Construct one
+    // with the same progress rank as the ordinary discard so the kong wins the
+    // exact tie and the turn path definitely evaluates it.
+    let concealed_hand = suit_hand(&[1, 1, 1, 1, 2, 3, 4, 9], &[1, 2, 3, 7, 8, 9], &[]);
+    let kong_tile = tile(Suit::Wan, 1);
+    let discard_tile = tile(Suit::Wan, 4);
+    let actions = [
+        Action::ConcealedKong(kong_tile),
+        Action::Discard(discard_tile),
+    ];
+    let choice = decision(
+        &concealed_hand,
+        &[],
+        Some(missing),
+        DecisionStage::Turn,
+        None,
+        &actions,
+        &[],
+    );
+    assert_eq!(
+        HeuristicPolicy::new().choose(&choice),
+        Action::ConcealedKong(kong_tile),
+        "a concealed kong with equal progress must run through ukeire and win"
+    );
+
+    // Also pin the added-kong path with a constructed exact tie; the corpus
+    // does select an added kong, but never reaches an AddedKongResponse.
+    let melds = [Meld::peng(tile(Suit::Wan, 2), source)];
+    let added_hand = suit_hand(&[2, 3, 4, 5, 6, 7, 8, 9, 9], &[5, 5], &[]);
+    let added_tile = tile(Suit::Wan, 2);
+    let actions = [Action::AddedKong(added_tile), Action::Discard(added_tile)];
+    let choice = decision(
+        &added_hand,
+        &melds,
+        Some(missing),
+        DecisionStage::Turn,
+        None,
+        &actions,
+        &[],
+    );
+    assert_eq!(
+        HeuristicPolicy::new().choose(&choice),
+        Action::AddedKong(added_tile),
+        "an added kong with equal progress must run through ukeire and win"
+    );
+
+    // A robbing-added-kong response deliberately bypasses hand analysis and
+    // follows the supplied action order after the Hu check. The synthetic Peng
+    // option and DiscardResponse/robbing combination probe defensive policy
+    // behavior only; Game does not produce those robbing-response decisions.
+    let response_hand = suit_hand(&[1, 4, 7, 2, 9], &[1, 4, 7, 2], &[1, 4, 7, 2]);
+    let actions = [Action::Pass, Action::Peng];
+    for stage in [
+        DecisionStage::AddedKongResponse,
+        DecisionStage::DiscardResponse,
+    ] {
+        let response = decision(
+            &response_hand,
+            &[],
+            Some(missing),
+            stage,
+            Some(ResponseView {
+                source,
+                tile: tile(Suit::Wan, 2),
+                robbing_added_kong: true,
+            }),
+            &actions,
+            &[],
+        );
+        assert_eq!(
+            HeuristicPolicy::new().choose(&response),
+            Action::Pass,
+            "{stage:?}: a robbing-added-kong response must bypass analysis"
+        );
+    }
+}
+
+#[test]
 fn zero_availability_tenpai_still_uses_the_fan_tie_break() {
     let missing = Suit::Tiao;
     let hand = seven_pairs_plus_extra();

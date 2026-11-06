@@ -257,3 +257,18 @@ See the [archived summary](../specs/archive/one-pass-discard/results.md) for the
 258-test verification, cross-version replay, interleaved A/B results, and limits.
 One-off tools and raw measurements were deleted at the user's request; the
 reported gains are historical local observations, not performance guarantees.
+
+## Bounded exact Needed-mask DP
+
+Ukeire now passes its already-known exact deficit to a strict `g > d` cutoff in
+the Needed-mask suit DP, retaining every optimal mask bit. Ordinary distance,
+Surplus analysis, policy ordering and checkpoint semantics are unchanged.
+Formatting, warning-denied Clippy and **271 tests in debug and release** passed;
+the fixed 40-game comparison and checkpoint continuations matched the baseline,
+and both benchmark seeds met the pre-registered paired acceptance criteria.
+
+See the [archived result summary](../specs/archive/bounded-exact-needed-dp/results.md)
+for the pruning contract, correctness scope, and historical workload and timing
+figures. Raw counts, one-off tooling and binary mirrors were deleted at the
+user's request; the summary cannot be recomputed from repository samples, and
+its local observations are not a cross-machine performance promise.

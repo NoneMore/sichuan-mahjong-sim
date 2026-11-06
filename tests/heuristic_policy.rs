@@ -56,3 +56,59 @@ fn continuation_from_a_cloned_game_matches_with_fresh_policies() {
     assert_eq!(original.end_reason, resumed.end_reason);
     assert_eq!(score_sum(&original.scores), 0);
 }
+
+/// Multi-seed checkpoint continuation with fresh policy instances.
+///
+/// Seeds cover both groups of the fixed `bounded-exact-trace-v1` corpus. A
+/// game that ends before decision 24 is skipped exactly like the collector's
+/// checkpoint rule, but at least one seed per group must reach the checkpoint.
+#[test]
+fn multi_seed_checkpoint_resume_matches_with_fresh_policies() {
+    const CHECKPOINT: u64 = 24;
+    let mut resumed_seeds = [0usize; 2];
+
+    for seed in [7u64, 13, 24, 10_007, 10_026] {
+        let full = heuristic_runner().run_new(seed).unwrap();
+        let mut game = Game::new(seed);
+        let mut limited = heuristic_runner().with_decision_limit(CHECKPOINT);
+
+        match limited.run_game(&mut game) {
+            Err(RunnerError::DecisionLimit { limit }) => assert_eq!(limit, CHECKPOINT),
+            Ok(_) => {
+                assert!(game.result().is_some(), "seed {seed}: early game result");
+                continue;
+            }
+            Err(error) => panic!("seed {seed}: unexpected runner error {error:?}"),
+        }
+        assert!(
+            game.result().is_none(),
+            "seed {seed}: checkpoint should be mid-game"
+        );
+
+        let mut fork = game.clone();
+        limited.set_decision_limit(10_000);
+        let original = limited.run_game(&mut game).unwrap();
+        let resumed = heuristic_runner().run_game(&mut fork).unwrap();
+
+        assert_eq!(
+            original.trace,
+            full.trace[CHECKPOINT as usize..],
+            "seed {seed}: continuation must replay the uninterrupted trace"
+        );
+        assert_eq!(original.decisions + CHECKPOINT, full.decisions);
+        assert_eq!(original.trace, resumed.trace, "seed {seed}: fresh resume");
+        assert_eq!(original.scores, resumed.scores, "seed {seed}: scores");
+        assert_eq!(original.winners, resumed.winners, "seed {seed}: winners");
+        assert_eq!(
+            original.end_reason, resumed.end_reason,
+            "seed {seed}: end reason"
+        );
+        assert_eq!(score_sum(&original.scores), 0, "seed {seed}: zero-sum");
+        resumed_seeds[usize::from(seed >= 10_000)] += 1;
+    }
+
+    assert!(
+        resumed_seeds.iter().all(|&count| count > 0),
+        "both seed groups must reach the checkpoint"
+    );
+}

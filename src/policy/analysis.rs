@@ -25,13 +25,16 @@
 //!   evaluated with a closed form over held pair units and odd kinds for plain
 //!   distance and needed masks; the surplus query uses a small pair-unit DP.
 //!
-//! [`DistanceEvaluator::deficit_with_mask`] additionally propagates, for every
-//! DP state, the union of tile kinds that the cheapest partial targets reaching
+//! Needed-mask analysis additionally propagates, for every DP state, the union
+//! of tile kinds that the cheapest partial targets reaching
 //! that state still need, including kinds entirely absent from the hand.
 //! The resulting 27-bit mask is exactly the set of
 //! draws that lower the distance, so [`ukeire`] no longer reruns the distance
 //! analysis once per tile kind. The masked analysis keeps its own per-suit and
 //! full-hand caches: a plain-distance cache hit never answers a mask query.
+//! [`ukeire`] uses [`DistanceEvaluator::deficit_with_mask_bounded`] with its
+//! caller-known exact distance; the complete `deficit_with_mask` route remains
+//! available without a cutoff.
 //!
 //! [`DistanceEvaluator::deficit_with_surplus`] is the dual query for an
 //! original hand: it returns the same deficit together with the union of kinds
@@ -82,6 +85,10 @@ pub(crate) struct DistanceEvaluator<'a> {
     /// separate so that a plain hit never suppresses the mask analysis.
     suit_mask_cache: HashMap<(u8, [u8; 9]), MaskTable>,
     hand_mask_cache: HashMap<[u8; TILE_KINDS], (u8, u32)>,
+    /// Bounded needed-mask suit tables, `None` until the first bounded query
+    /// that actually needs a per-suit build. Ordinary distance, complete
+    /// needed masks, and surplus queries never allocate or consult it.
+    bounded_needed_cache: Option<Box<BoundedNeededCache>>,
     /// Surplus-analysis caches, `None` until the first surplus query so an
     /// evaluator used for ordinary distance or needed masks pays neither the
     /// analysis nor an allocation for them.
@@ -97,6 +104,29 @@ pub(crate) struct DistanceEvaluator<'a> {
 struct SurplusCache {
     suit: HashMap<(u8, [u8; 9]), MaskTable>,
     hand: HashMap<[u8; TILE_KINDS], (u8, u32)>,
+}
+
+/// One lazily built bounded-needed suit table.
+///
+/// `cutoff` is the exact full-hand distance the table was built for. Every
+/// entry with cost `<= cutoff` is exact, including its mask; every other entry
+/// is `(INF, 0)`. A cached table can therefore answer any query whose cutoff
+/// is no larger than `cutoff` after filtering its table rows, but a wider
+/// query must rebuild it.
+struct BoundedSuitTable {
+    cutoff: u8,
+    table: MaskTable,
+}
+
+/// Lazily allocated cache for bounded needed-mask suit tables.
+///
+/// Kept separate from the complete [`DistanceEvaluator::suit_mask_cache`] so a
+/// truncated table can never answer a complete query or a wider cutoff. The
+/// complete table is always read first and may serve any bounded query; a
+/// bounded build never writes the complete map.
+#[derive(Default)]
+struct BoundedNeededCache {
+    suit: HashMap<(u8, [u8; 9]), BoundedSuitTable>,
 }
 
 impl<'a> DistanceEvaluator<'a> {
@@ -125,6 +155,7 @@ impl<'a> DistanceEvaluator<'a> {
             hand_cache: HashMap::new(),
             suit_mask_cache: HashMap::new(),
             hand_mask_cache: HashMap::new(),
+            bounded_needed_cache: None,
             surplus_cache: None,
         })
     }
@@ -178,6 +209,12 @@ impl<'a> DistanceEvaluator<'a> {
     /// post-declaration shapes [`ukeire`] analyzes), a legal added copy of kind
     /// `t` strictly lowers this distance if and only if bit `t` is set. See
     /// `specs/archive/one-pass-ukeire/proof.md`.
+    ///
+    /// Production ukeire uses [`Self::deficit_with_mask_bounded`]. This
+    /// complete route stays available for differential tests and for callers
+    /// that do not already know the exact deficit; it is currently unreferenced
+    /// outside tests, so the dead-code lint is explicitly suppressed.
+    #[allow(dead_code)]
     pub(crate) fn deficit_with_mask(&mut self, hand: &Hand) -> (u8, u32) {
         let key = *hand.counts();
         if let Some(&cached) = self.hand_mask_cache.get(&key) {
@@ -206,6 +243,64 @@ impl<'a> DistanceEvaluator<'a> {
             result.0,
             self.deficit(hand),
             "the masked analysis must keep the exact plain deficit"
+        );
+        self.hand_mask_cache.insert(key, result);
+        result
+    }
+
+    /// Exact needed `(deficit, mask)` using a caller-known exact deficit as a
+    /// strict upper cutoff.
+    ///
+    /// `exact_deficit` must be `D_C(hand)` from this evaluator's context, as
+    /// supplied by every [`ukeire`] caller. All transition costs are
+    /// non-negative, so no target with total cost at most `exact_deficit` can
+    /// pass through a partial state whose accumulated cost exceeds it. A
+    /// strict `g > d` cutoff therefore preserves every per-suit entry with
+    /// cost `<= d` and its entire optimal mask; ties at `g == d` are kept
+    /// because they can still finish at cost `d` and contribute mask bits.
+    ///
+    /// The standard route may be truncated above `d`; the seven-pairs route is
+    /// evaluated exactly and merged as usual, so a strictly cheaper seven-pairs
+    /// target never becomes unreachable. Because every optimal full-hand
+    /// target has all its per-suit costs at most `d`, the merged result is the
+    /// complete global `(D, M)` and is cached in the shared hand mask cache.
+    ///
+    /// Bounded per-suit tables live in a separate cache and are only reused for
+    /// a query whose cutoff they already cover; the complete suit cache is
+    /// consulted first and is never written by this path.
+    pub(crate) fn deficit_with_mask_bounded(
+        &mut self,
+        hand: &Hand,
+        exact_deficit: u8,
+    ) -> (u8, u32) {
+        let key = *hand.counts();
+        if let Some(&cached) = self.hand_mask_cache.get(&key) {
+            return cached;
+        }
+
+        let (standard, standard_mask) =
+            self.standard_deficit_with_mask_bounded(&key, exact_deficit);
+        // Declared melds complete standard sets and disable seven pairs.
+        let (seven_pairs, seven_pairs_mask) = if self.melds.is_empty() {
+            self.seven_pairs_deficit_with_mask(&key)
+        } else {
+            (INF, 0)
+        };
+        let result = if seven_pairs < standard {
+            (seven_pairs, seven_pairs_mask)
+        } else if seven_pairs == standard {
+            (standard, standard_mask | seven_pairs_mask)
+        } else {
+            (standard, standard_mask)
+        };
+        debug_assert_eq!(
+            result.0, exact_deficit,
+            "bounded needed analysis must preserve the caller's exact deficit"
+        );
+        debug_assert_eq!(
+            result.0,
+            self.deficit(hand),
+            "the bounded analysis must keep the exact plain deficit"
         );
         self.hand_mask_cache.insert(key, result);
         result
@@ -336,12 +431,40 @@ impl<'a> DistanceEvaluator<'a> {
     /// combined costs tie, because both suit prefixes are then part of some
     /// cheapest target; a strictly cheaper combination replaces the mask
     /// instead of unioning it.
+    #[allow(dead_code)]
     fn standard_deficit_with_mask(&mut self, counts: &[u8; TILE_KINDS]) -> (u8, u32) {
         standard_masked::<false>(
             &mut self.suit_mask_cache,
             &self.capacities,
             self.target_sets,
             counts,
+        )
+    }
+
+    /// Bounded counterpart of [`Self::standard_deficit_with_mask`].
+    ///
+    /// The bounded suit cache stays `None` while complete suit tables can
+    /// serve the query; it is allocated only when an actual per-suit build is
+    /// needed.
+    fn standard_deficit_with_mask_bounded(
+        &mut self,
+        counts: &[u8; TILE_KINDS],
+        cutoff: u8,
+    ) -> (u8, u32) {
+        let Self {
+            suit_mask_cache,
+            bounded_needed_cache,
+            capacities,
+            target_sets,
+            ..
+        } = self;
+        standard_masked_bounded(
+            suit_mask_cache,
+            bounded_needed_cache,
+            capacities,
+            *target_sets,
+            counts,
+            cutoff,
         )
     }
 
@@ -510,6 +633,114 @@ fn standard_masked<const SURPLUS: bool>(
     }
 
     combine[target_sets][1]
+}
+
+/// Bounded counterpart of [`standard_masked`] for the needed mask.
+///
+/// `cutoff` is an exact full-hand deficit. A per-suit table entry with cost
+/// above it can never participate in an optimal full target, so it is treated
+/// as unreachable. The complete suit cache is consulted first and serves any
+/// cutoff; otherwise the bounded cache is reused only when its built cutoff is
+/// at least as wide as this query, and a wider query replaces the entry. A
+/// bounded build is never written into the complete cache.
+fn standard_masked_bounded(
+    suit_cache: &mut HashMap<(u8, [u8; 9]), MaskTable>,
+    bounded_cache: &mut Option<Box<BoundedNeededCache>>,
+    capacities: &[[u8; 9]; 3],
+    target_sets: usize,
+    counts: &[u8; TILE_KINDS],
+    cutoff: u8,
+) -> (u8, u32) {
+    debug_assert!(
+        cutoff < INF,
+        "a finite exact deficit is required for a bounded query"
+    );
+
+    let mut combine = [[(INF, 0u32); 2]; 5];
+    combine[0][0] = (0, 0);
+
+    for suit in Suit::ALL {
+        let mut local = [0u8; 9];
+        let start = suit.index() * 9;
+        local.copy_from_slice(&counts[start..start + 9]);
+        let key = (suit.index() as u8, local);
+
+        let mut table = match suit_cache.get(&key) {
+            Some(table) => *table,
+            None => match bounded_cache
+                .as_ref()
+                .and_then(|cache| cache.suit.get(&key))
+            {
+                Some(entry) if entry.cutoff >= cutoff => entry.table,
+                _ => {
+                    let table = suit_table_mask_bounded(
+                        &local,
+                        &capacities[suit.index()],
+                        target_sets,
+                        cutoff,
+                    );
+                    bounded_cache
+                        .get_or_insert_with(Box::default)
+                        .suit
+                        .insert(key, BoundedSuitTable { cutoff, table });
+                    table
+                }
+            },
+        };
+
+        // A complete table or a table built for a wider cutoff can carry
+        // finite entries above this query's cutoff. They are exact for their
+        // own cost, but this query must treat them as unreachable rather than
+        // letting a too-expensive suit participate.
+        for row in &mut table {
+            for entry in row {
+                if entry.0 > cutoff {
+                    *entry = (INF, 0);
+                }
+            }
+        }
+
+        let shift = (suit.index() * 9) as u32;
+        let mut next = [[(INF, 0u32); 2]; 5];
+        for sets in 0..=target_sets {
+            for pair in 0..=1 {
+                let (current, current_mask) = combine[sets][pair];
+                if current == INF {
+                    continue;
+                }
+                for suit_sets in 0..=(target_sets - sets) {
+                    for suit_pair in 0..=1 {
+                        if pair + suit_pair > 1 {
+                            continue;
+                        }
+                        let (cost, suit_mask) = table[suit_sets][suit_pair];
+                        if cost == INF {
+                            continue;
+                        }
+                        let total = current.saturating_add(cost);
+                        let mask = current_mask | (suit_mask << shift);
+                        let slot = &mut next[sets + suit_sets][pair + suit_pair];
+                        if total < slot.0 {
+                            *slot = (total, mask);
+                        } else if total == slot.0 {
+                            slot.1 |= mask;
+                        }
+                    }
+                }
+            }
+        }
+        combine = next;
+    }
+
+    let result = combine[target_sets][1];
+    // A standard route above the exact full-hand distance is not optimal and
+    // may have been truncated internally; normalize it instead of exposing a
+    // partial finite result. The caller merges the exact seven-pairs route.
+    if result.0 > cutoff {
+        (INF, 0)
+    } else {
+        result
+    }
 }
 
 /// Exact seven-pairs cost from the `P`/`O` quantities documented on
@@ -693,6 +924,24 @@ fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) 
     suit_table_masked::<false>(hand, capacity, target_sets)
 }
 
+/// Bounded needed-mask per-suit table for an exact full-hand cutoff.
+///
+/// Every entry with cost `<= cutoff` is exact; every other entry is `(INF, 0)`.
+/// Strictly greater successors are pruned, so a prefix at cost exactly `cutoff`
+/// remains available for zero-cost completion and its mask bits survive.
+fn suit_table_mask_bounded(
+    hand: &[u8; 9],
+    capacity: &[u8; 9],
+    target_sets: usize,
+    cutoff: u8,
+) -> MaskTable {
+    debug_assert!(
+        cutoff < INF,
+        "a finite exact deficit is required for a bounded query"
+    );
+    suit_table_masked_kernel::<false, true>(hand, capacity, target_sets, cutoff)
+}
+
 /// Shared masked per-suit DP for the needed and surplus masks.
 ///
 /// This mirrors [`suit_table`] transition for transition, including the A2
@@ -713,6 +962,20 @@ fn suit_table_masked<const SURPLUS: bool>(
     hand: &[u8; 9],
     capacity: &[u8; 9],
     target_sets: usize,
+) -> MaskTable {
+    suit_table_masked_kernel::<SURPLUS, false>(hand, capacity, target_sets, INF)
+}
+
+/// `BOUNDED` switches on the strict successor cutoff for a caller-known exact
+/// full-hand deficit. In the unbounded instantiation the cutoff comparison is a
+/// compile-time false and disappears, so the complete needed and surplus paths
+/// keep their original runtime behavior. Bounded queries are needed-only;
+/// surplus is never bounded.
+fn suit_table_masked_kernel<const SURPLUS: bool, const BOUNDED: bool>(
+    hand: &[u8; 9],
+    capacity: &[u8; 9],
+    target_sets: usize,
+    cutoff: u8,
 ) -> MaskTable {
     // Flat state: (((a * 5 + b) * 5 + sets) * 2 + pair_used).
     const STRIDE_A: usize = 5;
@@ -779,6 +1042,12 @@ fn suit_table_masked<const SURPLUS: bool>(
                         };
                         let extra = count.saturating_sub(hand[rank]);
                         let cost = current.saturating_add(extra);
+                        // A successor above the exact full-hand distance can
+                        // never belong to an optimal target. Keep `== cutoff`:
+                        // it may still finish at zero further cost.
+                        if BOUNDED && cost > cutoff {
+                            continue;
+                        }
                         let mask = if marked {
                             current_mask | (1u32 << rank)
                         } else {
@@ -812,7 +1081,12 @@ fn suit_table_masked<const SURPLUS: bool>(
     let mut table = [[(INF, 0u32); 2]; 5];
     for sets in 0..=target_sets {
         for pair in 0..=1 {
-            table[sets][pair] = dp[index(0, 0, sets, pair)];
+            let entry = dp[index(0, 0, sets, pair)];
+            table[sets][pair] = if BOUNDED && entry.0 > cutoff {
+                (INF, 0)
+            } else {
+                entry
+            };
         }
     }
     table
@@ -824,7 +1098,8 @@ fn suit_table_masked<const SURPLUS: bool>(
 /// or post-declaration, before the replacement draw), and `deficit` must be
 /// its exact distance `D(hand)` under the same evaluator context.
 ///
-/// The structural criterion is read from [`DistanceEvaluator::deficit_with_mask`]:
+/// The structural criterion is read from
+/// [`DistanceEvaluator::deficit_with_mask_bounded`] using the supplied distance:
 /// kind `t` improves the hand exactly when some optimal target needs it, i.e.
 /// when bit `t` is set. Justification, with the full proof in
 /// `specs/archive/one-pass-ukeire/proof.md`:
@@ -847,7 +1122,7 @@ pub(crate) fn ukeire(
     public: &[u8; TILE_KINDS],
     deficit: u8,
 ) -> u32 {
-    let (structural_deficit, mask) = evaluator.deficit_with_mask(hand);
+    let (structural_deficit, mask) = evaluator.deficit_with_mask_bounded(hand, deficit);
     debug_assert_eq!(
         structural_deficit, deficit,
         "ukeire must use the exact distance of the same hand and context"
