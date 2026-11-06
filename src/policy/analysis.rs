@@ -1017,6 +1017,25 @@ fn suit_table_masked_kernel<const SURPLUS: bool, const BOUNDED: bool>(
             if reserved > rank_capacity {
                 continue;
             }
+            // Open sequences must consume at least `a + b` at this rank
+            // and `b` at the next rank. No future choice can reduce these
+            // obligations, and neither obligation shares a held tile with
+            // the other. This gives an admissible suffix-cost lower bound.
+            //
+            // A strict comparison retains every equal-cost continuation
+            // and therefore the union of all optimal needed-mask bits.
+            // The unbounded instantiations eliminate this entire check.
+            if BOUNDED {
+                let forced_here = reserved.saturating_sub(hand[rank] as usize);
+                let forced_next = if rank + 1 < 9 {
+                    b.saturating_sub(hand[rank + 1] as usize)
+                } else {
+                    0
+                };
+                if current as usize + forced_here + forced_next > cutoff as usize {
+                    continue;
+                }
+            }
             let free = rank_capacity - reserved;
             let set_budget = target_sets - sets;
             let max_sequences = set_budget.min(max_new_sequences).min(free);
