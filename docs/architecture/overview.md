@@ -55,9 +55,13 @@ policy-facing API. See [the game implementation](../../src/game.rs).
 ## Reproducibility boundary
 
 Heuristic ukeire bounds only the private Needed-mask suit DP with the exact
-deficit its caller already knows: strictly over-bound successors are discarded,
-while equal-cost paths still contribute their full optimal-mask union. Complete
-suit tables and cutoff-tagged bounded tables stay isolated within the same
+deficit its caller already knows: a state is skipped when its accumulated cost
+plus the mandatory sequence-tail deficit exceeds the cutoff, and strictly
+over-bound successors are discarded. Equal-cost paths still contribute their
+full optimal-mask union. The additional state-level tail bound is a **research
+candidate on this branch, not an accepted optimization**: its short/long
+performance checks conflict; see the [active change results](../../specs/active/needed-suffix-bound/results.md).
+Complete suit tables and cutoff-tagged bounded tables stay isolated within the same
 fixed-context evaluator; a bounded table is reused only when it covers the
 requested cutoff and never pollutes the complete-table cache. Ordinary distance
 and Surplus-mask analysis neither read nor allocate the lazily created bounded
@@ -93,8 +97,8 @@ so fresh instances reproduce continuation from a cloned game. The
   concrete target oracles, full suit tables, ownership, ties, and cache ordering.
   [`bounded_needed.rs`](../../src/policy/analysis/one_pass_tests/bounded_needed.rs)
   checks bounded tables and global masks against those oracles, including strict
-  cutoff equality, zero-distance cases, complete/bounded cache isolation, and
-  cutoff ordering.
+  cutoff equality, mandatory-tail equality at ranks 7/8, zero-distance cases,
+  complete/bounded cache isolation, and cutoff ordering.
 - [`src/policy/analysis/tests.rs`](../../src/policy/analysis/tests.rs),
   [`src/policy/analysis/optimization_b_tests.rs`](../../src/policy/analysis/optimization_b_tests.rs),
   [`src/policy/analysis/optimization_a2_tests.rs`](../../src/policy/analysis/optimization_a2_tests.rs),

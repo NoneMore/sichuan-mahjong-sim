@@ -14,7 +14,11 @@
 //!   transitions, while never exposing a partial entry above `d`;
 //! - bounded suit tables are cached separately: the complete cache is read
 //!   first, never written by a bounded build, and a wider cutoff rebuilds an
-//!   entry while a narrower query may reuse it.
+//!   entry while a narrower query may reuse it;
+//! - the mandatory pending-tail bound is pinned at its equality boundary,
+//!   including DP ranks 7 and 8 where the in-rank and next-rank terms are
+//!   charged separately, using literal cost/mask premises from the
+//!   concrete-target oracle.
 //!
 //! Fixtures are the existing physical boundary/sampled positions plus small
 //! hand-constructed tables. The oracle is the independent concrete-target
@@ -22,7 +26,7 @@
 
 use super::super::{suit_table_mask_bounded, suit_table_with_mask, DistanceEvaluator, INF};
 use super::oracle::{reference_hand_mask, reference_suit_table};
-use super::states::{boundary_states, hand_from_counts, sampled_states, tile};
+use super::states::{assert_physical, boundary_states, hand_from_counts, sampled_states, tile};
 use crate::tile::{Suit, TILE_KINDS};
 
 fn grouped(groups: &[(Suit, &[u8])]) -> [u8; TILE_KINDS] {
@@ -98,10 +102,7 @@ fn pending_sequence_suffix_bound_preserves_exact_mask_unions() {
         ([1, 0, 0, 3, 0, 0, 0, 0, 0], [4u8; 9]),
         ([2, 0, 0, 1, 0, 0, 1, 0, 0], [4u8; 9]),
         ([1, 1, 0, 1, 0, 0, 0, 0, 0], [4u8; 9]),
-        (
-            [1, 0, 0, 3, 0, 0, 0, 0, 0],
-            [4, 4, 0, 4, 4, 4, 4, 4, 4],
-        ),
+        ([1, 0, 0, 3, 0, 0, 0, 0, 0], [4, 4, 0, 4, 4, 4, 4, 4, 4]),
     ];
     for (hand, capacity) in fixtures {
         for target_sets in 0..=4 {
@@ -155,6 +156,101 @@ fn strict_cutoff_keeps_an_equal_cost_prefix_with_a_zero_cost_suffix() {
     assert_bounded_suit_table(&hand, &capacity, 4, expected[4][0].0);
 }
 
+/// Trailing-rank fixture for the pending-tail bound.
+///
+/// The held 7W and 9W leave exactly one cost-one one-set target (row `[1][0]`):
+/// the 7-8-9 sequence over DP ranks 6..8, whose only needed rank is 7. At DP
+/// rank 7 the state carries `b = 1`: `forced_here` is 1 because the 8W is
+/// unheld, while `forced_next` is 0 because the held 9W covers the tile owed at
+/// DP rank 8. Charging the next-rank term against `hand[rank]` instead of
+/// `hand[rank + 1]` would over-prune here, since the only optimal path reaches
+/// `g + L == cutoff == 1`; the entry and its bit must survive.
+#[test]
+fn trailing_rank_tail_bound_keeps_the_literal_cost_one_entry() {
+    let hand = [0u8, 0, 0, 0, 0, 0, 1, 0, 1];
+    let capacity = [4u8; 9];
+    let expected = reference_suit_table(&hand, &capacity, 1);
+    assert_eq!(expected[1][0], (1, 1 << 7), "test premise");
+
+    for cutoff in 0..=3 {
+        assert_bounded_suit_table(&hand, &capacity, 1, cutoff);
+    }
+    assert_eq!(
+        suit_table_mask_bounded(&hand, &capacity, 1, 1)[1][0],
+        (1, 1 << 7),
+        "the equality entry must survive a cutoff it fills exactly",
+    );
+}
+
+/// The pending-tail obligation across the last two DP ranks.
+///
+/// With 7W and 8W held, the 6-7-8 (DP ranks 5..7) and 7-8-9 (DP ranks 6..8)
+/// sequences both cost exactly one and need disjoint ranks, so a cutoff of one
+/// has to keep both paths and union their bits. They charge the bound at
+/// different states: at DP rank 7 the 6-7-8 path has `a = 1, b = 0, g = 1` with
+/// nothing forced, while the 7-8-9 path has `a = 0, b = 1, g = 0` and
+/// `forced_next = 1` because the 9W is unheld; at DP rank 8 the 7-8-9 path then
+/// pays `forced_here = 1` from `a = 1`, the last rank contributing no next-rank
+/// term. The charged steps all land exactly on `g + L == cutoff`, so a `>=`
+/// comparison would drop a mask bit.
+#[test]
+fn last_rank_tails_keep_the_equality_entry_and_its_mask_union() {
+    let hand = [0u8, 0, 0, 0, 0, 0, 1, 1, 0];
+    let capacity = [4u8; 9];
+    let expected = reference_suit_table(&hand, &capacity, 1);
+    assert_eq!(expected[1][0], (1, (1 << 5) | (1 << 8)), "test premise");
+
+    for cutoff in 0..=2 {
+        assert_bounded_suit_table(&hand, &capacity, 1, cutoff);
+    }
+    assert_eq!(
+        suit_table_mask_bounded(&hand, &capacity, 1, 0)[1][0],
+        (INF, 0),
+        "a cutoff below the exact cost keeps nothing",
+    );
+    assert_eq!(
+        suit_table_mask_bounded(&hand, &capacity, 1, 1)[1][0],
+        (1, (1 << 5) | (1 << 8)),
+        "the last-rank equality path must contribute its mask bit",
+    );
+}
+
+/// The pending-tail bound after a sequence opens at DP rank 0.
+///
+/// A single held 1W covers DP rank 0, so the state at DP rank 1 carries
+/// `g == 0` with `b = 1`: one tile is owed at DP rank 1 and one at DP rank 2,
+/// giving `g + L == 2`. The cheapest one-set targets are the triplet of 1W
+/// (cost two, needing DP rank 0) and the 1-2-3 sequence (cost two, needing DP
+/// ranks 1 and 2), so the exact `[1][0]` entry is their equal-cost union
+/// `(2, 0b111)`. The three cutoffs place `g + L = 2` above, at, and below the
+/// cutoff.
+#[test]
+fn rank_two_tail_bound_splits_below_equal_and_above_the_cutoff() {
+    let hand = [1u8, 0, 0, 0, 0, 0, 0, 0, 0];
+    let capacity = [4u8; 9];
+    let expected = reference_suit_table(&hand, &capacity, 1);
+    assert_eq!(expected[1][0], (2, 0b111), "test premise");
+
+    for cutoff in [1u8, 2, 3] {
+        assert_bounded_suit_table(&hand, &capacity, 1, cutoff);
+    }
+    assert_eq!(
+        suit_table_mask_bounded(&hand, &capacity, 1, 1)[1][0],
+        (INF, 0),
+        "cutoff 1 is below `g + L = 2`, so the set stays unreachable",
+    );
+    assert_eq!(
+        suit_table_mask_bounded(&hand, &capacity, 1, 2)[1][0],
+        (2, 0b111),
+        "cutoff 2 equals `g + L`, so the sequence path and its bits survive",
+    );
+    assert_eq!(
+        suit_table_mask_bounded(&hand, &capacity, 1, 3)[1][0],
+        (2, 0b111),
+        "cutoff 3 is above `g + L` and must equal the oracle entry",
+    );
+}
+
 #[test]
 fn bounded_hand_queries_match_complete_and_concrete_oracles() {
     let mut states = boundary_states();
@@ -164,6 +260,9 @@ fn bounded_hand_queries_match_complete_and_concrete_oracles() {
     let mut zero_deficits = 0usize;
 
     for state in &states {
+        // The bound is only meaningful for a physically reachable post-discard
+        // position, so restate that premise at the bounded entry point.
+        assert_physical(state);
         let expected = reference_hand_mask(&state.hand, &state.melds, state.missing);
         let mut bounded =
             DistanceEvaluator::new(&state.melds, state.missing).expect("at most four melds");
@@ -237,6 +336,7 @@ fn zero_distance_hands_keep_the_empty_mask_under_a_zero_cutoff() {
 #[test]
 fn complete_and_bounded_queries_interleave_on_one_evaluator() {
     for state in boundary_states().iter().take(8) {
+        assert_physical(state);
         let expected = reference_hand_mask(&state.hand, &state.melds, state.missing);
 
         let mut complete_first =
@@ -451,6 +551,7 @@ fn bounded_physical_suit_tables_preserve_the_exact_prefix() {
     let mut states = boundary_states();
     states.extend(sampled_states());
     for state in &states {
+        assert_physical(state);
         let (cutoff, _) = reference_hand_mask(&state.hand, &state.melds, state.missing);
         let capacity = super::states::capacity_by_suit(&state.melds, state.missing);
         for suit in Suit::ALL {

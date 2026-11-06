@@ -272,3 +272,15 @@ for the pruning contract, correctness scope, and historical workload and timing
 figures. Raw counts, one-off tooling and binary mirrors were deleted at the
 user's request; the summary cannot be recomputed from repository samples, and
 its local observations are not a cross-machine performance promise.
+
+## Needed-mask mandatory-tail bound: research candidate (2026-11-06)
+
+This branch's mandatory sequence-tail cutoff remains a research candidate,
+not an accepted optimization. Formatting, warning-denied Clippy and **275 tests
+in debug and release** pass; the 40-game B/C trace and fresh-policy continuations
+match. Performance acceptance is **unresolved**: both short-batch seeds pass,
+but the pre-registered long cross-check fails for seed 10007. The PR stays draft.
+See the [active summary](../specs/active/needed-suffix-bound/results.md) for the
+protocol, environment, measurements and limits. One-off tools and raw artifacts
+were removed at the user's request; the summary cannot be recomputed from
+repository samples. Reduced DP work does not establish end-to-end acceptance.

@@ -928,7 +928,12 @@ fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) 
 ///
 /// Every entry with cost `<= cutoff` is exact; every other entry is `(INF, 0)`.
 /// Strictly greater successors are pruned, so a prefix at cost exactly `cutoff`
-/// remains available for zero-cost completion and its mask bits survive.
+/// remains available for zero-cost completion and its mask bits survive. A
+/// reachable state is also dropped before its transitions when the accumulated
+/// cost plus the mandatory pending tails already exceeds `cutoff`, where the
+/// tails are `a + b` tiles at the current rank and `b` at the next one. That
+/// bound is admissible and uses the same strict comparison, so it too keeps
+/// every `== cutoff` path; at rank 8 the next-rank term is zero.
 fn suit_table_mask_bounded(
     hand: &[u8; 9],
     capacity: &[u8; 9],
@@ -966,11 +971,13 @@ fn suit_table_masked<const SURPLUS: bool>(
     suit_table_masked_kernel::<SURPLUS, false>(hand, capacity, target_sets, INF)
 }
 
-/// `BOUNDED` switches on the strict successor cutoff for a caller-known exact
-/// full-hand deficit. In the unbounded instantiation the cutoff comparison is a
-/// compile-time false and disappears, so the complete needed and surplus paths
-/// keep their original runtime behavior. Bounded queries are needed-only;
-/// surplus is never bounded.
+/// `BOUNDED` switches on the two strict cutoffs for a caller-known exact
+/// full-hand deficit: pending sequence tails are charged before transitions are
+/// enumerated, and each individual successor cost is rejected above the
+/// cutoff. In the unbounded instantiation both comparisons are compile-time
+/// false and disappear, so the complete needed and surplus paths keep their
+/// original runtime behavior. Bounded queries are needed-only; surplus is never
+/// bounded.
 fn suit_table_masked_kernel<const SURPLUS: bool, const BOUNDED: bool>(
     hand: &[u8; 9],
     capacity: &[u8; 9],
@@ -1020,11 +1027,14 @@ fn suit_table_masked_kernel<const SURPLUS: bool, const BOUNDED: bool>(
             // Open sequences must consume at least `a + b` at this rank
             // and `b` at the next rank. No future choice can reduce these
             // obligations, and neither obligation shares a held tile with
-            // the other. This gives an admissible suffix-cost lower bound.
+            // the other, so their deficits add up instead of cancelling. This
+            // gives an admissible suffix-cost lower bound.
             //
             // A strict comparison retains every equal-cost continuation
-            // and therefore the union of all optimal needed-mask bits.
-            // The unbounded instantiations eliminate this entire check.
+            // and therefore the union of all optimal needed-mask bits. The
+            // last rank has no next rank, so its second term is zero and the
+            // check never reads `hand[9]`. The unbounded instantiations
+            // eliminate this entire check.
             if BOUNDED {
                 let forced_here = reserved.saturating_sub(hand[rank] as usize);
                 let forced_next = if rank + 1 < 9 {
