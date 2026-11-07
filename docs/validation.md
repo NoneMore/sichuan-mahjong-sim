@@ -258,6 +258,41 @@ See the [archived summary](../specs/archive/one-pass-discard/results.md) for the
 One-off tools and raw measurements were deleted at the user's request; the
 reported gains are historical local observations, not performance guarantees.
 
+## Bounded cross-decision masked-DP cache
+
+An explicit, byte-bounded `HeuristicCache` now memoizes exact masked suit tables
+across decisions, games, and explicitly shared heuristic seats. Decision-local
+caches remain the first lookup layer; ordinary distance tables, policy ranking,
+information boundaries, and checkpoint semantics are unchanged. The retained
+four-way round-robin layout uses a selected 26.5 MiB default and a configurable
+53 MiB comparison tier, plus zero-budget mode.
+
+Formatting, warning-denied Clippy/rustdoc, and **316 Rust tests in both debug
+and release** passed. An independently built original source `8332537` matched
+all eight fixed-corpus comparisons: 40 full games (2,179 decisions) and 39
+checkpoint continuations (1,221 decisions), using disabled, one-group
+eviction-heavy, 26.5 MiB and 53 MiB contexts in forward and reverse order.
+Permanent tests include complete table/oracle comparisons, shared/local cache
+isolation, resource accounting, and failure fallback.
+
+The `heuristic-benchmark-v2` tool makes cold/warm cache inheritance and
+initialization costs explicit. A converged, predeclared 276-arm experiment
+completed in 221 seconds without failures or degradation. At seeds 7/10007,
+26.5 MiB reduced paired 500-game cold-batch times by 41.87%/43.93%, 2,000-game
+accumulation times by 54.73%/55.78%, and 8/12/16-worker process makespans by
+21.82–27.09%; every main group passed its own B/B noise gate with 5/5 positive
+pairs. Doubling memory did not meet the predeclared extra-benefit threshold.
+Short 20-game batches did not pass the throughput gate; one-game cold-process
+times increased by 60.86–64.46%. The pressure fixture used 1 MiB and does not
+establish fully saturated production-budget throughput.
+
+See the [implementation and verification record](../specs/archive/bounded-masked-dp-cache/results.md)
+for the historical environment, memory and page-fault observations, and
+limitations. Temporary experiment tools and raw measurement data were removed at
+the user's request, so these figures cannot be recomputed from repository data.
+They are historical local observations, not a cross-machine or all-workload
+speedup guarantee.
+
 ## Bounded exact Needed-mask DP
 
 Ukeire now passes its already-known exact deficit to a strict `g > d` cutoff in

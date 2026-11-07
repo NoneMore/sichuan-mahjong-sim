@@ -14,6 +14,15 @@ use crate::hand::Hand;
 use crate::seat::{Seat, PLAYER_COUNT};
 use crate::tile::{Suit, Tile};
 
+/// Disabled cache for helper-level tests of the decision-local analysis.
+///
+/// These tests pin the original DP behavior with no cross-decision reuse; the
+/// cache wiring itself is covered by `analysis::cache_tests` and the public
+/// policy checks.
+fn uncached() -> HeuristicCache {
+    HeuristicCache::new(0).expect("zero disables the cache")
+}
+
 fn tile(suit: Suit, rank: u8) -> Tile {
     Tile::from_suit_rank(suit, rank).expect("rank in range")
 }
@@ -563,6 +572,96 @@ fn progress_of(hand: &Hand, melds: &[Meld], missing: Suit, public: &[u8; TILE_KI
     Progress {
         shanten: deficit as i32 - 1,
         ukeire: analysis::ukeire(&mut evaluator, hand, public, deficit),
+    }
+}
+
+/// The policy clone keeps sharing one cache, and the policy stays `Send + Sync`.
+#[test]
+fn cloned_policies_share_the_context_and_stay_send_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<HeuristicPolicy>();
+    assert_send_sync::<HeuristicCache>();
+
+    let policy = HeuristicPolicy::new();
+    let clone = policy.clone();
+    assert!(policy.cache().shares_context_with(clone.cache()));
+    assert_eq!(
+        policy.cache().status().budget_bytes,
+        crate::policy::DEFAULT_BUDGET_BYTES,
+        "the default budget is the experimental candidate, never zero"
+    );
+    assert_ne!(
+        policy.cache().status().state,
+        crate::policy::CacheState::Disabled,
+        "the default policy enables the cache"
+    );
+
+    let separate = HeuristicPolicy::new();
+    assert!(!policy.cache().shares_context_with(separate.cache()));
+}
+
+/// Four seats of a shared group share one default context.
+#[test]
+fn shared_group_binds_one_default_context() {
+    let group = HeuristicPolicy::shared_group();
+    for seat in 0..PLAYER_COUNT {
+        assert!(
+            group[0].cache().shares_context_with(group[seat].cache()),
+            "seat {seat} must share the group context"
+        );
+        let status = group[seat].cache().status();
+        assert_eq!(status.state, crate::policy::CacheState::Unallocated);
+        assert_eq!(status.budget_bytes, crate::policy::DEFAULT_BUDGET_BYTES);
+        assert_eq!(status.allocated_bytes, 0);
+    }
+    assert!(
+        !group[0]
+            .cache()
+            .shares_context_with(HeuristicPolicy::new().cache()),
+        "an independently created policy must not join the group"
+    );
+}
+
+/// Binding a cache must not change the chosen action.
+///
+/// The same decision is evaluated with the default context, a disabled
+/// context, a minimal enabled context, and a context whose one lazy allocation
+/// already failed. The first two choices of each policy also pin that a warm
+/// context cannot change a later decision.
+#[test]
+fn cache_state_never_changes_a_decision() {
+    let hand = suit_hand(&[1, 1, 2, 2, 3, 3, 4, 5, 6], &[1, 7, 8, 9, 9], &[]);
+    let actions = [
+        Action::Discard(tile(Suit::Wan, 1)),
+        Action::Discard(tile(Suit::Wan, 4)),
+        Action::Discard(tile(Suit::Tong, 1)),
+        Action::Discard(tile(Suit::Tong, 7)),
+        Action::Discard(tile(Suit::Tong, 9)),
+    ];
+    let decision = decision(
+        &hand,
+        &[],
+        Some(Suit::Tiao),
+        DecisionStage::Turn,
+        None,
+        &actions,
+        &[],
+    );
+    let expected = HeuristicPolicy::new().choose(&decision);
+
+    let minimum = crate::policy::cache::MINIMUM_BUDGET_BYTES;
+    for cache in [
+        HeuristicCache::new(0).expect("zero disables"),
+        HeuristicCache::new(minimum).expect("one group"),
+        HeuristicCache::new_with_allocation_failure(minimum),
+    ] {
+        let mut policy = HeuristicPolicy::with_cache(cache);
+        assert_eq!(policy.choose(&decision), expected);
+        assert_eq!(
+            policy.choose(&decision),
+            expected,
+            "a warm context must not change a later identical decision"
+        );
     }
 }
 

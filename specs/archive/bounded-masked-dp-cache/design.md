@@ -8,7 +8,8 @@
 基线 `9390264` 的缓存仅在一次决策内有效，见
 [`analysis.rs`](../../../src/policy/analysis.rs)。
 [历史研究](https://github.com/NoneMore/sichuan-mahjong-sim/blob/955b1785a44791c6444f4a51e41fb7d329976fc6/docs/studies/heuristic-space-time.md)
-支持增加跨决策缓存；旧原型和测量脚本已删除，需重新实现候选与采集证据。
+支持增加跨决策缓存；旧原型和测量脚本已删除，本次重新实现候选，临时实验
+工具与原始数据随后也按用户要求清理，结果见 [results.md](results.md)。
 
 ## 取舍
 
