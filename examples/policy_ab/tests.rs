@@ -1,4 +1,5 @@
 use super::*;
+use sichuan_mahjong_sim::policy::DEFAULT_BUDGET_BYTES;
 
 const LIMIT: u64 = 10_000;
 
@@ -9,6 +10,14 @@ fn plan(seeds: Vec<u64>, style_a: Style, style_b: Style) -> Plan {
         decision_limit: LIMIT,
         style_a,
         style_b,
+        cache_budget: CacheBudget::CandidateDefault,
+    }
+}
+
+fn plan_with_cache(seeds: Vec<u64>, style_a: Style, style_b: Style, bytes: usize) -> Plan {
+    Plan {
+        cache_budget: CacheBudget::Explicit(bytes),
+        ..plan(seeds, style_a, style_b)
     }
 }
 
@@ -230,7 +239,7 @@ fn run_record_names_the_selected_policies() {
         toolchain: "rustc test".to_owned(),
         warnings: Vec::new(),
     };
-    let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata);
+    let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata, None);
     assert!(text.contains("policy A: heuristic\n"), "{text}");
     assert!(text.contains("policy B: first\n"), "{text}");
     assert!(!text.contains("policy A: first"), "{text}");
@@ -565,7 +574,7 @@ fn missing_only_orientations_run_and_record_the_selected_policies() {
             toolchain: "rustc test".to_owned(),
             warnings: Vec::new(),
         };
-        let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata);
+        let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata, None);
         assert!(
             text.contains(&format!("policy A: {}\n", style_a.name())),
             "{text}"
@@ -683,6 +692,12 @@ fn execute_writes_artifacts_and_recomputes_the_summary_from_records() {
     let run_record = fs::read_to_string(out.join("run.txt")).unwrap();
     assert!(run_record.contains("simulator revision:"));
     assert!(run_record.contains("policy stream derivation: random_seat_seed"));
+    assert!(run_record.contains("heuristic cache: not applicable (no heuristic seat)"));
+    assert!(
+        !run_record.contains("heuristic cache scope:"),
+        "{run_record}"
+    );
+    assert!(!out.join("cache.txt").exists());
     assert!(run_record.contains(
         "invocation argv (debug-quoted, one element per argument): \
          [\"target/release/examples/policy_ab\", \"--out\", \"cargo test execute\"]"
@@ -715,7 +730,7 @@ fn invocation_arguments_keep_their_boundaries_in_the_run_record() {
         "a run dir".to_owned(),
         "he said \"hi\"".to_owned(),
     ];
-    let text = run_record_text(&plan, &invocation, &metadata);
+    let text = run_record_text(&plan, &invocation, &metadata, None);
     assert!(
         text.contains(
             "invocation argv (debug-quoted, one element per argument): \
@@ -749,7 +764,7 @@ fn unknown_metadata_is_rendered_with_its_warning() {
         toolchain: "unknown".to_owned(),
         warnings: vec!["simulator revision unavailable; recorded as unknown".to_owned()],
     };
-    let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata);
+    let text = run_record_text(&plan, &["policy_ab".to_owned()], &metadata, None);
     assert!(text.contains("simulator revision: unknown"), "{text}");
     assert!(text.contains("working tree dirty: unknown"), "{text}");
     assert!(text.contains("toolchain: unknown"), "{text}");
@@ -822,4 +837,315 @@ fn unavailable_metadata_is_recorded_as_unknown_with_a_warning() {
         "abc"
     );
     assert_eq!(warnings.len(), 1);
+}
+
+#[test]
+fn cache_budget_option_parses_and_requires_a_heuristic_seat() {
+    let args = |values: &[&str]| {
+        values
+            .iter()
+            .map(|value| (*value).to_owned())
+            .collect::<Vec<_>>()
+    };
+    let base = [
+        "--seeds",
+        "1",
+        "--policy-seed",
+        "3",
+        "--decision-limit",
+        "50",
+        "--out",
+        "run",
+        "--a",
+        "heuristic",
+        "--b",
+        "first",
+    ];
+
+    let Command::Run(defaults) = parse_args(args(&base)).unwrap() else {
+        panic!("expected a run command");
+    };
+    assert_eq!(defaults.plan.cache_budget, CacheBudget::CandidateDefault);
+    assert!(defaults.plan.uses_heuristic());
+
+    let mut explicit = base.to_vec();
+    explicit.extend_from_slice(&["--cache-budget-bytes", "0"]);
+    let Command::Run(options) = parse_args(args(&explicit)).unwrap() else {
+        panic!("expected a run command");
+    };
+    assert_eq!(options.plan.cache_budget, CacheBudget::Explicit(0));
+
+    let invalid = |extra: &[&str]| {
+        let mut values = base.to_vec();
+        values.extend_from_slice(extra);
+        parse_args(args(&values)).unwrap_err()
+    };
+    assert!(invalid(&["--cache-budget-bytes", "abc"]).contains("invalid"));
+    assert_eq!(
+        invalid(&["--cache-budget-bytes"]),
+        "--cache-budget-bytes requires a value"
+    );
+    assert_eq!(
+        invalid(&["--cache-budget-bytes", "1", "--cache-budget-bytes", "2",]),
+        "duplicate --cache-budget-bytes"
+    );
+
+    // No heuristic seat means the option is a configuration mistake, not an
+    // ignored setting.
+    let no_heuristic = [
+        "--seeds",
+        "1",
+        "--policy-seed",
+        "0",
+        "--decision-limit",
+        "10",
+        "--out",
+        "run",
+        "--cache-budget-bytes",
+        "100",
+    ];
+    let error = parse_args(args(&no_heuristic)).unwrap_err();
+    assert!(
+        error.contains("requires at least one heuristic seat"),
+        "{error}"
+    );
+
+    // The option is accepted when either arm is heuristic, including 0.
+    for styles in [
+        ["heuristic", "first"],
+        ["first", "heuristic"],
+        ["heuristic", "heuristic"],
+    ] {
+        let values = [
+            "--seeds",
+            "1",
+            "--policy-seed",
+            "0",
+            "--decision-limit",
+            "10",
+            "--out",
+            "run",
+            "--a",
+            styles[0],
+            "--b",
+            styles[1],
+            "--cache-budget-bytes",
+            "0",
+        ];
+        assert!(parse_args(args(&values)).is_ok(), "{styles:?}");
+    }
+}
+
+#[test]
+fn byte_values_are_strict_decimal_usize_counts() {
+    assert_eq!(parse_usize("--cache-budget-bytes", "0").unwrap(), 0);
+    assert_eq!(
+        parse_usize("--cache-budget-bytes", "27787264").unwrap(),
+        27_787_264
+    );
+    for value in [
+        "",
+        "+1",
+        "-1",
+        "1_000",
+        "0x10",
+        "1.5",
+        "18446744073709551616",
+    ] {
+        assert!(
+            parse_usize("--cache-budget-bytes", value).is_err(),
+            "{value}"
+        );
+    }
+}
+
+#[test]
+fn a_shared_heuristic_context_preserves_actions_across_games_and_placements() {
+    let cache = SharedCache::new(DEFAULT_BUDGET_BYTES).expect("candidate cache context");
+    let shared = play_with_cache(
+        31,
+        A_PAIRS[3],
+        Style::Heuristic,
+        Style::First,
+        5,
+        LIMIT,
+        Some(&cache),
+    )
+    .expect("shared-context game runs");
+    let fresh = play_with(31, A_PAIRS[3], Style::Heuristic, Style::First, 5, LIMIT)
+        .expect("fresh-context game runs");
+
+    assert_eq!(shared.scores, fresh.scores);
+    assert_eq!(shared.decisions, fresh.decisions);
+    assert_eq!(shared.end_reason, fresh.end_reason);
+    assert_eq!(shared.trace, fresh.trace);
+    assert!(!shared.trace.is_empty());
+    assert_ne!(cache.snapshot().state, "disabled");
+}
+
+#[test]
+fn run_plan_with_cache_shares_one_context_over_the_whole_run() {
+    let plan = plan_with_cache(
+        vec![7, 8],
+        Style::Heuristic,
+        Style::Heuristic,
+        DEFAULT_BUDGET_BYTES,
+    );
+    let cache = SharedCache::new(plan.cache_budget.bytes()).expect("cache context");
+    let mut output = Vec::new();
+    run_plan_with_cache(&plan, &mut output, Some(&cache)).expect("shared corpus runs");
+
+    let records = parse_records(&plan, &String::from_utf8(output).unwrap())
+        .expect("shared-context records parse");
+    assert_eq!(records.len(), 2 * A_PAIRS.len());
+    let summary = summarize(&plan, &records).expect("shared-context summary recomputes");
+    for entry in &summary.per_seed {
+        approx(entry.contrast, 0.0);
+    }
+    assert_ne!(cache.snapshot().state, "disabled");
+}
+
+#[test]
+fn execute_persists_the_explicit_cache_scope_and_allocation() {
+    let out = temp_dir("shared-cache-artifacts");
+    let plan = plan_with_cache(
+        vec![3],
+        Style::Heuristic,
+        Style::First,
+        DEFAULT_BUDGET_BYTES,
+    );
+    let summary = execute(&plan, &out, &["policy_ab".to_owned()]).expect("run succeeds");
+
+    let run_record = fs::read_to_string(out.join("run.txt")).unwrap();
+    assert!(
+        run_record.contains("heuristic cache scope: shared by all heuristic seats and all games"),
+        "{run_record}"
+    );
+    assert!(
+        run_record.contains("heuristic cache budget source: explicit"),
+        "{run_record}"
+    );
+    assert!(
+        run_record.contains(&format!(
+            "heuristic cache budget bytes: {DEFAULT_BUDGET_BYTES}"
+        )),
+        "{run_record}"
+    );
+    assert!(
+        run_record.contains("heuristic cache initial state: unallocated"),
+        "{run_record}"
+    );
+    assert!(
+        run_record.contains("heuristic cache context overhead bytes: "),
+        "{run_record}"
+    );
+
+    let cache_record = fs::read_to_string(out.join("cache.txt")).unwrap();
+    assert!(
+        cache_record.contains("scope: all heuristic seats in all games of this run"),
+        "{cache_record}"
+    );
+    assert!(
+        cache_record.contains("initial state: unallocated"),
+        "{cache_record}"
+    );
+    assert!(
+        cache_record.contains("initial context overhead bytes: "),
+        "{cache_record}"
+    );
+    assert!(
+        cache_record.contains("final context overhead bytes: "),
+        "{cache_record}"
+    );
+    assert!(
+        cache_record.contains("final state: ready"),
+        "{cache_record}"
+    );
+    assert!(cache_record.contains("warning count: 0"), "{cache_record}");
+    assert!(
+        cache_record.contains("final allocated bytes: "),
+        "{cache_record}"
+    );
+    assert!(summary.games > 0);
+
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+fn execute_persists_a_disabled_cache_without_table_allocation() {
+    let out = temp_dir("disabled-cache-artifacts");
+    let plan = plan_with_cache(vec![3], Style::Heuristic, Style::First, 0);
+    execute(&plan, &out, &["policy_ab".to_owned()]).expect("disabled-cache run succeeds");
+
+    let run_record = fs::read_to_string(out.join("run.txt")).unwrap();
+    assert!(
+        run_record.contains("heuristic cache budget bytes: 0"),
+        "{run_record}"
+    );
+    assert!(
+        run_record.contains("heuristic cache initial state: disabled"),
+        "{run_record}"
+    );
+
+    let cache_record = fs::read_to_string(out.join("cache.txt")).unwrap();
+    assert!(
+        cache_record.contains("final state: disabled"),
+        "{cache_record}"
+    );
+    assert!(
+        cache_record.contains("final allocated bytes: 0"),
+        "{cache_record}"
+    );
+    assert!(
+        cache_record.contains("final capacity entries: 0"),
+        "{cache_record}"
+    );
+
+    let _ = fs::remove_dir_all(&out);
+}
+
+#[test]
+fn invalid_cache_budgets_fail_before_creating_the_output_directory() {
+    let out = temp_dir("invalid-cache-budget");
+    let plan = plan_with_cache(vec![1], Style::Heuristic, Style::First, 1);
+    let error = execute(&plan, &out, &["policy_ab".to_owned()]).unwrap_err();
+    assert!(error.contains("invalid heuristic cache budget"), "{error}");
+    assert!(!out.exists(), "no output directory may be created");
+}
+
+#[test]
+fn cache_record_states_one_allocation_warning_per_context() {
+    let plan = plan_with_cache(vec![1], Style::Heuristic, Style::First, 4096);
+    let initial = CacheSnapshot {
+        state: "unallocated",
+        budget_bytes: 4096,
+        context_overhead_bytes: 256,
+        allocated_bytes: 0,
+        capacity_entries: 0,
+        occupied_entries: 0,
+        evictions: 0,
+        hits: 0,
+        misses: 0,
+    };
+    let final_snapshot = CacheSnapshot {
+        state: "allocation-failed",
+        budget_bytes: 4096,
+        context_overhead_bytes: 256,
+        allocated_bytes: 0,
+        capacity_entries: 0,
+        occupied_entries: 0,
+        evictions: 0,
+        hits: 0,
+        misses: 0,
+    };
+    let warnings = vec![
+        "policy_ab heuristic cache: heuristic cache allocation failed; caching is disabled \
+         for this context and the run continues"
+            .to_owned(),
+    ];
+    let text = cache_record_text(&plan, Some(initial), final_snapshot, &warnings);
+    assert!(text.contains("final state: allocation-failed"), "{text}");
+    assert!(text.contains("warning count: 1"), "{text}");
+    assert!(text.matches("warning: ").count() == 1, "{text}");
+    assert!(text.contains("budget source: explicit"), "{text}");
 }

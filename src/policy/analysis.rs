@@ -43,9 +43,11 @@
 //! per-candidate distance solve. It is not the complement of the needed mask
 //! and keeps its own caches, allocated only on the first surplus query.
 //!
-//! No heuristic shanten estimate is used. The only memoization is keyed by
-//! exact counted hands (and exact per-suit count vectors); it is local to one
-//! policy decision and can never change an action.
+//! No heuristic shanten estimate is used. The decision-local memoization is
+//! keyed by exact counted hands (and exact per-suit count vectors). An optional
+//! [`HeuristicCache`] may additionally hold exact masked per-suit tables across
+//! decisions; it is keyed by the complete local input of the kernel, is
+//! consulted only after the local caches miss, and can never change an action.
 
 use std::collections::HashMap;
 
@@ -54,6 +56,8 @@ use crate::eval;
 use crate::hand::Hand;
 use crate::rules::{self, WinMethod};
 use crate::tile::{Suit, Tile, COPIES_PER_TILE, TILE_KINDS};
+
+use super::cache::{HeuristicCache, MaskKind, COMPLETE_BOUND};
 
 const INF: u8 = u8::MAX;
 
@@ -67,7 +71,7 @@ type SuitTable = [[u8; 2]; 5];
 /// attaining that cost. Bits are local to the suit:
 /// rank `r` is `1 << r`, so bits 9.. are always zero. Unreachable entries are
 /// `(INF, 0)`; an entry with cost `INF` never carries a mask bit.
-type MaskTable = [[(u8, u32); 2]; 5];
+pub(crate) type MaskTable = [[(u8, u32); 2]; 5];
 
 /// Exact target-deficit evaluator for one fixed meld set and missing suit.
 ///
@@ -79,6 +83,9 @@ pub(crate) struct DistanceEvaluator<'a> {
     target_sets: usize,
     /// Per-suit, per-rank maximum concealed copies allowed in a target.
     capacities: [[u8; 9]; 3],
+    /// Optional cross-decision context for exact masked suit tables. It is
+    /// read only after the decision-local caches miss.
+    shared: Option<&'a HeuristicCache>,
     suit_cache: HashMap<(u8, [u8; 9]), SuitTable>,
     hand_cache: HashMap<[u8; TILE_KINDS], u8>,
     /// Masked counterparts of the two plain-distance caches. They are kept
@@ -131,7 +138,28 @@ struct BoundedNeededCache {
 
 impl<'a> DistanceEvaluator<'a> {
     /// Builds an evaluator, or `None` for an impossible meld count.
+    ///
+    /// This evaluator uses its decision-local caches only. Production binds an
+    /// explicit cross-decision context with [`Self::with_cache`]; this
+    /// uncached form backs the differential tests.
+    #[cfg(test)]
     pub(crate) fn new(melds: &'a [Meld], missing: Suit) -> Option<Self> {
+        Self::build(melds, missing, None)
+    }
+
+    /// Builds an evaluator that may reuse masked suit tables from `cache`.
+    ///
+    /// The local caches are still consulted first; a cross-decision hit fills
+    /// the corresponding local cache with the retrieved table.
+    pub(crate) fn with_cache(
+        melds: &'a [Meld],
+        missing: Suit,
+        cache: &'a HeuristicCache,
+    ) -> Option<Self> {
+        Self::build(melds, missing, Some(cache))
+    }
+
+    fn build(melds: &'a [Meld], missing: Suit, shared: Option<&'a HeuristicCache>) -> Option<Self> {
         if melds.len() > 4 {
             return None;
         }
@@ -151,6 +179,7 @@ impl<'a> DistanceEvaluator<'a> {
             missing,
             target_sets: 4 - melds.len(),
             capacities,
+            shared,
             suit_cache: HashMap::new(),
             hand_cache: HashMap::new(),
             suit_mask_cache: HashMap::new(),
@@ -344,10 +373,11 @@ impl<'a> DistanceEvaluator<'a> {
         let missing = self.missing;
         let target_sets = self.target_sets;
         let capacities = self.capacities;
+        let shared = self.shared;
         let cache = self.surplus_cache.get_or_insert_with(Box::default);
 
         let (standard, standard_mask) =
-            standard_masked::<true>(&mut cache.suit, &capacities, target_sets, &key);
+            standard_masked::<true>(&mut cache.suit, &capacities, target_sets, &key, shared);
         // Declared melds complete standard sets and disable seven pairs.
         let (seven_pairs, seven_pairs_mask) = if melds_empty {
             seven_pairs_deficit_surplus(missing, &key)
@@ -438,6 +468,7 @@ impl<'a> DistanceEvaluator<'a> {
             &self.capacities,
             self.target_sets,
             counts,
+            self.shared,
         )
     }
 
@@ -456,6 +487,7 @@ impl<'a> DistanceEvaluator<'a> {
             bounded_needed_cache,
             capacities,
             target_sets,
+            shared,
             ..
         } = self;
         standard_masked_bounded(
@@ -465,6 +497,7 @@ impl<'a> DistanceEvaluator<'a> {
             *target_sets,
             counts,
             cutoff,
+            *shared,
         )
     }
 
@@ -571,7 +604,8 @@ impl<'a> DistanceEvaluator<'a> {
 /// count below the held count). Costs are identical to
 /// [`DistanceEvaluator::standard_deficit`] in both variants; only the
 /// accumulated bits differ. The suit table is computed once per exact local
-/// hand and cached in the caller's cache, which belongs to one evaluator.
+/// hand and cached in the caller's cache, which belongs to one evaluator; an
+/// optional cross-decision context may answer the same key across evaluators.
 ///
 /// Suit-local masks are shifted to global tile indices and unioned on equal
 /// cost, because both prefixes are then part of some cheapest completion; a
@@ -581,6 +615,7 @@ fn standard_masked<const SURPLUS: bool>(
     capacities: &[[u8; 9]; 3],
     target_sets: usize,
     counts: &[u8; TILE_KINDS],
+    shared: Option<&HeuristicCache>,
 ) -> (u8, u32) {
     let mut combine = [[(INF, 0u32); 2]; 5];
     combine[0][0] = (0, 0);
@@ -593,8 +628,13 @@ fn standard_masked<const SURPLUS: bool>(
         let table = match suit_cache.get(&(suit.index() as u8, local)) {
             Some(table) => *table,
             None => {
-                let table =
-                    suit_table_masked::<SURPLUS>(&local, &capacities[suit.index()], target_sets);
+                let table = masked_suit_table::<SURPLUS, false>(
+                    &local,
+                    &capacities[suit.index()],
+                    target_sets,
+                    INF,
+                    shared,
+                );
                 suit_cache.insert((suit.index() as u8, local), table);
                 table
             }
@@ -643,6 +683,13 @@ fn standard_masked<const SURPLUS: bool>(
 /// cutoff; otherwise the bounded cache is reused only when its built cutoff is
 /// at least as wide as this query, and a wider query replaces the entry. A
 /// bounded build is never written into the complete cache.
+///
+/// A cross-decision miss computes the truncated table and stores it under the
+/// exact bound, so a table built for one cutoff never answers another one. A
+/// cross-decision hit fills the local bounded cache with the retrieved table;
+/// any local entry it replaces is narrower, because a wider local table is
+/// reused before the shared lookup. Query-time filtering happens on the
+/// returned copy and never rewrites a stored entry.
 fn standard_masked_bounded(
     suit_cache: &mut HashMap<(u8, [u8; 9]), MaskTable>,
     bounded_cache: &mut Option<Box<BoundedNeededCache>>,
@@ -650,6 +697,7 @@ fn standard_masked_bounded(
     target_sets: usize,
     counts: &[u8; TILE_KINDS],
     cutoff: u8,
+    shared: Option<&HeuristicCache>,
 ) -> (u8, u32) {
     debug_assert!(
         cutoff < INF,
@@ -673,11 +721,12 @@ fn standard_masked_bounded(
             {
                 Some(entry) if entry.cutoff >= cutoff => entry.table,
                 _ => {
-                    let table = suit_table_mask_bounded(
+                    let table = masked_suit_table::<false, true>(
                         &local,
                         &capacities[suit.index()],
                         target_sets,
                         cutoff,
+                        shared,
                     );
                     bounded_cache
                         .get_or_insert_with(Box::default)
@@ -914,14 +963,47 @@ fn suit_table(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> SuitTab
     table
 }
 
+/// Returns one masked per-suit table from the cross-decision cache or the DP.
+///
+/// `SURPLUS` selects the mask meaning and `BOUNDED` the truncated needed table
+/// for the caller's exact full-hand cutoff. The cross-decision key carries the
+/// kind and the exact bound, so a stored table can only answer the same query.
+/// A miss computes the table with the unchanged kernel and stores a copy; the
+/// returned table is owned by the caller, so the later cutoff filtering of the
+/// analysis never rewrites a stored entry.
+fn masked_suit_table<const SURPLUS: bool, const BOUNDED: bool>(
+    hand: &[u8; 9],
+    capacity: &[u8; 9],
+    target_sets: usize,
+    cutoff: u8,
+    shared: Option<&HeuristicCache>,
+) -> MaskTable {
+    let kind = if SURPLUS {
+        MaskKind::Surplus
+    } else {
+        MaskKind::Needed
+    };
+    let bound = if BOUNDED { cutoff } else { COMPLETE_BOUND };
+    if let Some(cache) = shared {
+        if let Some(table) = cache.lookup_suit(hand, capacity, target_sets, kind, bound) {
+            return table;
+        }
+    }
+    let table = suit_table_masked_kernel::<SURPLUS, BOUNDED>(hand, capacity, target_sets, cutoff);
+    if let Some(cache) = shared {
+        cache.insert_suit(hand, capacity, target_sets, kind, bound, &table);
+    }
+    table
+}
+
 /// Computes the exact masked per-suit table for a standard target, marking
 /// needed ranks (target count above the held count).
 ///
-/// Production goes through [`suit_table_masked`] directly; this alias is the
-/// test-facing name used by the complete-table checks.
+/// This is the test-facing name used by the complete-table checks; it goes
+/// through the same cache gate as production with no cross-decision context.
 #[cfg(test)]
 fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) -> MaskTable {
-    suit_table_masked::<false>(hand, capacity, target_sets)
+    masked_suit_table::<false, false>(hand, capacity, target_sets, INF, None)
 }
 
 /// Bounded needed-mask per-suit table for an exact full-hand cutoff.
@@ -929,6 +1011,10 @@ fn suit_table_with_mask(hand: &[u8; 9], capacity: &[u8; 9], target_sets: usize) 
 /// Every entry with cost `<= cutoff` is exact; every other entry is `(INF, 0)`.
 /// Strictly greater successors are pruned, so a prefix at cost exactly `cutoff`
 /// remains available for zero-cost completion and its mask bits survive.
+///
+/// This is the test-facing bounded build; production goes through
+/// [`masked_suit_table`] so the cross-decision context can answer first.
+#[cfg(test)]
 fn suit_table_mask_bounded(
     hand: &[u8; 9],
     capacity: &[u8; 9],
@@ -958,14 +1044,7 @@ fn suit_table_mask_bounded(
 /// never written or ORed because every written cost is finite: only reachable
 /// active states are expanded, and their target costs are too small to saturate
 /// at `INF`.
-fn suit_table_masked<const SURPLUS: bool>(
-    hand: &[u8; 9],
-    capacity: &[u8; 9],
-    target_sets: usize,
-) -> MaskTable {
-    suit_table_masked_kernel::<SURPLUS, false>(hand, capacity, target_sets, INF)
-}
-
+///
 /// `BOUNDED` switches on the strict successor cutoff for a caller-known exact
 /// full-hand deficit. In the unbounded instantiation the cutoff comparison is a
 /// compile-time false and disappears, so the complete needed and surplus paths
@@ -1175,6 +1254,8 @@ pub(crate) fn max_discard_fan(hand: &Hand, melds: &[Meld], missing: Suit) -> u8 
     best
 }
 
+#[cfg(test)]
+mod cache_tests;
 #[cfg(test)]
 mod discard_surplus_tests;
 #[cfg(test)]

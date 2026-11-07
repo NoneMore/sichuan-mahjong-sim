@@ -143,7 +143,15 @@ fn assert_rank_differential(
     candidates: &[Tile],
     with_fan: bool,
 ) {
-    let actual = rank_discards(hand, melds, missing, public, candidates, with_fan);
+    let actual = rank_discards(
+        hand,
+        melds,
+        missing,
+        public,
+        candidates,
+        with_fan,
+        &uncached(),
+    );
     let mut reference = reference_candidates(hand, melds, missing, public, candidates)
         .expect("test contexts use a legal meld count");
     let expected = reference_ranking(&mut reference, melds, missing, with_fan);
@@ -158,9 +166,16 @@ fn assert_rank_differential(
     for candidate in unique {
         match reference.iter().find(|scored| scored.tile == candidate) {
             Some(scored) => {
-                let (tile, progress) =
-                    rank_discards(hand, melds, missing, public, &[candidate], false)
-                        .expect("a held candidate is scored");
+                let (tile, progress) = rank_discards(
+                    hand,
+                    melds,
+                    missing,
+                    public,
+                    &[candidate],
+                    false,
+                    &uncached(),
+                )
+                .expect("a held candidate is scored");
                 assert_eq!(tile, candidate, "{label}: single candidate {candidate}");
                 assert_eq!(
                     progress.shanten,
@@ -173,7 +188,15 @@ fn assert_rank_differential(
                 );
             }
             None => assert_eq!(
-                rank_discards(hand, melds, missing, public, &[candidate], false),
+                rank_discards(
+                    hand,
+                    melds,
+                    missing,
+                    public,
+                    &[candidate],
+                    false,
+                    &uncached()
+                ),
                 None,
                 "{label}: invalid candidate {candidate} must be skipped"
             ),
@@ -190,8 +213,16 @@ fn single_deficit(
     public: &[u8; TILE_KINDS],
     candidate: Tile,
 ) -> u8 {
-    let (tile, progress) = rank_discards(hand, melds, missing, public, &[candidate], false)
-        .unwrap_or_else(|| panic!("candidate {candidate} must be held"));
+    let (tile, progress) = rank_discards(
+        hand,
+        melds,
+        missing,
+        public,
+        &[candidate],
+        false,
+        &uncached(),
+    )
+    .unwrap_or_else(|| panic!("candidate {candidate} must be held"));
     assert_eq!(tile, candidate);
     u8::try_from(progress.shanten + 1).expect("deficit fits in u8")
 }
@@ -720,8 +751,8 @@ fn candidate_subsets_order_duplicates_invalid_and_empty_lists_match() {
         true,
     );
     assert_eq!(
-        rank_discards(&hand, &[], missing, &public, &all, true),
-        rank_discards(&hand, &[], missing, &public, &reversed, true),
+        rank_discards(&hand, &[], missing, &public, &all, true, &uncached()),
+        rank_discards(&hand, &[], missing, &public, &reversed, true, &uncached()),
         "candidate order must not change a strict winner"
     );
 
@@ -749,7 +780,15 @@ fn candidate_subsets_order_duplicates_invalid_and_empty_lists_match() {
     assert!(more_ukeire.deficit > lower_deficit.deficit);
     assert!(more_ukeire.ukeire > lower_deficit.ukeire);
     assert_eq!(
-        rank_discards(&hand, &[], missing, &public, &[one_wan, one_tong], false),
+        rank_discards(
+            &hand,
+            &[],
+            missing,
+            &public,
+            &[one_wan, one_tong],
+            false,
+            &uncached()
+        ),
         Some((
             one_tong,
             Progress {
@@ -788,7 +827,7 @@ fn candidate_subsets_order_duplicates_invalid_and_empty_lists_match() {
     );
 
     assert_eq!(
-        rank_discards(&hand, &[], missing, &public, &[], true),
+        rank_discards(&hand, &[], missing, &public, &[], true, &uncached()),
         None,
         "an empty candidate list selects nothing"
     );
@@ -803,7 +842,8 @@ fn candidate_subsets_order_duplicates_invalid_and_empty_lists_match() {
             missing,
             &public,
             &[invalid, another_invalid],
-            true
+            true,
+            &uncached()
         ),
         None,
         "an all-invalid candidate list selects nothing"
@@ -845,9 +885,17 @@ fn fan_tie_break_matches_the_reference_on_tenpai_ties() {
     let higher_fan = tile(Suit::Wan, 7);
     let candidates = [lower_fan, higher_fan];
 
-    let without_fan = rank_discards(&hand, &[], missing, &public, &candidates, false)
-        .expect("both discards are legal");
-    let with_fan = rank_discards(&hand, &[], missing, &public, &candidates, true)
+    let without_fan = rank_discards(
+        &hand,
+        &[],
+        missing,
+        &public,
+        &candidates,
+        false,
+        &uncached(),
+    )
+    .expect("both discards are legal");
+    let with_fan = rank_discards(&hand, &[], missing, &public, &candidates, true, &uncached())
         .expect("both discards are legal");
     assert_eq!(
         without_fan.0, lower_fan,
@@ -907,7 +955,8 @@ fn fan_tie_break_matches_the_reference_on_tenpai_ties() {
             missing,
             &exhausted_public,
             &availability_candidates,
-            true
+            true,
+            &uncached()
         )
         .expect("both discards are legal")
         .0,
@@ -958,8 +1007,17 @@ fn repeated_and_interleaved_contexts_stay_reference_equivalent() {
         &standard_public,
         &standard_candidates,
         true,
+        &uncached(),
     );
-    let first_fan = rank_discards(&pairs, &[], missing, &fan_public, &fan_candidates, true);
+    let first_fan = rank_discards(
+        &pairs,
+        &[],
+        missing,
+        &fan_public,
+        &fan_candidates,
+        true,
+        &uncached(),
+    );
     let first_open = rank_discards(
         &open_hand,
         &[],
@@ -967,6 +1025,7 @@ fn repeated_and_interleaved_contexts_stay_reference_equivalent() {
         &open_public,
         &open_candidates,
         true,
+        &uncached(),
     );
     let first_peng = rank_discards(
         &peng_hand,
@@ -975,6 +1034,7 @@ fn repeated_and_interleaved_contexts_stay_reference_equivalent() {
         &peng_public,
         &all_candidates(&peng_hand),
         true,
+        &uncached(),
     );
 
     // Interleaving different hands, meld sets, missing suits, and public
@@ -987,12 +1047,21 @@ fn repeated_and_interleaved_contexts_stay_reference_equivalent() {
                 missing,
                 &standard_public,
                 &standard_candidates,
-                true
+                true,
+                &uncached()
             ),
             first_standard
         );
         assert_eq!(
-            rank_discards(&pairs, &[], missing, &fan_public, &fan_candidates, true),
+            rank_discards(
+                &pairs,
+                &[],
+                missing,
+                &fan_public,
+                &fan_candidates,
+                true,
+                &uncached()
+            ),
             first_fan
         );
         assert_eq!(
@@ -1002,7 +1071,8 @@ fn repeated_and_interleaved_contexts_stay_reference_equivalent() {
                 missing_tong,
                 &open_public,
                 &open_candidates,
-                true
+                true,
+                &uncached()
             ),
             first_open
         );
@@ -1013,7 +1083,8 @@ fn repeated_and_interleaved_contexts_stay_reference_equivalent() {
                 missing,
                 &peng_public,
                 &all_candidates(&peng_hand),
-                true
+                true,
+                &uncached()
             ),
             first_peng
         );
@@ -1030,7 +1101,8 @@ fn repeated_and_interleaved_contexts_stay_reference_equivalent() {
             missing,
             &standard_public,
             &reversed_standard,
-            true
+            true,
+            &uncached()
         ),
         first_standard
     );
@@ -1186,6 +1258,7 @@ fn reference_response_action(decision: &Decision<'_>, actions: &[Action], missin
             &public,
             response.tile,
             response.source,
+            &uncached(),
         )
     } else {
         None
@@ -1304,7 +1377,15 @@ fn peng_and_open_kong_decisions_match_the_removed_tile_reference() {
     assert_eq!(policy.choose(&tenpai_decision), Action::Pass);
     let tenpai_public = base_public(&tenpai_decision.observation);
     assert_eq!(
-        evaluate_peng(&tenpai, &[], missing, &tenpai_public, tenpai_claim, source),
+        evaluate_peng(
+            &tenpai,
+            &[],
+            missing,
+            &tenpai_public,
+            tenpai_claim,
+            source,
+            &uncached()
+        ),
         reference_evaluate_peng(&tenpai, &[], missing, &tenpai_public, tenpai_claim, source),
         "peng progress uses the same candidate deficits as the old path"
     );
@@ -1334,7 +1415,15 @@ fn peng_and_open_kong_decisions_match_the_removed_tile_reference() {
     assert_eq!(policy.choose(&open_decision), Action::Peng);
     let open_public = base_public(&open_decision.observation);
     assert_eq!(
-        evaluate_peng(&open, &[], missing, &open_public, open_claim, source),
+        evaluate_peng(
+            &open,
+            &[],
+            missing,
+            &open_public,
+            open_claim,
+            source,
+            &uncached()
+        ),
         reference_evaluate_peng(&open, &[], missing, &open_public, open_claim, source)
     );
 
@@ -1370,7 +1459,8 @@ fn peng_and_open_kong_decisions_match_the_removed_tile_reference() {
             missing,
             &six_pairs_public,
             six_pairs_claim,
-            source
+            source,
+            &uncached()
         ),
         reference_evaluate_peng(
             &six_pairs,

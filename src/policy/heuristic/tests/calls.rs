@@ -12,7 +12,7 @@ fn peng_must_strictly_lower_shanten() {
     let discards = [discard_info(source, claim, None, [false; 4])];
     let public = public_of(&discards, &[]);
     let pass = progress_of(&tenpai, &[], missing, &public);
-    let peng = evaluate_peng(&tenpai, &[], missing, &public, claim, source)
+    let peng = evaluate_peng(&tenpai, &[], missing, &public, claim, source, &uncached())
         .expect("peng then discard is legal");
     assert_eq!(peng.shanten, pass.shanten);
     assert!(
@@ -42,7 +42,7 @@ fn peng_must_strictly_lower_shanten() {
     let discards = [discard_info(source, claim, None, [false; 4])];
     let public = public_of(&discards, &[]);
     let pass = progress_of(&open, &[], missing, &public);
-    let peng = evaluate_peng(&open, &[], missing, &public, claim, source)
+    let peng = evaluate_peng(&open, &[], missing, &public, claim, source, &uncached())
         .expect("peng then discard is legal");
     assert!(
         peng.shanten < pass.shanten,
@@ -77,8 +77,16 @@ fn peng_cannot_use_the_seven_pairs_route_after_a_meld() {
 
     let pass = progress_of(&six_pairs, &[], missing, &public);
     assert_eq!(pass.shanten, 0, "the hand is a seven-pairs tenpai");
-    let peng = evaluate_peng(&six_pairs, &[], missing, &public, claim, source)
-        .expect("peng then discard is legal");
+    let peng = evaluate_peng(
+        &six_pairs,
+        &[],
+        missing,
+        &public,
+        claim,
+        source,
+        &uncached(),
+    )
+    .expect("peng then discard is legal");
     assert!(
         peng.shanten >= pass.shanten,
         "declaring a meld disables seven pairs, so it cannot strictly improve"
@@ -193,7 +201,7 @@ fn open_kong_gate_rejects_equal_shanten_with_less_ukeire() {
     let public = public_of(&discards, &[]);
 
     let pass = progress_of(&hand, &[], missing, &public);
-    let kong = evaluate_open_kong(&hand, &[], missing, &public, claim, source)
+    let kong = evaluate_open_kong(&hand, &[], missing, &public, claim, source, &uncached())
         .expect("open kong position");
     assert_eq!(pass.shanten, 0);
     assert_eq!(kong.shanten, pass.shanten);

@@ -23,19 +23,33 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitCode};
 
+#[path = "support/cache_tool.rs"]
+mod cache_tool;
+
+use cache_tool::{CacheSnapshot, CacheWarnings, SharedCache};
 use sichuan_mahjong_sim::policy::{
     random_seat_seed, FirstLegalPolicy, HeuristicPolicy, MissingOnlyPolicy, Policy, RandomPolicy,
+    DEFAULT_BUDGET_BYTES,
 };
 use sichuan_mahjong_sim::runner::{FinishReason, RunReport, Runner};
 use sichuan_mahjong_sim::{Seat, PLAYER_COUNT};
 
-const USAGE: &str = "\
+fn usage() -> String {
+    let candidate = DEFAULT_BUDGET_BYTES;
+    format!(
+        "\
 Usage: policy_ab --seeds LIST --policy-seed S --decision-limit N --out DIR \
-                 [--a STYLE] [--b STYLE]
+                 [--a STYLE] [--b STYLE] [--cache-budget-bytes BYTES]
 
 Runs balanced 2A2B games over an explicit seed list and writes reproducible
 artifacts to a fresh directory. A defaults to FirstLegalPolicy and B to
 RandomPolicy.
+
+Every heuristic seat in the run shares one explicit cache context across all
+games; non-heuristic seats never touch it. The context is created before play,
+so an invalid budget fails before the output directory is created. An
+allocation failure is warned about once on stderr and the run continues. The
+library itself prints no cache diagnostics.
 
 Options:
   --seeds LIST       Comma-separated, nonempty, distinct u64 game seeds.
@@ -46,8 +60,14 @@ Options:
                      missing-only. Default first.
   --b STYLE          Policy in the two remaining B seats: first, random,
                      heuristic, or missing-only. Default random.
+  --cache-budget-bytes BYTES
+                     Heuristic cache byte budget; 0 disables caching and the
+                     default is 26.5 MiB ({candidate}), selected for batch reuse.
+                     Requires at least one heuristic seat.
   -h, --help         Print this help and exit; arguments after it are ignored.
-";
+"
+    )
+}
 
 /// The six balanced A-seat pairs, in the order games are played.
 const A_PAIRS: [[Seat; 2]; 6] = [
@@ -64,6 +84,29 @@ const fn seat(index: usize) -> Seat {
     match Seat::new(index) {
         Some(seat) => seat,
         None => panic!("seat index out of range"),
+    }
+}
+
+/// Heuristic cache budget selected for the run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CacheBudget {
+    CandidateDefault,
+    Explicit(usize),
+}
+
+impl CacheBudget {
+    fn bytes(self) -> usize {
+        match self {
+            CacheBudget::CandidateDefault => DEFAULT_BUDGET_BYTES,
+            CacheBudget::Explicit(bytes) => bytes,
+        }
+    }
+
+    fn source(self) -> &'static str {
+        match self {
+            CacheBudget::CandidateDefault => "candidate-default",
+            CacheBudget::Explicit(_) => "explicit",
+        }
     }
 }
 
@@ -100,11 +143,19 @@ impl Style {
     /// is discardable and never changes later choices, so a fresh instance is a
     /// valid continuation of an existing heuristic seat. `MissingOnlyPolicy` is
     /// stateless for the same reason.
-    fn build(self, stream_seed: u64) -> Box<dyn Policy> {
+    ///
+    /// When `cache` is supplied, a heuristic seat binds to that shared context.
+    /// Other styles ignore it. A missing cache gives a heuristic seat its own
+    /// independent default context, which is useful for tests but is not how
+    /// this tool runs a comparison.
+    fn build(self, stream_seed: u64, cache: Option<&SharedCache>) -> Box<dyn Policy> {
         match self {
             Style::First => Box::new(FirstLegalPolicy::new()),
             Style::Random => Box::new(RandomPolicy::new(stream_seed)),
-            Style::Heuristic => Box::new(HeuristicPolicy::new()),
+            Style::Heuristic => match cache {
+                Some(cache) => Box::new(cache.policy()),
+                None => Box::new(HeuristicPolicy::new()),
+            },
             Style::MissingOnly => Box::new(MissingOnlyPolicy::new()),
             #[cfg(test)]
             Style::Rejecting => Box::new(RejectingPolicy),
@@ -136,6 +187,14 @@ struct Plan {
     decision_limit: u64,
     style_a: Style,
     style_b: Style,
+    cache_budget: CacheBudget,
+}
+
+impl Plan {
+    /// Whether this comparison has any heuristic seat that uses a cache.
+    fn uses_heuristic(&self) -> bool {
+        self.style_a == Style::Heuristic || self.style_b == Style::Heuristic
+    }
 }
 
 /// One completed game, also the serialized `games.tsv` row.
@@ -203,6 +262,7 @@ where
     let mut out = None;
     let mut style_a = None;
     let mut style_b = None;
+    let mut cache_budget = None;
     let mut arguments = args.into_iter();
 
     while let Some(argument) = arguments.next() {
@@ -272,21 +332,54 @@ where
                     .ok_or_else(|| "--b requires a value".to_owned())?;
                 style_b = Some(parse_style(&value)?);
             }
+            "--cache-budget-bytes" => {
+                if cache_budget.is_some() {
+                    return Err("duplicate --cache-budget-bytes".to_owned());
+                }
+                let value = arguments
+                    .next()
+                    .ok_or_else(|| "--cache-budget-bytes requires a value".to_owned())?;
+                cache_budget = Some(parse_usize("--cache-budget-bytes", &value)?);
+            }
             other => return Err(format!("unexpected argument '{other}'")),
         }
     }
 
+    let style_a = style_a.unwrap_or(Style::First);
+    let style_b = style_b.unwrap_or(Style::Random);
+    if cache_budget.is_some() && style_a != Style::Heuristic && style_b != Style::Heuristic {
+        return Err("--cache-budget-bytes requires at least one heuristic seat".to_owned());
+    }
     Ok(Command::Run(Options {
         plan: Plan {
             seeds: seeds.ok_or_else(|| "--seeds is required".to_owned())?,
             policy_seed: policy_seed.ok_or_else(|| "--policy-seed is required".to_owned())?,
             decision_limit: decision_limit
                 .ok_or_else(|| "--decision-limit is required".to_owned())?,
-            style_a: style_a.unwrap_or(Style::First),
-            style_b: style_b.unwrap_or(Style::Random),
+            style_a,
+            style_b,
+            cache_budget: match cache_budget {
+                Some(bytes) => CacheBudget::Explicit(bytes),
+                None => CacheBudget::CandidateDefault,
+            },
         },
         out: out.ok_or_else(|| "--out is required".to_owned())?,
     }))
+}
+
+/// Parses a decimal byte count that must fit this platform's `usize`.
+fn parse_usize(option: &str, value: &str) -> Result<usize, String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(format!(
+            "invalid {option} value '{value}': expected a decimal unsigned integer"
+        ));
+    }
+    let parsed = value
+        .parse::<u64>()
+        .map_err(|_| format!("invalid {option} value '{value}': out of range"))?;
+    usize::try_from(parsed).map_err(|_| {
+        format!("invalid {option} value '{value}': out of range for this platform's usize")
+    })
 }
 
 /// Parses and validates a comma-separated seed list.
@@ -314,7 +407,7 @@ fn parse_seeds(value: &str) -> Result<Vec<u64>, String> {
 fn main() -> ExitCode {
     match parse_args(env::args().skip(1)) {
         Ok(Command::Help) => {
-            print!("{USAGE}");
+            print!("{}", usage());
             ExitCode::SUCCESS
         }
         Ok(Command::Run(options)) => {
@@ -334,7 +427,7 @@ fn main() -> ExitCode {
         Err(message) => {
             eprintln!("error: {message}");
             eprintln!();
-            eprint!("{USAGE}");
+            eprint!("{}", usage());
             ExitCode::from(2)
         }
     }
@@ -351,6 +444,18 @@ fn execute(plan: &Plan, out: &Path, invocation: &[String]) -> Result<Summary, St
         eprintln!("warning: {warning}");
     }
 
+    // The heuristic context is created before any artifact or game so an
+    // invalid budget fails cleanly and an explicit scope is recorded up front.
+    let cache = if plan.uses_heuristic() {
+        Some(
+            SharedCache::new(plan.cache_budget.bytes())
+                .map_err(|error| format!("invalid heuristic cache budget: {error}"))?,
+        )
+    } else {
+        None
+    };
+    let initial_cache = cache.as_ref().map(SharedCache::snapshot);
+
     fs::create_dir(out).map_err(|error| {
         if error.kind() == io::ErrorKind::AlreadyExists {
             format!(
@@ -365,7 +470,7 @@ fn execute(plan: &Plan, out: &Path, invocation: &[String]) -> Result<Summary, St
     let run_record_path = out.join("run.txt");
     fs::write(
         &run_record_path,
-        run_record_text(plan, invocation, &metadata),
+        run_record_text(plan, invocation, &metadata, initial_cache),
     )
     .map_err(|error| format!("failed to write {}: {error}", run_record_path.display()))?;
 
@@ -381,13 +486,36 @@ fn execute(plan: &Plan, out: &Path, invocation: &[String]) -> Result<Summary, St
         .flush()
         .map_err(|error| format!("failed to write {}: {error}", records_path.display()))?;
 
-    run_plan(plan, &mut records_file).map_err(|error| {
+    let run_result = run_plan_with_cache(plan, &mut records_file, cache.as_ref());
+    drop(records_file);
+
+    // Report the context once. The library never prints, so the tool owns both
+    // the diagnostic and its persistence, including on a failed run.
+    let mut cache_warnings = Vec::new();
+    if let Some(cache) = &cache {
+        let snapshot = cache.snapshot();
+        let mut warner = CacheWarnings::default();
+        if let Some(warning) = warner.observe(snapshot, "policy_ab heuristic cache") {
+            eprintln!("warning: {warning}");
+            cache_warnings.push(warning);
+        }
+        let cache_path = out.join("cache.txt");
+        let text = cache_record_text(plan, initial_cache, snapshot, &cache_warnings);
+        match fs::write(&cache_path, text) {
+            Ok(()) => {}
+            // Preserve the original run error; a degraded or failed run keeps
+            // its records even if the cache observation cannot be written.
+            Err(_) if run_result.is_err() => {}
+            Err(error) => return Err(format!("failed to write {}: {error}", cache_path.display())),
+        }
+    }
+
+    run_result.map_err(|error| {
         format!(
             "{error}; completed records retained in {}",
             records_path.display()
         )
     })?;
-    drop(records_file);
 
     let records = read_records(plan, &records_path)?;
     let summary = summarize(plan, &records)?;
@@ -404,17 +532,31 @@ fn execute(plan: &Plan, out: &Path, invocation: &[String]) -> Result<Summary, St
 ///
 /// Only the persisted rows are produced here; the summary is later recomputed
 /// from the written file, which is the sole statistics input.
+#[cfg(test)]
 fn run_plan(plan: &Plan, out: &mut dyn Write) -> Result<(), String> {
+    run_plan_with_cache(plan, out, None)
+}
+
+/// Plays the plan with an optional shared heuristic context.
+///
+/// The context is used only by heuristic seats and is shared across every
+/// placement and game of the run; all other styles build their normal policies.
+fn run_plan_with_cache(
+    plan: &Plan,
+    out: &mut dyn Write,
+    cache: Option<&SharedCache>,
+) -> Result<(), String> {
     let index = SeedIndex::new(plan);
     for &seed in &plan.seeds {
         for pair in A_PAIRS {
-            let report = play_with(
+            let report = play_with_cache(
                 seed,
                 pair,
                 plan.style_a,
                 plan.style_b,
                 plan.policy_seed,
                 plan.decision_limit,
+                cache,
             )
             .map_err(|error| {
                 format!(
@@ -463,6 +605,7 @@ fn run_plan(plan: &Plan, out: &mut dyn Write) -> Result<(), String> {
 /// `random_seat_seed(seed ^ policy_seed, seat)`. A deterministic policy ignores
 /// the stream, and a random policy starts exactly there, so results do not
 /// depend on earlier games or loop order.
+#[cfg(test)]
 fn play_with(
     seed: u64,
     pair: [Seat; 2],
@@ -470,6 +613,27 @@ fn play_with(
     style_b: Style,
     policy_seed: u64,
     decision_limit: u64,
+) -> Result<RunReport, String> {
+    play_with_cache(
+        seed,
+        pair,
+        style_a,
+        style_b,
+        policy_seed,
+        decision_limit,
+        None,
+    )
+}
+
+/// Plays one game with fresh seat policies and an optional shared context.
+fn play_with_cache(
+    seed: u64,
+    pair: [Seat; 2],
+    style_a: Style,
+    style_b: Style,
+    policy_seed: u64,
+    decision_limit: u64,
+    cache: Option<&SharedCache>,
 ) -> Result<RunReport, String> {
     let mut a_seats = [false; PLAYER_COUNT];
     for seat in pair {
@@ -480,9 +644,9 @@ fn play_with(
         let seat = seat(index);
         let stream_seed = random_seat_seed(seed ^ policy_seed, seat);
         if a_seats[index] {
-            style_a.build(stream_seed)
+            style_a.build(stream_seed, cache)
         } else {
-            style_b.build(stream_seed)
+            style_b.build(stream_seed, cache)
         }
     });
 
@@ -764,7 +928,12 @@ fn parse_seat(field: &str) -> Result<Seat, String> {
 }
 
 /// Writes the pre-run reproducibility record.
-fn run_record_text(plan: &Plan, invocation: &[String], metadata: &Metadata) -> String {
+fn run_record_text(
+    plan: &Plan,
+    invocation: &[String],
+    metadata: &Metadata,
+    cache_initial: Option<CacheSnapshot>,
+) -> String {
     let mut text = String::new();
     text.push_str("# minimal native policy A/B comparison\n");
     text.push_str(&format!("simulator revision: {}\n", metadata.revision));
@@ -782,6 +951,29 @@ fn run_record_text(plan: &Plan, invocation: &[String], metadata: &Metadata) -> S
     ));
     text.push_str(&format!("policy A: {}\n", plan.style_a.name()));
     text.push_str(&format!("policy B: {}\n", plan.style_b.name()));
+    if plan.uses_heuristic() {
+        text.push_str(
+            "heuristic cache scope: shared by all heuristic seats and all games in this run; \
+             non-heuristic seats are untouched\n",
+        );
+        text.push_str(&format!(
+            "heuristic cache budget source: {}\n",
+            plan.cache_budget.source()
+        ));
+        text.push_str(&format!(
+            "heuristic cache budget bytes: {}\n",
+            plan.cache_budget.bytes()
+        ));
+        match cache_initial {
+            Some(snapshot) => text.push_str(&format!(
+                "heuristic cache initial state: {}\nheuristic cache context overhead bytes: {}\n",
+                snapshot.state, snapshot.context_overhead_bytes
+            )),
+            None => text.push_str("heuristic cache initial state: unknown\n"),
+        }
+    } else {
+        text.push_str("heuristic cache: not applicable (no heuristic seat)\n");
+    }
     text.push_str(&format!("policy seed: {}\n", plan.policy_seed));
     text.push_str(
         "policy stream derivation: random_seat_seed(game_seed ^ policy_seed, seat); \
@@ -806,6 +998,73 @@ fn run_record_text(plan: &Plan, invocation: &[String], metadata: &Metadata) -> S
          end_reason, decisions; summary.txt is recomputed from them\n",
     );
     for warning in &metadata.warnings {
+        text.push_str(&format!("warning: {warning}\n"));
+    }
+    text
+}
+
+/// Formats the persisted heuristic-cache observation.
+///
+/// This record exists only when the comparison has a heuristic seat. It states
+/// the explicit sharing scope, the configured and actual allocation, and any
+/// single allocation-failure warning, so a run can be classified without
+/// scraping stderr.
+fn cache_record_text(
+    plan: &Plan,
+    initial: Option<CacheSnapshot>,
+    final_snapshot: CacheSnapshot,
+    warnings: &[String],
+) -> String {
+    let mut text = String::new();
+    text.push_str("# heuristic cache observation\n");
+    text.push_str(
+        "scope: all heuristic seats in all games of this run; non-heuristic seats are untouched\n",
+    );
+    text.push_str(&format!(
+        "budget source: {}\nbudget bytes: {}\n",
+        plan.cache_budget.source(),
+        plan.cache_budget.bytes()
+    ));
+    if let Some(initial) = initial {
+        text.push_str(&format!(
+            "initial state: {}\n\
+             initial context overhead bytes: {}\n\
+             initial allocated bytes: {}\n\
+             initial capacity entries: {}\n\
+             initial occupied entries: {}\n\
+             initial evictions: {}\n\
+             initial hits: {}\n\
+             initial misses: {}\n",
+            initial.state,
+            initial.context_overhead_bytes,
+            initial.allocated_bytes,
+            initial.capacity_entries,
+            initial.occupied_entries,
+            initial.evictions,
+            initial.hits,
+            initial.misses
+        ));
+    }
+    text.push_str(&format!(
+        "final state: {}\n\
+         final context overhead bytes: {}\n\
+         final allocated bytes: {}\n\
+         final capacity entries: {}\n\
+         final occupied entries: {}\n\
+         final evictions: {}\n\
+         final hits: {}\n\
+         final misses: {}\n",
+        final_snapshot.state,
+        final_snapshot.context_overhead_bytes,
+        final_snapshot.allocated_bytes,
+        final_snapshot.capacity_entries,
+        final_snapshot.occupied_entries,
+        final_snapshot.evictions,
+        final_snapshot.hits,
+        final_snapshot.misses
+    ));
+    text.push_str(&format!("warning count: {}\n", warnings.len()));
+    for warning in warnings {
         text.push_str(&format!("warning: {warning}\n"));
     }
     text

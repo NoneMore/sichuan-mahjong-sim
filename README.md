@@ -61,12 +61,57 @@ define intended game semantics.
 
 `Runner::random(seed)` initializes a separate RNG stream for each seat. There is
 no heuristic or missing-only runner shortcut: build `HeuristicPolicy::new()` or
-`MissingOnlyPolicy::new()` values and pass them to `Runner::new`. The main
+`MissingOnlyPolicy::new()` values and pass them to `Runner::new`. For heuristic
+self-play, prefer `HeuristicPolicy::shared_group()` so all four seats share one
+bounded analysis-cache context rather than four independent budgets. The main
 simulation CLI still offers only `--policy first|random`. Both policies are
 available through the library and the
 [`policy_ab` example](#policy-ab-comparison-example); four-seat heuristic
 self-play also has a dedicated
 [`heuristic_bench` example](#heuristic-benchmark-example).
+
+### Heuristic cache contexts
+
+`HeuristicPolicy::new()` and `Default` create an independent, enabled cache
+context. `HeuristicPolicy::shared_group()` creates four policies sharing one
+default context. For a custom byte budget, disabled caching, or mixed policies,
+bind the same explicit context to the heuristic seats:
+
+```rust
+use sichuan_mahjong_sim::policy::{HeuristicCache, HeuristicPolicy, Policy};
+use sichuan_mahjong_sim::runner::Runner;
+
+let cache = HeuristicCache::new(27_787_264)?; // selected 26.5 MiB budget
+let policies = std::array::from_fn(|_| {
+    Box::new(HeuristicPolicy::with_cache(cache.clone())) as Box<dyn Policy>
+});
+let mut runner = Runner::new(policies);
+let report = runner.run_new(7)?;
+let status = cache.status();
+```
+
+A zero budget disables the cross-decision table, not the existing decision-local
+memoization. Invalid or too-small positive budgets return `CacheConfigError`.
+The large table is allocated lazily on the first masked-DP local miss, never
+exceeds its configured budget, and uses local replacement rather than growing
+or clearing the whole table. Fixed context overhead is reported separately.
+Allocation failure permanently disables new caching in that context without
+changing actions; the library does not print diagnostics. Inspect `status()`
+to distinguish disabled, unallocated, ready, and allocation-failed contexts.
+
+Cloning a policy or context shares its cache and initialization/failure state;
+the last holder releases it. Policies are `Clone` and `Send + Sync`, but no
+longer `Copy` or constant-constructible. There is no global or thread-local
+sharing. Reuse a context explicitly across decisions, games, or runners; use a
+new context to change its budget or start a cold experiment. Cache contents
+are discardable memoization and never part of a checkpoint.
+
+The 26.5 MiB default was selected against 53 MiB in paired batch measurements
+on the measured host; doubling memory did not reach the predeclared
+extra-benefit threshold. Short cold work may not amortize initialization, so
+isolated short tasks should consider budget `0`. See the
+[result summary](specs/archive/bounded-masked-dp-cache/results.md) for the
+historical workload, memory cost, and limitations.
 
 ### Runner API
 
@@ -240,7 +285,10 @@ rates.
 behavior; `--a` and `--b` select `first`, `random`, `heuristic`, or
 `missing-only` for each side. Every game seed is played six times with A in
 seats `[0,1] [0,2] [0,3] [1,2] [1,3] [2,3]` and B in the remaining seats, each
-placement using fresh policies and a fresh `Runner`. Each seat running
+placement using fresh policies and a fresh `Runner`. All heuristic seats on
+both sides share one explicit cache context across the complete invocation
+(seeds and placements); non-heuristic seats do not use it. The cache is
+memoization only and does not change the comparison's decisions. Each seat running
 `RandomPolicy` (on either side) starts from
 `policy::random_seat_seed(game_seed ^ policy_seed, seat)`; deterministic styles
 ignore that stream.
@@ -272,6 +320,7 @@ cargo run --release --example policy_ab -- \
 | `--out DIR` | Output directory; it must not already exist. |
 | `--a STYLE` | Policy in the two A seats: `first`, `random`, `heuristic`, or `missing-only`. Default `first`. |
 | `--b STYLE` | Policy in the two remaining seats: `first`, `random`, `heuristic`, or `missing-only`. Default `random`. |
+| `--cache-budget-bytes B` | Shared heuristic table budget in bytes; `0` disables it. Only valid when A or B is `heuristic`; the default is the selected 26.5 MiB library budget. |
 | `-h`, `--help` | Print usage and exit. |
 
 `--a` and `--b` are optional and independent, so `--a heuristic --b random` or
@@ -279,6 +328,10 @@ cargo run --release --example policy_ab -- \
 and `summary.txt`. Deterministic styles ignore the policy seed but still receive
 their seat's derived stream seed. The example validates this comparison
 workflow; it is not a policy-strength result.
+
+All contexts report their budget, allocation, and state in cache diagnostics;
+a failed allocation emits one warning per context while play continues. A
+cache-disabled comparison still keeps decision-local analysis memoization.
 
 `--out` uses a single `create_dir`, so an existing directory is refused rather
 than overwritten, and its parent directory must already exist (for example,
@@ -297,6 +350,10 @@ Artifacts are written to the fresh output directory:
   `a_seat0`/`a_seat1`, four zero-sum scores by seat, end reason, decision
   count). Records are flushed as games finish, so a failed run keeps its
   completed records.
+- `cache.txt` (when heuristic seats are present): the invocation-wide sharing
+  scope, budget source, initial/final cache status, fixed context overhead,
+  table allocation and counters, plus any allocation-failure warning. It is
+  retained on execution failure alongside completed game records.
 - `summary.txt`: `A_mean`, `B_mean`, `Delta = A_mean - B_mean` (positive
   favors A), the sample standard error over seed blocks (`SE`, unavailable for
   one seed), and each seed's `D`. The summary is recomputed from the persisted
@@ -317,34 +374,60 @@ four-seat `HeuristicPolicy` self-play through `Runner::run_batch`.
 It does not change game rules, policy decisions, or the main CLI.
 
 ```text
+# Cold measured context; warmup only warms process-level state:
 cargo run --release --example heuristic_bench -- --games 200 --seed 7 --warmup 20
+
+# Explicitly inherit the warmed context, using the 53 MiB candidate:
+cargo run --release --example heuristic_bench -- --games 200 --seed 7 \
+  --warmup 20 --lifecycle warm --cache-budget-bytes 55574528
 ```
 
-All three arguments are required: `--games N` is a positive measured game
-count, `--seed S` is the first measured seed, and `--warmup W` is an
-optional-in-effect warmup count (`0` disables it). `--help` prints usage.
-The measured games use wrapping seeds `S + i`; warmup uses the adjacent
-`W` seeds preceding `S`. The tool rejects `N + W > 2^64` to prevent
-overlap. A fresh `Runner` and four policies are constructed for each phase;
-policy instances are reused across games within their phase.
+`--games N` (positive) and `--seed S` are required. `--warmup W` defaults to
+`0`; `--lifecycle cold|warm` defaults to `cold`, and `warm` requires `W >= 1`.
+`--cache-budget-bytes B` selects the shared table budget (`0` disables the
+cross-decision cache; the selected 26.5 MiB default is 27,787,264 bytes; the
+53 MiB comparison tier is 55,574,528 bytes).
+`--help` prints usage. The measured games use wrapping seeds `S + i`; warmup
+uses the adjacent `W` seeds preceding `S`. The tool rejects `N + W > 2^64`
+to prevent overlap.
 
-The `heuristic-benchmark-v1` report uses one `key: value` per line.
-It records the workload, measured game/decision counts, wall time, policy and
-rule-driving times (seconds), throughput (games/s and decisions/s), mean
-policy cost (microseconds/decision), and terminal-game statistics. Field names
-carry units, `seat_order` labels the seat arrays, and `completed_games` records
-actual completions separately from the requested `games`. `unavailable` is used
-when a rate cannot be calculated.
-All timing and rates exclude warmup and construction of the measured runner.
-Batch wall time includes game construction, driving and aggregation; policy
-and rules timings need not sum to it. The mean policy cost covers all decision
-kinds; aggregate game results do not establish action-by-action equivalence.
-Warmup does not reset process-level caches or guarantee a speedup.
+All four seats share one context, reused across measured games. With `cold`,
+warmup uses a separate runner/context which is dropped before measurement;
+the measured context starts empty, and its lazy initialization is included in
+the measured batch time. With `warm`, one runner/context survives both phases,
+and initialization that occurs during warmup is charged to warmup instead.
+Cold `--warmup 0` in a fresh process also exercises full cold startup; measure
+external launch-to-exit wall time separately to include process startup.
+
+The `heuristic-benchmark-v2` report uses one `key: value` per line. It records
+the workload, lifecycle, sharing scope, budget, actual table allocation, cache
+state/counters before and after measurement, initialization boundary, separate
+warmup time, measured game/decision counts, batch/policy/rules times,
+throughput, mean policy cost, and terminal-game statistics. Cache-status
+snapshots are outside the timed batch. Field names carry units; `seat_order`
+labels seat arrays and `completed_games` records actual completions separately
+from requested `games`. Unavailable rates use `unavailable`.
+
+Measured `total_time` includes game construction, driving and aggregation, not
+runner construction, reporting, or warmup; policy and rules timings need not
+sum to it. Do not mix these batch times with external process wall times in a
+paired ratio. The mean policy cost covers every decision kind; aggregate game
+results do not establish action-by-action equivalence. Warmup does not reset
+process-level state or guarantee a speedup.
 
 The command reports one observation, not a statistical conclusion. Record the
-source revision, build/toolchain, environment and repeat-run conditions separately.
-Failed input, execution, or report output makes the run invalid; no partial
-batch is reported as a normal measurement.
+source revision, build/toolchain, environment and repeat-run conditions.
+Allocation degradation remains visible in the report and warns once per
+context; retain such runs but do not use them for performance adoption. Failed
+input, execution, or report output makes a run invalid; no partial batch is
+reported as a normal measurement.
+
+The figures are historical. Temporary experiment drivers, replay collectors,
+and raw measurement data were removed at the user's request, so the original
+samples cannot be recomputed from repository files. The permanent Rust cache,
+continuation, example, and benchmark tests remain in the tree; the
+[result summary](specs/archive/bounded-masked-dp-cache/results.md) retains the
+protocol, boundaries, and adoption results.
 
 ## Documentation
 

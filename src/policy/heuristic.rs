@@ -1,16 +1,20 @@
 //! Deterministic shanten-and-ukeire policy.
 //!
 //! The policy observes only [`Decision`], never the authoritative game or an
-//! opponent's concealed tiles. It has no RNG and no history-dependent logical
-//! state: all memoization lives inside one `choose` call.
+//! opponent's concealed tiles. It has no RNG. Decision-local memoization lives
+//! inside one `choose` call; exact masked suit tables may additionally be
+//! reused across decisions through the explicit [`HeuristicCache`] context the
+//! policy is bound to.
 
 use crate::action::{Action, Meld, MeldKind};
 use crate::game::{Decision, DecisionStage, LegalActions, Observation};
 use crate::hand::Hand;
 use crate::rules;
+use crate::seat::PLAYER_COUNT;
 use crate::tile::{Suit, Tile, TILE_KINDS};
 
 use super::analysis::{self, DistanceEvaluator};
+use super::cache::HeuristicCache;
 use super::Policy;
 
 /// Deterministic policy that ranks legal post-discard hands by exact target
@@ -30,13 +34,42 @@ use super::Policy;
 /// - a kong must have a `(S, -U)` rank no worse than the ordinary alternative;
 /// - on a response with both peng and open kong eligible, the better progress
 ///   rank wins and the kong wins an exact tie.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct HeuristicPolicy;
+///
+/// The policy is [`Clone`] and [`Send`] + [`Sync`], but not [`Copy`]: a clone
+/// keeps sharing its [`HeuristicCache`] context with the source. The cache is
+/// derived memoization only, so it never changes an action and never enters a
+/// checkpoint.
+#[derive(Clone, Debug, Default)]
+pub struct HeuristicPolicy {
+    cache: HeuristicCache,
+}
 
 impl HeuristicPolicy {
-    /// Creates the policy. The policy is stateless.
-    pub const fn new() -> Self {
-        Self
+    /// Creates a policy with its own cache context, enabled by default.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Creates a policy bound to an existing cache context.
+    ///
+    /// The context may be reused across decisions, games, and runners, and it
+    /// may be shared with other heuristic policies. Only heuristic seats share
+    /// tables; no other policy reads the context.
+    pub fn with_cache(cache: HeuristicCache) -> Self {
+        Self { cache }
+    }
+
+    /// Creates one policy per seat, all sharing one default cache context.
+    pub fn shared_group() -> [Self; PLAYER_COUNT] {
+        let cache = HeuristicCache::default();
+        std::array::from_fn(|_| Self {
+            cache: cache.clone(),
+        })
+    }
+
+    /// The cache context this policy is bound to.
+    pub fn cache(&self) -> &HeuristicCache {
+        &self.cache
     }
 }
 
@@ -60,9 +93,9 @@ impl Policy for HeuristicPolicy {
                 };
 
                 match decision.observation.stage {
-                    DecisionStage::Turn => choose_turn(decision, actions, missing),
+                    DecisionStage::Turn => choose_turn(decision, actions, missing, &self.cache),
                     DecisionStage::DiscardResponse => {
-                        choose_discard_response(decision, actions, missing)
+                        choose_discard_response(decision, actions, missing, &self.cache)
                     }
                     DecisionStage::AddedKongResponse => super::preferred_action(actions),
                     DecisionStage::Exchange | DecisionStage::MissingSuit => {
@@ -175,6 +208,7 @@ fn rank_discards(
     public_before_discard: &[u8; TILE_KINDS],
     candidates: &[Tile],
     with_fan: bool,
+    cache: &HeuristicCache,
 ) -> Option<(Tile, Progress)> {
     let mut evaluator: Option<DistanceEvaluator<'_>> = None;
     let mut base: Option<(u8, u32)> = None;
@@ -188,7 +222,7 @@ fn rank_discards(
         let (base_deficit, surplus) = match base {
             Some(value) => value,
             None => {
-                let mut fresh = DistanceEvaluator::new(melds, missing)?;
+                let mut fresh = DistanceEvaluator::with_cache(melds, missing, cache)?;
                 let value = fresh.deficit_with_surplus(hand);
                 evaluator = Some(fresh);
                 base = Some(value);
@@ -258,7 +292,12 @@ fn rank_discards(
 
 /// A turn: take Hu, short-circuit forced choices, then compare kongs with the
 /// best ordinary discard.
-fn choose_turn(decision: &Decision<'_>, actions: &[Action], missing: Suit) -> Action {
+fn choose_turn(
+    decision: &Decision<'_>,
+    actions: &[Action],
+    missing: Suit,
+    cache: &HeuristicCache,
+) -> Action {
     if let Some(&hu) = actions.iter().find(|action| matches!(action, Action::Hu)) {
         return hu;
     }
@@ -295,9 +334,15 @@ fn choose_turn(decision: &Decision<'_>, actions: &[Action], missing: Suit) -> Ac
         })
         .collect();
 
-    let Some((best_discard, alternative)) =
-        rank_discards(own_hand, own_melds, missing, &public, &discard_tiles, true)
-    else {
+    let Some((best_discard, alternative)) = rank_discards(
+        own_hand,
+        own_melds,
+        missing,
+        &public,
+        &discard_tiles,
+        true,
+        cache,
+    ) else {
         return super::preferred_action(actions);
     };
 
@@ -314,7 +359,7 @@ fn choose_turn(decision: &Decision<'_>, actions: &[Action], missing: Suit) -> Ac
                 Some(position) => position,
                 None => continue,
             };
-        let Some(mut evaluator) = DistanceEvaluator::new(&melds, missing) else {
+        let Some(mut evaluator) = DistanceEvaluator::with_cache(&melds, missing, cache) else {
             continue;
         };
         let deficit = evaluator.deficit(&hand);
@@ -417,7 +462,12 @@ fn kong_position(
 }
 
 /// A discard response: compare passing with peng and open kong.
-fn choose_discard_response(decision: &Decision<'_>, actions: &[Action], missing: Suit) -> Action {
+fn choose_discard_response(
+    decision: &Decision<'_>,
+    actions: &[Action],
+    missing: Suit,
+    cache: &HeuristicCache,
+) -> Action {
     if let Some(&hu) = actions.iter().find(|action| matches!(action, Action::Hu)) {
         return hu;
     }
@@ -437,7 +487,7 @@ fn choose_discard_response(decision: &Decision<'_>, actions: &[Action], missing:
     let own_melds = observation.own_melds;
     let public = base_public(observation);
 
-    let Some(mut pass_evaluator) = DistanceEvaluator::new(own_melds, missing) else {
+    let Some(mut pass_evaluator) = DistanceEvaluator::with_cache(own_melds, missing, cache) else {
         return super::preferred_action(actions);
     };
     let pass_deficit = pass_evaluator.deficit(own_hand);
@@ -454,6 +504,7 @@ fn choose_discard_response(decision: &Decision<'_>, actions: &[Action], missing:
             &public,
             response.tile,
             response.source,
+            cache,
         )
     } else {
         None
@@ -466,6 +517,7 @@ fn choose_discard_response(decision: &Decision<'_>, actions: &[Action], missing:
             &public,
             response.tile,
             response.source,
+            cache,
         )
     } else {
         None
@@ -516,6 +568,7 @@ fn evaluate_peng(
     public: &[u8; TILE_KINDS],
     tile: Tile,
     source: crate::seat::Seat,
+    cache: &HeuristicCache,
 ) -> Option<Progress> {
     let (_, hand, melds, public_after_claim) =
         claim_position(Action::Peng, own_hand, own_melds, public, tile, source)?;
@@ -527,6 +580,7 @@ fn evaluate_peng(
         &public_after_claim,
         &candidates,
         false,
+        cache,
     )?;
     Some(progress)
 }
@@ -539,10 +593,11 @@ fn evaluate_open_kong(
     public: &[u8; TILE_KINDS],
     tile: Tile,
     source: crate::seat::Seat,
+    cache: &HeuristicCache,
 ) -> Option<Progress> {
     let (_, hand, melds, adjusted) =
         claim_position(Action::OpenKong, own_hand, own_melds, public, tile, source)?;
-    let mut evaluator = DistanceEvaluator::new(&melds, missing)?;
+    let mut evaluator = DistanceEvaluator::with_cache(&melds, missing, cache)?;
     let deficit = evaluator.deficit(&hand);
     Some(Progress {
         shanten: deficit as i32 - 1,

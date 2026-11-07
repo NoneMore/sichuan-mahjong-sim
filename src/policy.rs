@@ -17,18 +17,29 @@
 //!   actions or from the eligible exchange tiles.
 //! - [`HeuristicPolicy`] is deterministic and ranks legal post-discard hands by
 //!   exact target-deficit shanten, then unseen improving copies, then a tenpai
-//!   fan tie-break. Its analysis is private and local to each decision.
+//!   fan tie-break. Its analysis is private; reusable masked suit tables may be
+//!   memoized by the explicit [`HeuristicCache`] context described below.
 //! - [`MissingOnlyPolicy`] is the missing-suit-only ablation: it uses exactly
 //!   the [`FirstLegalPolicy`] choice everywhere except the missing-suit
 //!   declaration, where it uses the [`HeuristicPolicy`] fewest-tile rule.
+//!
+//! [`HeuristicCache`] is a byte-bounded cross-decision context for exact masked
+//! suit tables. It is enabled by default with a 26.5 MiB budget, can be
+//! bound explicitly with [`HeuristicPolicy::with_cache`] or shared by four
+//! seats with [`HeuristicPolicy::shared_group`], and never changes an action:
+//! it only reuses derived tables that a fresh context recomputes. No cache
+//! state enters a game checkpoint. The `cache` module documents the key,
+//! layout, and lifecycle contract.
 //!
 //! No policy reads privileged game state; none is a search or evaluation
 //! engine in the rollout sense.
 
 mod analysis;
+mod cache;
 mod heuristic;
 mod missing_only;
 
+pub use cache::{CacheConfigError, CacheState, CacheStatus, HeuristicCache, DEFAULT_BUDGET_BYTES};
 pub use heuristic::HeuristicPolicy;
 pub use missing_only::MissingOnlyPolicy;
 
