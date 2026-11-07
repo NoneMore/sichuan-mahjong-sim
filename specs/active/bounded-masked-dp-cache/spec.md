@@ -1,0 +1,90 @@
+# Bounded Masked DP Cache — Specification
+
+关联：[Issue #17](https://github.com/NoneMore/sichuan-mahjong-sim/issues/17)；取舍见 [design.md](design.md)。
+
+## 范围
+
+增加默认开启、按字节有界的跨决策 masked 花色 DP 精确缓存，保持策略动作、规则、
+信息边界和 checkpoint 语义不变，普通距离表保持原路径。
+范围不含整手结果、ukeire、动作缓存，以及新剪枝、近似分析或转移预计算。
+
+## 接口与资源行为
+
+| 接口 | 行为 |
+| --- | --- |
+| `HeuristicPolicy::new() -> Self` / `Default` | 创建独立策略，缓存默认开启 |
+| `HeuristicCache::new(bytes: usize) -> Result<Self, CacheConfigError>` | 校验预算并创建上下文 |
+| `HeuristicPolicy::with_cache(cache: HeuristicCache) -> Self` | 绑定已有上下文，可跨决策、游戏和 Runner 复用 |
+| `HeuristicPolicy::shared_group() -> [Self; PLAYER_COUNT]` | 四席共用一份默认上下文 |
+| `cache.status() -> CacheStatus` | 返回状态、配置预算、实际表分配和可用条目数的快照 |
+
+- 自定义预算或混合策略组分别绑定同一上下文，仅启发式席位共享；无 TLS 或全局自动共享。
+- 策略和上下文的 `clone()` 共享缓存、初始化及降级状态；最后一个持有者释放时回收。
+  策略保留 `Clone`、`Send + Sync`，移除 `Copy` 和常量构造。
+- 预算 0 表示关闭，正数表示字节上限。表分配包含条目、对齐、索引和替换元数据，
+  不超过预算；固定上下文开销单列。调整预算通过新建上下文完成。
+- 无效或过小的非零预算在创建时返回 `CacheConfigError`，提供标准错误接口和可读说明。
+- 大表在首次本地未命中、需要跨决策查询时分配，每个上下文只初始化一次。
+  分配失败后禁用该上下文的新增缓存，不自动重试，原计算继续。
+- `CacheStatus` 区分主动关闭、尚未分配、可用和分配失败。库不打印；
+  命令行工具对每个分配失败的上下文警告一次。
+- 容量满后局部替换，不扩容或整表清空。关闭时新增表分配为零，保留原决策内缓存。
+- 缓存可随时丢弃，不进入 checkpoint；fresh policy 能从 cloned game 精确续局。
+
+## 查询与结果
+
+查询顺序：本地缓存 → 跨决策缓存 → 原 DP；跨决策命中填充本地缓存。
+
+逻辑 key：
+
+```text
+(hand[9], target_capacity[9], target_sets, Needed/Surplus, bound)
+```
+
+key 自持输入并完整匹配。capacity 表达副露和缺门限制，允许 `hand > capacity`。
+首个候选按精确 bound 分键，完整查询使用无界标记；保留现有本地完整／有界表的
+覆盖复用与过滤。公开剩余牌数、对手暗牌、牌墙及其他席位查询历史不参与结果计算。
+
+值为完整 `5 × 2` 表，每项保留最小 cost 及全部等成本最优分支的九位局部 mask 并集。
+不可达项为 `(INF, 0)`，`INF = 255`；有界表精确保留 `cost <= bound` 的项，
+其余为 `(INF, 0)`。编码无损，查询过滤不改写共享条目。
+
+## 首个实验候选
+
+固定分组，每组 4 条。命中不调整顺序；未命中优先用空位，组满后循环替换一条，
+仅推进该组的替换位置。比较 26.5 MiB 与 53 MiB 两档预算。
+生产默认额度及最终布局／替换规则由同预算测量选择。
+
+## 验收
+
+### 正确性与资源
+
+- cached/uncached 逐项比较完整表，并与独立 target oracle 交叉验证。覆盖 key 各维度、
+  不可达、多最优 mask、bound 相等、碰撞、驱逐和先窄后宽。
+- 固定可重现的语料，比较原基线、候选关闭及开启时的完整动作轨迹与终局结果；
+  覆盖冷暖、查询顺序、不同上下文、合法动作、seed replay 和 clone/fresh-policy 续局。
+- 验证共享与释放、预算上限、关闭零表分配、延迟初始化、配置错误及分配失败降级。
+
+### 性能
+
+报告采用 `heuristic-benchmark-v2`，默认冷缓存起步，暖缓存单独测量。
+冷批次从空上下文开始并在批次内积累，暖批次显式继承预热上下文。
+完整冷启动另测；初始化成本计入实际发生的阶段。
+
+- 至少两个 seed，每个工作负载、每个 seed 先做 3 对生产基线 B/B，
+  再做 5 对基线／候选，运行次序交错。正式测量前固定工作负载、seed、预热和顺序。
+  候选关闭模式仅用于观察接线开销。
+- 按相同字节预算比较候选变量，覆盖短任务、超容量长批次及 8/12/16 worker。
+- 记录源码、构建、环境、种子、计时边界、共享范围、冷暖、预算、实际分配、吞吐、
+  private commit、working set 和换页；多 worker 的启动与观测方法可重建。
+- 运行失败或分配降级时保留数据，该组不作性能采用结论；不删除或追加样本凑通过。
+
+对每个工作负载、每个 seed，以相同计时边界的端到端墙钟计算：
+
+- 噪声上限 `N = max(|1 - B_second / B_first|)`，取 3 对 B/B。
+- 配对耗时降幅 `R = 1 - C / B`，取 5 对基线／候选。
+- 至少 4/5 对 `R > 0` 且 `median(R) > N`，通过该组吞吐判据。
+
+冷启动、长跑和各 worker 档位分别报告，不跨组抵消。
+执行[项目标准检查](../../../docs/governance.md#documentation-and-verification)及
+`cargo test --release --all-targets`，更新受影响的使用、架构和验证说明。
