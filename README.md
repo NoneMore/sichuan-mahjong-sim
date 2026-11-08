@@ -48,16 +48,9 @@ define intended game semantics.
   applies conservative peng and kong gates. It reads only `Decision`, uses no
   RNG, and has no logical checkpoint state; any internal analysis cache is
   discardable without changing later decisions.
-- `MissingOnlyPolicy`: missing-suit-only ablation. It makes exactly the
-  `FirstLegalPolicy` choice at every decision except the missing-suit
-  declaration, where it uses the `HeuristicPolicy` fewest-tile rule (fewest own
-  tiles after the exchange, lowest suit index on a tie). `MissingOnlyPolicy`
-  and `HeuristicPolicy` share exchange selection and the missing-suit rule, so
-  comparing the ablation with `FirstLegalPolicy` isolates the value of a
-  non-arbitrary suit declaration, while comparing it with `HeuristicPolicy`
-  measures the remaining
-  heuristic play logic, including discard ranking and the peng/kong gates. It
-  is stateless.
+- `MissingOnlyPolicy`: stateless ablation that uses the heuristic
+  fewest-tile missing-suit declaration and delegates all other choices to
+  `FirstLegalPolicy`. It shares the heuristic exchange-selection behavior.
 
 `Runner::random(seed)` initializes a separate RNG stream for each seat. There is
 no heuristic or missing-only runner shortcut: build `HeuristicPolicy::new()` or
@@ -90,28 +83,13 @@ let report = runner.run_new(7)?;
 let status = cache.status();
 ```
 
-A zero budget disables the cross-decision table, not the existing decision-local
-memoization. Invalid or too-small positive budgets return `CacheConfigError`.
-The large table is allocated lazily on the first masked-DP local miss, never
-exceeds its configured budget, and uses local replacement rather than growing
-or clearing the whole table. Fixed context overhead is reported separately.
-Allocation failure permanently disables new caching in that context without
-changing actions; the library does not print diagnostics. Inspect `status()`
-to distinguish disabled, unallocated, ready, and allocation-failed contexts.
-
-Cloning a policy or context shares its cache and initialization/failure state;
-the last holder releases it. Policies are `Clone` and `Send + Sync`, but no
-longer `Copy` or constant-constructible. There is no global or thread-local
-sharing. Reuse a context explicitly across decisions, games, or runners; use a
-new context to change its budget or start a cold experiment. Cache contents
-are discardable memoization and never part of a checkpoint.
-
-The 26.5 MiB default was selected against 53 MiB in paired batch measurements
-on the measured host; doubling memory did not reach the predeclared
-extra-benefit threshold. Short cold work may not amortize initialization, so
-isolated short tasks should consider budget `0`. See the
-[result summary](specs/archive/bounded-masked-dp-cache/results.md) for the
-historical workload, memory cost, and limitations.
+A zero budget disables only cross-decision memoization; failed allocation
+also falls back to exact analysis without changing choices. Inspect
+`cache.status()` for diagnostics, and use a new context for a different budget
+or independent cold run. See [Policy architecture](docs/architecture/policy.md#cache-and-checkpoint-boundary)
+for the design constraints and the
+[historical cache study](specs/archive/bounded-masked-dp-cache/results.md)
+for measured trade-offs.
 
 ### Runner API
 

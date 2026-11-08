@@ -7,9 +7,8 @@ information boundaries**. Game is not a policy or a match-level controller.
 
 ## Ownership
 
-- [`game.rs`](../../src/game.rs) owns the wall and RNG, concealed hands, melds,
-  public discard history, missing-suit declarations, pass locks, pending
-  decisions, scores, winners, and staged choices.
+- [`game.rs`](../../src/game.rs) owns authoritative hand state, pending
+  choices, progression and physical tile ownership.
 - [`game/settlement.rs`](../../src/game/settlement.rs) implements payments,
   winner bookkeeping, and wall-exhaustion settlement on that **same** `Game`
   instance. It does not own an independent ledger or state machine.
@@ -74,10 +73,9 @@ not additional game rules.
 
 ## Replay and verification
 
-A cloned `Game` includes its own RNG, wall position, and pending decision.
-It does **not** include independently owned stateful policies; see
-[execution checkpoints](execution.md#continuation-and-seeds).
-Do not move a transition into Runner or Policy as a way to simplify Game.
+`Game::clone` preserves hand state but not independently owned policies.
+See [execution checkpoints](execution.md#continuation-and-seeds) for full
+continuation, and keep transitions inside Game.
 
 Start regression work in the [game scenario modules](../../src/game/tests.rs),
 [public decision contracts](../../tests/decision_contract.rs),

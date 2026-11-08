@@ -8,47 +8,32 @@ options belong in the [development guide](../development.md).
 
 ## Composition
 
-Both tools use the production [Runner](execution.md) and the
-[Policy subsystem](policy.md) rather than reaching into a privileged Game
-state. Private `cli` modules validate workload inputs and `report`
-modules format results; [shared cache tooling](../../examples/support/cache_tool.rs)
-constructs explicit contexts and reports allocation problems.
-
-The A/B tool separates [comparison execution](../../examples/policy_ab/comparison.rs)
-from [validated persisted-record aggregation](../../examples/policy_ab/records.rs).
-The benchmark separates [warmup and measured phases](../../examples/heuristic_bench/phases.rs)
-from report generation. These are different evidence pipelines, not a
-single mandatory framework or another source of game semantics.
+Both tools use the production [Runner](execution.md) and
+[Policy](policy.md) boundary, not privileged Game state. Shared support
+constructs explicit cache contexts; the examples own experiment lifecycles,
+record validation and reporting, not gameplay rules.
 
 ## Balanced policy comparison
 
-[`policy_ab`](../../examples/policy_ab.rs) runs a balanced 2A2B design:
-each game seed is exercised with all six choices of the two A seats.
-Every placement constructs fresh seat policies and a fresh Runner, so
-stateful policy RNG streams do not leak between comparisons. Heuristic seats
-can deliberately share one explicit analysis-cache context over the
-invocation; that cache does not affect the action sequence.
+[`policy_ab`](../../examples/policy_ab.rs) compares policies across
+balanced seat placements. Every placement uses fresh policies and a new
+Runner, preventing RNG state from carrying across comparisons; only explicit
+heuristic memoization may outlive a placement.
 
-Execution, persisted game records, validation, aggregation, and presentation
-are separate private modules. The completed `games.tsv` rows are the
-statistics input; the summary is **reconstructed from those persisted
-records**, not from an independent in-memory counter. An invalid or incomplete
-run must not be reported as a completed comparison.
+The statistical summary is reconstructed from validated persisted
+`games.tsv` records, not a separate in-memory counter. An incomplete run
+cannot become a completed comparison. Exact placements, seeds and report
+formats are specified in [development](../development.md).
 
 ## Heuristic benchmark
 
-[`heuristic_bench`](../../examples/heuristic_bench.rs) measures four-seat
-heuristic self-play through the production Runner. The measured games use
-fixed, seed-derived input; warmup seeds precede the measured range so changing
-warmup length does not move the measured seed sequence.
-
-The tool makes cache initialization boundaries explicit: `cold` uses a
-separate warmup context, while `warm` reuses the runner and cache across
-warmup and measurement. Cache-status snapshots and report formatting are
-outside the timed batch. Allocation degradation and phase failures must
-remain visible rather than being mistaken for valid performance samples.
-The precise `heuristic-benchmark-v2` protocol lives next to the example
-source and its CLI options in [development](../development.md).
+[`heuristic_bench`](../../examples/heuristic_bench.rs) measures
+four-seat heuristic self-play with explicit cache lifecycles: cold uses a
+separate warmup context; warm retains the runner and context. This determines
+which initialization work is charged to the measured phase. Cache snapshots
+are outside timing, and allocation degradation remains observable.
+See [development](../development.md#heuristic-benchmark-example) for seeds,
+CLI options and report fields.
 
 ## Evidence and verification
 

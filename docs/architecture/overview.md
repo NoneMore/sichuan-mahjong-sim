@@ -38,12 +38,10 @@ shared tile / hand / action types
        Experiment tools run comparisons and benchmarks through Runner
 ```
 
-This depicts architectural roles, not every compile-time dependency.
-**Game is the only authority** for a hand's transitions and settlement.
-A Policy sees a legal, player-scoped Decision rather than hidden game
-state; Runner and the research tools never add new Mahjong rules. Shared
-heuristic caches are derived memoization, never logical game or policy
-state. Cloning Game does not checkpoint an independent random-policy RNG.
+This is logical dataflow, not a compile-time dependency graph. `Game`
+commits transitions; policies select from player-scoped decisions and
+Runner drives the loop. The subsystem guides explain ownership, cache
+and checkpoint constraints in detail.
 
 These are current **implemented outcomes**, not prospective designs.
 Use [development](../development.md) for setup, CI and operational commands,

@@ -13,14 +13,12 @@ The current crate provides four policy roles:
 | Role | Responsibility |
 | --- | --- |
 | `FirstLegalPolicy` | Reproducible legal-action baseline |
-| `RandomPolicy` | Seeded legal-choice baseline with its own RNG |
+| `RandomPolicy` | Seeded random legal-choice baseline that takes Hu whenever offered |
 | `MissingOnlyPolicy` | Controlled ablation of the missing-suit declaration; delegates remaining choices to the first-legal baseline |
 | `HeuristicPolicy` | Deterministic action ranking from exact hand analysis and conservative claim gates |
 
-Policy implementations must use the offered legal actions and the information
-included in `Decision`. They never read another player's concealed tiles,
-an unrevealed simultaneous choice, or the hidden wall. They do not adjust
-legality, scoring, or turn timing: those remain Game responsibilities.
+Policies use only the offered `Decision`; legality, scoring, turn timing
+and privileged hidden state remain Game responsibilities.
 
 ## Analysis structure
 
@@ -44,17 +42,14 @@ analysis.rs (exact distance + improving/surplus masks)
        +-- decision-local caches -> optional shared HeuristicCache
 ```
 
-The standard route combines per-suit target tables and one pair. The
-seven-pairs route is available only without declared melds. The evaluator
-takes the best exact target deficit and unions masks for tied optimal routes.
-The Surplus mask avoids re-solving every candidate removal; the Needed mask
-identifies draws improving a post-discard hand and feeds ukeire.
+The evaluator compares exact standard and seven-pairs targets (the latter
+only without melds). Needed masks identify improving draws for ukeire;
+Surplus masks avoid re-solving each possible discard. Bounded pruning must
+retain equal-cost optimal paths and their mask bits.
 
-This separation of **action selection, exact analysis and game-rule
-enforcement** is an implemented design result. Strictly over-bound DP
-states may be pruned, but equal-cost paths and optimal-mask bits must survive.
-Algorithm recurrences and cache key encodings stay with the source and
-independent test oracles rather than being copied here.
+The separation between strategy selection, exact analysis and authoritative
+rules is the architectural boundary. Recurrences and cache-key encodings stay
+near the source and independent oracles rather than being duplicated here.
 
 ## Cache and checkpoint boundary
 
@@ -71,12 +66,10 @@ The evaluator uses decision-local exact caches first, optionally reusing
 masked per-suit results across decisions via the shared context. Allocation
 failure falls back to exact analysis, not a new strategy.
 
-Caching may change memory use and timing, **never** the action chosen, the
-replay trace, or continuation. `HeuristicPolicy` has no logical RNG/checkpoint
-state; its cache is disposable. `RandomPolicy` owns an RNG stream, so clone
-or otherwise preserve its policy state for exact continuation. The
-[Runner guide](execution.md#continuation-and-seeds) covers the cross-subsystem
-checkpoint rule.
+Caching may change memory use and timing, never actions or replay.
+`HeuristicPolicy` has no logical checkpoint state; `RandomPolicy` owns
+an RNG stream. See [execution](execution.md#continuation-and-seeds)
+for the cross-subsystem continuation contract.
 
 ## Verification boundary
 
