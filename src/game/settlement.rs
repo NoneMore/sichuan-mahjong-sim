@@ -51,7 +51,13 @@ impl Game {
         });
     }
 
-    pub(super) fn settle_discard_win(&mut self, winner: Seat, tile: Tile, method: WinMethod, payer: Seat) {
+    pub(super) fn settle_discard_win(
+        &mut self,
+        winner: Seat,
+        tile: Tile,
+        method: WinMethod,
+        payer: Seat,
+    ) {
         let index = winner.index();
         let mut hand = self.hands[index];
         hand.add(tile)
