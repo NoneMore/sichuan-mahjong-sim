@@ -18,6 +18,25 @@ information boundaries**. Game is not a policy or a match-level controller.
 - Pure [rule facts](../../src/rules.rs) and [hand-shape evaluation](../../src/eval.rs)
   answer queries; they do not decide when a transition occurs.
 
+## Internal state-machine structure
+
+```text
+Exchange -> Missing-suit declaration -> Turn <-> Response -> Ended
+                                         |         |
+                                    draw/action   discard or added-kong claims
+```
+
+The private `Stage` tracks exchange collection, missing-suit choices,
+the acting player's turn, responses and termination. Turn contexts distinguish
+opening, ordinary/replacement draw and after-peng play. `PendingDecision`
+freezes the current offered choice; `ResponseStage` holds eligibility and
+submitted choices until arbitration. State is therefore not inferred from
+which Policy or Runner happens to be active.
+
+This is an implemented architectural outcome: Game produces a **validated
+decision view**, rather than making consumers reconstruct legality or stage
+progression. It owns automatic draws, response priority, and terminal checks.
+
 ## Decision and transition boundary
 
 `Game::next_decision()` advances automatic work until a player must choose.
@@ -45,11 +64,13 @@ owned tile. Multiple Hu winners can use the same discard **virtually for hand
 evaluation**, but they do not each own an additional physical tile.
 
 Settlement changes scores through balanced transfers; accepted transitions
-must conserve tiles and total score. Terminal wall-exhaustion evaluation and
-kong-income refunds use facts from the rule subsystem while Game retains
-authority over the timing and payment ledger. `Game::debug_validate` also
-checks winner/discard metadata consistency; these are representation
-invariants, not additional game rules.
+must conserve tiles and total score. The [rule foundation](foundation.md)
+provides pure fan, payer and wall-exhaustion facts; Game owns the timing,
+active seats and committed ledger entries. The private
+[settlement implementation](../../src/game/settlement.rs) works on that same
+Game instance, not a second state owner. `Game::debug_validate` checks
+winner/discard metadata consistency; these are representation invariants,
+not additional game rules.
 
 ## Replay and verification
 

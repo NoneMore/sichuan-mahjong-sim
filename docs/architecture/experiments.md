@@ -6,6 +6,20 @@ cache lifecycles, and output formats; they may not redefine game rules or
 alter a policy's legal-action contract. Operational commands and exact CLI
 options belong in the [development guide](../development.md).
 
+## Composition
+
+Both tools use the production [Runner](execution.md) and the
+[Policy subsystem](policy.md) rather than reaching into a privileged Game
+state. Private `cli` modules validate workload inputs and `report`
+modules format results; [shared cache tooling](../../examples/support/cache_tool.rs)
+constructs explicit contexts and reports allocation problems.
+
+The A/B tool separates [comparison execution](../../examples/policy_ab/comparison.rs)
+from [validated persisted-record aggregation](../../examples/policy_ab/records.rs).
+The benchmark separates [warmup and measured phases](../../examples/heuristic_bench/phases.rs)
+from report generation. These are different evidence pipelines, not a
+single mandatory framework or another source of game semantics.
+
 ## Balanced policy comparison
 
 [`policy_ab`](../../examples/policy_ab.rs) runs a balanced 2A2B design:

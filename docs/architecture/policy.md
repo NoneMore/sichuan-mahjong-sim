@@ -22,21 +22,39 @@ included in `Decision`. They never read another player's concealed tiles,
 an unrevealed simultaneous choice, or the hidden wall. They do not adjust
 legality, scoring, or turn timing: those remain Game responsibilities.
 
-## Analysis versus action selection
+## Analysis structure
 
-[`policy/heuristic.rs`](../../src/policy/heuristic.rs) owns the decision policy
-(exchange/missing-suit selection, discard ranking, and peng/kong choices).
-[`policy/analysis.rs`](../../src/policy/analysis.rs) computes the exact
-target deficit, needed/ukeire and surplus information used by that ranking.
-The private kernels are split into suit DP, standard-hand combination, and
-seven-pairs analysis. They are **not** game-rule authorities and must not
-mutate game state.
+[`policy/heuristic.rs`](../../src/policy/heuristic.rs) owns the **strategy**:
+missing-suit and exchange choices, discard ranking, and peng/kong decisions.
+Private [`analysis.rs`](../../src/policy/analysis.rs) supplies exact
+target deficit, Needed/ukeire and Surplus data, not legal-action authority.
+The [rule foundation](foundation.md) remains responsible for winning-shape
+and scoring facts used by Game.
 
-Exactness matters across refactors: equal-cost winning targets all contribute
-to the optimal needed/surplus masks; bounded analysis may prune strictly
-over-bound paths but must preserve equality. Keep independent reference/oracle
-tests separate from production kernels. Implementation formulas and cache key
-encoding live with the analysis source rather than being copied here.
+```text
+Decision and legal actions
+       |
+heuristic.rs (choose and compare actions)
+       |
+analysis.rs (exact distance + improving/surplus masks)
+       |
+       +-- standard.rs -> suit_dp.rs (counted per-suit targets)
+       +-- seven_pairs.rs (seven-pairs formula / DP)
+       |
+       +-- decision-local caches -> optional shared HeuristicCache
+```
+
+The standard route combines per-suit target tables and one pair. The
+seven-pairs route is available only without declared melds. The evaluator
+takes the best exact target deficit and unions masks for tied optimal routes.
+The Surplus mask avoids re-solving every candidate removal; the Needed mask
+identifies draws improving a post-discard hand and feeds ukeire.
+
+This separation of **action selection, exact analysis and game-rule
+enforcement** is an implemented design result. Strictly over-bound DP
+states may be pruned, but equal-cost paths and optimal-mask bits must survive.
+Algorithm recurrences and cache key encodings stay with the source and
+independent test oracles rather than being copied here.
 
 ## Cache and checkpoint boundary
 
@@ -46,6 +64,12 @@ seats. It is not a game-state cache. Decision-local analysis continues to
 work when cross-decision caching is disabled, unallocated, or fails to
 allocate. There is no implicit global or thread-local context; caller-owned
 clones can share a context deliberately.
+
+Complete and bounded queries have distinct cache reuse conditions:
+a truncated bounded suit result must not answer a wider or unbounded query.
+The evaluator uses decision-local exact caches first, optionally reusing
+masked per-suit results across decisions via the shared context. Allocation
+failure falls back to exact analysis, not a new strategy.
 
 Caching may change memory use and timing, **never** the action chosen, the
 replay trace, or continuation. `HeuristicPolicy` has no logical RNG/checkpoint

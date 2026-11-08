@@ -6,6 +6,20 @@
 For commands and public API examples, use [development](../development.md)
 and the [README](../../README.md).
 
+## Component composition
+
+Runner owns four seat-policy objects and one decision limit. A new game
+has its own shuffled wall, scores and hand state; Runner retains its policies
+when driving successive games, so their RNG streams can continue even though
+each new Game starts fresh. The [native CLI](../../src/main.rs) parses a
+restricted set of batch options and prints the aggregate result: heuristic
+experiments do not live in this entry point.
+
+Separating **Game state**, **policy state** and **execution/report state**
+permits deterministic checkpoints and controlled policy comparisons without
+giving Runner any rule authority. Experiment tools deliberately decide
+when to build fresh runners or reuse memoization contexts.
+
 ## Run boundary
 
 At each step, Runner obtains the next pending `Decision` from Game, calls the
