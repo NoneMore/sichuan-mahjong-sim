@@ -31,7 +31,7 @@ with genuinely agent-specific guidance kept separate.
 
 | Question | Start here |
 | --- | --- |
-| Setup, build, run, test | [README](../README.md), especially **Running** |
+| Setup, build, run, test | [README quick start](../README.md#running), then [development guide](development.md) for checks, CLI and CI |
 | Fixed game semantics | [Baseline rules](baseline-rules.md) |
 | Current implementation | Relevant `src/` code, `tests/`, and executable evidence |
 | Component boundaries | [Current architecture](architecture/overview.md), then code |

@@ -1,4 +1,11 @@
-# Validation and initial native CPU baseline
+# Historical validation and native CPU baselines
+
+This page records **point-in-time** checks and local experiments. The
+counts and toolchain statements below describe their original revisions;
+they are not the current suite size, CI status, or performance guarantees.
+For current build, test, lint, rustdoc, and MSRV instructions use the
+[development guide](development.md) and
+[GitHub Actions workflow](../.github/workflows/rust-ci.yml).
 
 ## Environment and scope
 
@@ -6,9 +13,9 @@
 - Host target: `x86_64-pc-windows-msvc`, LLVM 22.1.8.
 - One Rust crate, no third-party dependencies, no unsafe code.
 - Measurements use the default Cargo release profile, one process and one thread.
-- `rust-version = "1.75"` is the declared minimum; this session validated the installed 1.98 toolchain, not a separately installed 1.75 toolchain.
+- `rust-version = "1.75"` is the declared minimum; that original session validated the installed 1.98 toolchain, not a separately installed 1.75 toolchain.
 
-## Repeatable validation commands
+## Recorded initial validation commands
 
 ```text
 cargo fmt --all -- --check

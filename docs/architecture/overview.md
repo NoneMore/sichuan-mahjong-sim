@@ -172,4 +172,6 @@ so fresh instances reproduce continuation from a cloned game. The
   synthetic-state builders live in
   [`fixtures.rs`](../../src/game/tests/fixtures.rs).
 
-Build and test commands live in the [README](../../README.md).
+Build, test, CI, and executable-example commands live in the
+[development guide](../development.md); the [README](../../README.md)
+provides quick start and public API examples.
