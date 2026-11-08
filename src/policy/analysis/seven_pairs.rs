@@ -63,7 +63,7 @@ impl<'a> DistanceEvaluator<'a> {
     ///
     /// The optimal seven-pairs targets are characterized by the cost of their
     /// pair units, so the needed-kind union follows from the same `P`/`O`
-    /// quantities (see `specs/archive/one-pass-ukeire/proof.md`):
+    /// quantities (see [archived correctness proof](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/one-pass-ukeire/proof.md)):
     ///
     /// - zero deficit: every optimal target has cost zero, so no target count
     ///   can exceed the held count and the mask is empty;

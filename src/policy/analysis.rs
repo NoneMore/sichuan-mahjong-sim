@@ -254,7 +254,7 @@ impl<'a> DistanceEvaluator<'a> {
     /// For a hand one tile below the target size (the post-discard and
     /// post-declaration shapes [`ukeire`] analyzes), a legal added copy of kind
     /// `t` strictly lowers this distance if and only if bit `t` is set. See
-    /// `specs/archive/one-pass-ukeire/proof.md`.
+    /// [archived correctness proof](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/one-pass-ukeire/proof.md).
     ///
     /// Production ukeire uses [`Self::deficit_with_mask_bounded`]. This
     /// complete route stays available for differential tests and for callers
@@ -432,7 +432,7 @@ impl<'a> DistanceEvaluator<'a> {
 /// [`DistanceEvaluator::deficit_with_mask_bounded`] using the supplied distance:
 /// kind `t` improves the hand exactly when some optimal target needs it, i.e.
 /// when bit `t` is set. Justification, with the full proof in
-/// `specs/archive/one-pass-ukeire/proof.md`:
+/// [archived correctness proof](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/one-pass-ukeire/proof.md):
 ///
 /// - For a fixed target, adding a held copy only lowers its deficit for the
 ///   kinds the target still needs, so `D(hand + t)` is `D(hand)` or
