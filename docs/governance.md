@@ -31,7 +31,7 @@ with genuinely agent-specific guidance kept separate.
 
 | Question | Start here |
 | --- | --- |
-| Setup, build, run, test | [README](../README.md), especially **Running** |
+| Setup, build, run, test | [README quick start](../README.md#running), then [development guide](development.md) for checks, CLI and CI |
 | Fixed game semantics | [Baseline rules](baseline-rules.md) |
 | Current implementation | Relevant `src/` code, `tests/`, and executable evidence |
 | Component boundaries | [Current architecture](architecture/overview.md), then code |
@@ -41,12 +41,25 @@ with genuinely agent-specific guidance kept separate.
 
 ## Architecture knowledge
 
-[Current architecture](architecture/overview.md) maps implemented components,
-boundaries, and code pointers; README **Architecture** is the short entry.
-Consult code for behavior. Keep the architecture overview aligned with
-implemented changes, label prospective designs distinctly, and reflect
-implemented ADR outcomes without repeating decision rationale or function-level
-detail.
+[Current architecture](architecture/overview.md) is the subsystem index;
+its linked guides summarize the **current implemented high-level structure**,
+responsibilities, major component interactions and boundaries, useful code
+entry points, and **architectural outcomes of implemented decisions**.
+README **Architecture** is the short entry. Keep intended gameplay in
+[baseline rules](baseline-rules.md), distinct from the rule foundation's
+implementation architecture.
+
+Consult code for current behavior and function-level detail. Keep the
+architecture guides aligned with implemented changes, not proposals; label
+future, non-prescriptive design directions separately. ADRs preserve
+consequential alternatives and historical reasoning, while architecture
+records only implemented outcomes. Change-scoped design may inform an
+architecture update after implementation without becoming a second current
+authority.
+
+Choose meaningful paths and document names for their subject and role; do
+not replicate that metadata in extra indexes or require uniform documents
+for every module. Create or split subsystem guides only when useful.
 
 ## Change-centered work
 
