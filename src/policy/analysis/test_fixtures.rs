@@ -1,4 +1,9 @@
-//! Physical fixtures and deterministic sampling for one-pass evidence.
+//! Physical fixtures and deterministic sampling for the analysis differential
+//! tests.
+//!
+//! Loaded once as a `#[cfg(test)]` module of `analysis`, so the one-pass and
+//! discard-surplus evidence share one fixture definition instead of copies
+//! that could drift.
 //!
 //! A [`State`] is a post-discard physical position: `13 - 3 * melds.len()`
 //! concealed tiles, the declared melds, the missing suit, and the public

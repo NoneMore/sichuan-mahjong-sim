@@ -1,8 +1,7 @@
 //! Settlement bookkeeping for the authoritative [`Game`].
 //!
-//! Payments, winner records, and terminal wall-exhaustion settlement remain
-//! methods on the same game state. Only the private implementation lives here;
-//! game progression and policy-visible decisions stay in the parent module.
+//! Payments, winner records, and wall-exhaustion refunds live here. Terminal
+//! transitions and game progression stay in the parent module.
 
 use super::*;
 
@@ -74,25 +73,7 @@ impl Game {
         });
     }
 
-
-    pub(super) fn end_hand(&mut self, reason: EndReason) {
-        if self.result.is_some() {
-            return;
-        }
-        if reason == EndReason::WallExhausted {
-            self.settle_wall_exhaustion();
-        }
-        self.stage = Stage::Ended;
-        self.pending = None;
-        self.legal_actions.clear();
-        self.result = Some(GameResult {
-            scores: self.scores,
-            winners: self.winners,
-            end_reason: reason,
-        });
-    }
-
-    fn settle_wall_exhaustion(&mut self) {
+    pub(super) fn settle_wall_exhaustion(&mut self) {
         let entries: [rules::WallExhaustionEntry; PLAYER_COUNT] = std::array::from_fn(|index| {
             let seat = Seat::new(index).expect("seat index");
             let is_hu = self.winners[index];
@@ -152,4 +133,5 @@ impl Game {
             }
         }
         best
-    }}
+    }
+}

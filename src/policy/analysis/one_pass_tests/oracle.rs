@@ -27,8 +27,8 @@
 //! `(INF, 0)`: a cost can never be `INF`, so unreachable states cannot leak a
 //! mask bit.
 
+use super::super::test_fixtures::{capacity_by_kind, capacity_by_suit, suit_counts};
 use super::super::INF;
-use super::states::{capacity_by_kind, capacity_by_suit, suit_counts};
 use crate::action::Meld;
 use crate::hand::Hand;
 use crate::tile::{Suit, Tile, TILE_KINDS};

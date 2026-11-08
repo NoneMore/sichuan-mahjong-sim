@@ -15,8 +15,9 @@
 //!   triplet/sequence competition, a seven-pairs-only surplus, a
 //!   standard/seven-pairs tie, a peng capacity of one, four melds, an uncleared
 //!   missing-suit tile, and seven-pairs hands with missing-suit tiles.
-//! - Physical fixed-seed positions: [`states::sampled_states`] documents seed
-//!   base `0x5EED_1A55_0F0F_0001`, stride `0x9E37_79B9_7F4A_7C15`, and 75
+//! - Physical fixed-seed positions: [`super::test_fixtures::sampled_states`]
+//!   documents seed base `0x5EED_1A55_0F0F_0001`, stride
+//!   `0x9E37_79B9_7F4A_7C15`, and 75
 //!   post-discard positions covering three missing suits and meld counts
 //!   `0..=4` with peng/open-kong/concealed-kong/added-kong capacities. Each is
 //!   extended by one deterministically chosen legal tile to the original
@@ -30,15 +31,9 @@
 //! integration, full-game trajectories, and performance measurements are
 //! separate deliverables.
 
-// The documented physical fixtures and fixed-seed sampler are reused verbatim
-// from the one-pass test module instead of being copied or made public; loading
-// the same test-only source under this module keeps `pub(super)` visibility
-// intact and cannot affect production code.
-#[path = "one_pass_tests/states.rs"]
-#[allow(dead_code, clippy::duplicate_mod)]
-mod states;
-
-use self::states::{assert_physical, boundary_states, meld_copies, sampled_states, tile, State};
+use super::test_fixtures::{
+    assert_physical, boundary_states, meld_copies, sampled_states, tile, State,
+};
 use super::{one_pass_reference, DistanceEvaluator};
 use crate::action::Meld;
 use crate::hand::Hand;
