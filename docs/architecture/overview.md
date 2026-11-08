@@ -1,80 +1,44 @@
 # Current architecture
 
-This page explains the ownership boundaries that matter when changing the
-simulator. It is **not** a second description of every source file, algorithm,
-or test case. Checked-in code is evidence of implemented behavior; the
-[fixed game rules](../baseline-rules.md) describe intended gameplay. See
-[development](../development.md) for setup, tests, and executable examples.
+This is the **map of the current subsystems**, not a second specification of
+the game's rules or a list of every source file. Each subsystem guide describes
+its ownership, boundaries, and verification entry points. Read only the guide
+relevant to the change. Implemented behavior is established by code and tests;
+the [fixed rules](../baseline-rules.md) state intended gameplay.
 
-## Ownership and control flow
+## Subsystems
 
-`Runner` drives the following boundary for each decision:
+| Subsystem | Guide | Owns |
+| --- | --- | --- |
+| Rules and tile model | [Fixed gameplay rules](../baseline-rules.md) | Intended legality, winning shapes, and payments; pure implementation in [`eval.rs`](../../src/eval.rs) and [`rules.rs`](../../src/rules.rs), with tile/hand types |
+| Authoritative game | [Game](game.md) | State, turn/response collection, transitions, settlement, and invariants |
+| Policies and hand analysis | [Policy](policy.md) | Choices from player-visible decisions, exact private analysis, and optional cache contexts |
+| Execution | [Runner and CLI](execution.md) | Driving policies against a game, tracing, batching, and reporting |
+| Research tools | [Experiments](experiments.md) | Balanced A/B comparisons, heuristic benchmarks, reproducibility artifacts, and measured boundaries |
+
+## System interaction
 
 ```text
-Game (authoritative state) -> Decision (player-visible data)
-                           -> Policy::choose -> Action -> Game::submit
+Pure rules and shape evaluation ----> Game (authoritative state and legality)
+                                       |
+                                  Decision (acting seat's view)
+                                       |
+                                  Policy::choose
+                                       |
+                                     Action
+                                       |
+                                 Game::submit
+                                       ^
+Runner drives this loop; experiments invoke Runner and record its outcomes.
 ```
 
-Only `Game` decides legality, transitions, and settlement. `Policy` chooses
-from its legal actions; `Runner` schedules decisions and collects reports
-without interpreting mahjong rules. External callers can also drive the
-`Game::next_decision` / `Game::submit` interface directly.
+`Game` is the only mutable owner of the hand state. Policies cannot inspect
+private game state, and neither Runner nor experiment tools implement or
+override gameplay rules. Shared heuristic caching may save computation, but
+cannot change chosen actions. A game checkpoint does not implicitly contain
+stateful policy RNG state.
 
-| Responsibility | Current owner |
-| --- | --- |
-| Tiles, hands, legal shapes, and fixed scoring facts | [`tile.rs`](../../src/tile.rs), [`hand.rs`](../../src/hand.rs), [`eval.rs`](../../src/eval.rs), [`rules.rs`](../../src/rules.rs) |
-| Authoritative game state, turn/response collection, and claims | [`game.rs`](../../src/game.rs) |
-| Game payments and terminal settlement; invariant diagnostics | [`game/settlement.rs`](../../src/game/settlement.rs), [`game/diagnostics.rs`](../../src/game/diagnostics.rs) |
-| Action selection and private exact hand analysis | [`policy.rs`](../../src/policy.rs), [`policy/analysis.rs`](../../src/policy/analysis.rs) |
-| Optional bounded analysis memoization | [`policy/cache.rs`](../../src/policy/cache.rs) |
-| Native game execution and command-line entry | [`runner.rs`](../../src/runner.rs), [`main.rs`](../../src/main.rs) |
-| Policy A/B studies and heuristic performance measurement | [`policy_ab.rs`](../../examples/policy_ab.rs), [`heuristic_bench.rs`](../../examples/heuristic_bench.rs) |
-
-Public module exports are defined in [`src/lib.rs`](../../src/lib.rs).
-The exact hand-analysis kernels are private children of `policy/analysis.rs`;
-its module comments and code explain their DP and cache contracts. Example
-entry points similarly delegate parsing, execution, and reports to private
-child modules.
-
-## Boundaries that must remain intact
-
-- **Information isolation:** A `Decision` carries the acting player's
-  concealed tiles, public observations, and legal actions, never another
-  player's concealed hand, the hidden wall order, or uncommitted simultaneous
-  choices. Policy code does not access `Game` internals.
-- **Single state owner:** Exchange, missing-suit declarations, discard
-  responses, and added-kong robbery collect eligible choices before resolution.
-  Re-reading a pending decision is stable; a rejected action must leave
-  authoritative state unchanged.
-- **Tile and score invariants:** A physical discarded or robbed-kong tile has
-  one owner in the game's accounting, even when several players Hu on it.
-  Scoring may consider a virtual winning tile without introducing an extra
-  physical copy. Game diagnostics verify tile conservation and zero-sum scores.
-  These are representation invariants, not additional mahjong rules.
-- **Replay and checkpoints:** Cloning `Game` captures the game position and
-  its RNG, not an independent policy's RNG or other logical state. Stateful
-  policies such as `RandomPolicy` must be checkpointed separately.
-  `HeuristicPolicy`'s cache is discardable memoization and must not change
-  decisions or continuation.
-- **Exact analysis:** The heuristic's exact DP and bounded caches are
-  implementation details, not extra rule authorities. Any optimization must
-  preserve the exact distances, all tied optimal masks, and cache-independent
-  action choices; its local algorithm contracts live with the source.
-
-## Where to verify a change
-
-- Game semantics, transitions, settlement, and invariants:
-  [game scenarios](../../src/game/tests.rs),
-  [decision contracts](../../tests/decision_contract.rs),
-  [settlement matrix](../../tests/settlement_matrix.rs), and
-  [seeded stress](../../tests/state_stress.rs).
-- Policy legality and analysis: [policy integration tests](../../tests/heuristic_policy.rs),
-  [exact-analysis tests](../../src/policy/analysis/one_pass_tests.rs), and
-  [independent reference](../../src/policy/analysis/one_pass_reference.rs).
-- Reproducible experiment tools: the tests alongside
-  [`policy_ab`](../../examples/policy_ab/tests.rs) and
-  [`heuristic_bench`](../../examples/heuristic_bench/tests.rs).
-
-The [development guide](../development.md) is the maintained entry point for
-local and CI verification commands. Historical results belong in
-[validation](../validation.md), not in this current architecture map.
+For building, testing, running, and CI, use the [development guide](../development.md).
+For historical measurements, use [validation](../validation.md).
+Consequential architectural decisions, when needed, belong in ADRs, not in
+these descriptions of the current system.

@@ -41,12 +41,12 @@ with genuinely agent-specific guidance kept separate.
 
 ## Architecture knowledge
 
-[Current architecture](architecture/overview.md) maps implemented components,
-boundaries, and code pointers; README **Architecture** is the short entry.
-Consult code for behavior. Keep the architecture overview aligned with
-implemented changes, label prospective designs distinctly, and reflect
-implemented ADR outcomes without repeating decision rationale or function-level
-detail.
+[Current architecture](architecture/overview.md) is the subsystem index;
+its linked subsystem guides describe implemented responsibilities, boundaries,
+and useful code/test entry points. README **Architecture** is the short entry.
+Consult code for behavior. Keep these guides aligned with implemented changes,
+label prospective designs distinctly, and reflect implemented ADR outcomes
+without repeating decision rationale or function-level detail.
 
 ## Change-centered work
 
