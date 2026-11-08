@@ -1,21 +1,25 @@
-# Baseline rules
+# Fixed gameplay rules
 
-This document defines the **intended fixed gameplay and settlement rules**
-for this Sichuan mahjong ("blood battle", 血战到底) baseline. It is normative
-for game semantics, not evidence that a particular implementation or API
-already behaves as described. See [governance](governance.md) for that
-distinction. The baseline does not cover local variants or policy/runner
-implementation details.
+This is the **intended game-rule contract** for this simulator's one fixed
+Sichuan mahjong ("blood battle", 血战到底) variant. Local versions of the
+game differ, so this document states which actions, wins, and payments count
+as correct *for this project*. It is useful when implementing or testing
+gameplay, not required reading for ordinary setup or policy experiments.
 
-Normative key words: **must**, **may**, and **illegal** describe engine
-behaviour. A "player" is one of four seats.
+These rules define intended behavior; they do **not** prove what current code
+does. Check [the implementation](../src/game.rs) and tests for actual behavior
+and report discrepancies using [project governance](governance.md).
+This document does not define Rust APIs, internal tile ownership, strategy,
+runner behavior, or other local mahjong variants.
+
+Here **must**, **may**, and **illegal** express intended engine behavior;
+a "player" means one of the four seats.
 
 ## 1. Deck, seats, and deal
 
 - The deck has 108 tiles: ranks 1 through 9 in each of three suits, four copies
   of every tile kind.
-- Suit names and encoding order are Wan, Tong, Tiao. Tile indices are
-  `0..27`; the text form is `1W`, `5T`, `9B`.
+- The three suits are Wan, Tong, and Tiao.
 - Seats are numbered `0..=3` in clockwise turn order. Seat 0 is the dealer.
 - The dealer receives 14 tiles and each other seat receives 13 tiles. All
   tiles are dealt face down; only a player's own concealed tiles are visible to
@@ -132,22 +136,6 @@ discard is consumed. The next action is a draw by the next active seat
 clockwise after the discarder, unless the hand ends because only one active
 player remains. The discarder does not draw again on that discard.
 
-#### 4.4.1 Discard ownership and multiple winners
-
-The public discard list is a global, ordered history of physical tiles. Every
-discarded or robbed added-kong tile is counted exactly once:
-
-- If the tile is claimed as a peng or open kong, it becomes part of the
-  claimant's meld. The discard record keeps the public claim association and is
-  not additional ownership.
-- If the tile is claimed by Hu, one or more winners reference that single
-  record. Each winner's scoring hand is evaluated with a virtual copy of the
-  tile, but the physical tile is counted once, not once per winner. This is
-  how a one-discard, three-winner hand (一炮多响) remains tile-conserving.
-- An unclaimed discard and a robbed added-kong tile likewise remain one
-  physical tile in the discard history. A self-draw winning tile stays in the
-  winner's concealed hand.
-
 ### 4.5 Peng
 
 A peng claim takes the discarded tile plus two matching tiles from the
@@ -158,26 +146,24 @@ immediately, without drawing. The meld is public.
 
 There are three kong declarations:
 
-- **Open kong** (直杠): claim a discard with three matching tiles in hand. The
-  discarder pays 2 points to the kong declarer. The declarer then draws a
-  replacement tile from the wall tail and discards. An open kong cannot be
-  robbed.
+- **Open kong** (直杠): claim a discard with three matching tiles in hand,
+  then draw a replacement tile from the wall tail and discard. An open kong
+  cannot be robbed.
 - **Added kong** (补杠): on the declarer's turn, add the fourth tile to an
   existing peng. Before the kong is finalized, any player who can win on that
   tile may rob it (抢杠). If robbed, the added kong is cancelled, no kong
   payment is made, the existing peng remains, and the robbed tile is treated as
-  the declarer's discard for purposes of the win and turn order. If not robbed,
-  the kong is finalized; every active opponent pays 1 point; the declarer draws
-  a replacement tile from the wall tail and discards.
+  the declarer's discard for the win and turn order. If not robbed, the kong
+  is finalized and the declarer draws a replacement tile from the wall tail
+  and discards.
 - **Concealed kong** (暗杠): declare four matching concealed tiles on the
-  declarer's turn. A concealed kong cannot be robbed. Every active opponent
-  pays 2 points. The declarer draws a replacement tile from the wall tail and
-  discards.
+  declarer's turn, then draw a replacement tile from the wall tail and discard.
+  A concealed kong cannot be robbed.
 
-A declared concealed kong is public: the tile is known to all players. Multiple
-kongs may be declared consecutively if each is legal and enough wall tiles
-remain for each replacement draw. Kong payments are recorded per payer because
-they may be refunded at wall exhaustion.
+A declared concealed kong is public: its tile kind is known to all players.
+Multiple kongs may be declared consecutively if each is legal and enough wall
+tiles remain for replacement draws. Kong payment amounts and payers are
+specified once in section 6.3; refund conditions are in section 7.4.
 
 ### 4.7 Passing a win (过手胡)
 
@@ -268,8 +254,8 @@ Win payments are settled when the Hu is resolved.
 - Open kong: the discarder pays 2.
 - A peng has no payment.
 
-"Active opponent" means a player who has not yet won. Kong income is recorded
-per payer so that it can be refunded at wall exhaustion.
+"Active opponent" means a player who has not yet won. Refunds, when due at
+wall exhaustion, go to the original payers (section 7.4).
 
 ## 7. End of hand
 
@@ -280,7 +266,7 @@ when either:
 2. The wall is exhausted and the next required draw cannot be made.
 
 When only one active player remains, the hand ends by that condition. The
-end-of-wall checks and kong refunds in section 7.2 do **not** run in that case.
+wall-exhaustion settlement in sections 7.1–7.4 does **not** run in that case.
 
 ### 7.1 Wall exhaustion
 
