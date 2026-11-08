@@ -93,6 +93,6 @@ target/release/examples/heuristic_bench.exe --games 2000 --seed 7 --warmup 20
 target/release/examples/heuristic_bench.exe --games 2000 --seed 10007 --warmup 20
 ```
 
-函数级采样、符号解析及聚合命令见归档 Change 的[一次性复现材料](../../specs/archive/heuristic-cost-attribution/tools/README.md)。按上表变更局数、首种子、预热、frame-pointer 构建选项及暂停方式，即可重新采集同类证据并独立判断热点。不要求复现相同绝对耗时或百分比。
+函数级采样、符号解析及聚合命令见归档 Change 的[一次性复现材料](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/tools/README.md)（复现时需从历史提交检出脚本；当前 `main` 不再包含该工具目录）。按上表变更局数、首种子、预热、frame-pointer 构建选项及暂停方式，即可重新采集同类证据并独立判断热点。不要求复现相同绝对耗时或百分比。
 
-本研究对应的[设计](../../specs/archive/heuristic-cost-attribution/design.md)已完成；后续优化需另行验证正确性与实际收益。
+本研究对应的[设计](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/design.md)已完成；后续优化需另行验证正确性与实际收益。

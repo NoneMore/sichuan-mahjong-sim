@@ -88,7 +88,7 @@ also falls back to exact analysis without changing choices. Inspect
 `cache.status()` for diagnostics, and use a new context for a different budget
 or independent cold run. See [Policy architecture](docs/architecture/policy.md#cache-and-checkpoint-boundary)
 for the design constraints and the
-[historical cache study](specs/archive/bounded-masked-dp-cache/results.md)
+[historical cache study](docs/validation.md#bounded-cross-decision-masked-dp-cache)
 for measured trade-offs.
 
 ### Runner API

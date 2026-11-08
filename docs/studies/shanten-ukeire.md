@@ -4,7 +4,7 @@
 fixed rules and the `Game`/`Policy`/`Runner` contracts. All **178 tests** pass in
 debug and release (125 library, 6 CLI, 17 integration, 30 A/B example);
 formatting, all-target Clippy with warnings denied, and warning-free rustdoc
-also pass. The [archived proposal](../../specs/archive/shanten-ukeire-policy/spec.md)
+also pass. The [archived proposal](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/shanten-ukeire-policy/spec.md)
 and its design are historical intent, not a second implementation authority.
 
 New coverage includes independent standard/seven-pairs target enumeration,

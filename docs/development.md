@@ -215,5 +215,5 @@ reported as a normal measurement.
 
 Historical benchmark observations, artifact-retention limitations, and the
 cache-adoption results belong in [validation](validation.md) and the
-[archived result summary](../specs/archive/bounded-masked-dp-cache/results.md).
+[historical validation record](validation.md#bounded-cross-decision-masked-dp-cache).
 

@@ -20,8 +20,8 @@ one-pass discard 将逐候选 `deficit` 改为一次原手牌 surplus 分析，�
 
 ## 测量条件
 
-沿用[归档方法](../../specs/archive/heuristic-cost-attribution/design.md)和
-[采样工具](../../specs/archive/heuristic-cost-attribution/tools/README.md)。
+沿用[归档方法](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/design.md)和
+[采样工具](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/tools/README.md)。
 工作负载为 `heuristic-benchmark-v1` 四席启发式自对弈，每阶段新建 Runner/策略，
 阶段内跨局复用，每局决策上限 10,000；预热不计入正式批次。
 
@@ -45,7 +45,7 @@ one-pass discard 将逐候选 `deficit` 改为一次原手牌 surplus 分析，�
 | 每轮策略时间 / 批次时间 | 97.367–97.471% | 97.430–97.493% |
 
 本轮未重建旧版做交错 A/B，不把跨日期耗时或份额差当作受控加速比。
-one-pass discard 的历史受控实验见[验收摘要](../../specs/archive/one-pass-discard/results.md)。
+one-pass discard 的历史受控实验见[验收摘要](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/one-pass-discard/results.md)。
 
 ## 采样与归因
 
@@ -89,6 +89,8 @@ VCRUNTIME 不等于分配器成本，无策略帧的截断栈也不能当作非�
   测试（**24 项**）通过。未测调用数、缓存命中率、分配次数、内存或单调用延迟。
 
 ## 复测与材料清理
+
+相关 Windows 采样工具已从当前工作树退役；如需重做采样，须从[清理前快照](https://github.com/NoneMore/sichuan-mahjong-sim/tree/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/tools)取回，并重建所述历史环境。
 
 从上述提交构建 `cargo build --release --example heuristic_bench`，直接运行：
 

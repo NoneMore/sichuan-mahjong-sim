@@ -7,6 +7,10 @@ For current build, test, lint, rustdoc, and MSRV instructions use the
 [development guide](development.md) and
 [GitHub Actions workflow](../.github/workflows/rust-ci.yml).
 
+Historical Change documents that left the current tree are available from the
+[pre-retirement snapshot](https://github.com/NoneMore/sichuan-mahjong-sim/tree/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive).
+Its contents are point-in-time records, not a second maintained authority.
+
 ## Environment and scope
 
 - Toolchain: `rustc 1.98.0 (88d9e12ae 2026-08-18)`, Cargo 1.98.0.
@@ -251,7 +255,7 @@ Paired median total/policy reductions were 62.44%/62.86% and 61.95%/62.35%,
 respectively, with 5/5 improvements and identical non-timing results. Pure-distance
 instrumented microbenchmarks regressed slightly (cold 1.3%, warm 4.8%).
 
-See the [archived summary](../specs/archive/one-pass-ukeire/results.md) for the
+See the [archived summary](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/one-pass-ukeire/results.md) for the
 proof, environment and limitations. Experiment tools and raw evidence were deleted
 at the user's request; only permanent tests, proof and historical summaries remain.
 These are historical observations, not performance or statistical guarantees.
@@ -260,7 +264,7 @@ These are historical observations, not performance or statistical guarantees.
 
 Discard ranking now derives exact candidate deficits from one original-hand
 surplus-mask analysis, without changing policy choices or checkpoint semantics.
-See the [archived summary](../specs/archive/one-pass-discard/results.md) for the
+See the [archived summary](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/one-pass-discard/results.md) for the
 258-test verification, cross-version replay, interleaved A/B results, and limits.
 One-off tools and raw measurements were deleted at the user's request; the
 reported gains are historical local observations, not performance guarantees.
@@ -293,7 +297,7 @@ Short 20-game batches did not pass the throughput gate; one-game cold-process
 times increased by 60.86–64.46%. The pressure fixture used 1 MiB and does not
 establish fully saturated production-budget throughput.
 
-See the [implementation and verification record](../specs/archive/bounded-masked-dp-cache/results.md)
+See the [implementation and verification record](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/bounded-masked-dp-cache/results.md)
 for the historical environment, memory and page-fault observations, and
 limitations. Temporary experiment tools and raw measurement data were removed at
 the user's request, so these figures cannot be recomputed from repository data.
@@ -309,7 +313,7 @@ Formatting, warning-denied Clippy and **271 tests in debug and release** passed;
 the fixed 40-game comparison and checkpoint continuations matched the baseline,
 and both benchmark seeds met the pre-registered paired acceptance criteria.
 
-See the [archived result summary](../specs/archive/bounded-exact-needed-dp/results.md)
+See the [archived result summary](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/bounded-exact-needed-dp/results.md)
 for the pruning contract, correctness scope, and historical workload and timing
 figures. Raw counts, one-off tooling and binary mirrors were deleted at the
 user's request; the summary cannot be recomputed from repository samples, and

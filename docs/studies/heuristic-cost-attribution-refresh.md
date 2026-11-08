@@ -16,7 +16,7 @@
 
 ## 测量条件与证据
 
-沿用[归档方法](../../specs/archive/heuristic-cost-attribution/design.md)和[采样工具](../../specs/archive/heuristic-cost-attribution/tools/README.md)，使用未改变的 `heuristic-benchmark-v1` 四席启发式自对弈入口。
+沿用[归档方法](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/design.md)和[采样工具](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/tools/README.md)，使用未改变的 `heuristic-benchmark-v1` 四席启发式自对弈入口。
 
 - 测量前工作树干净；Windows 10 Pro 19045 x64，Ryzen 7 3700X（8 核/16 线程）。
 - rustc/Cargo 1.98.0，LLVM 22.1.8，`x86_64-pc-windows-msvc`；64 位 CPython 3.12.10，Windows Kits dbghelp 10.0.26100.9457。
@@ -78,7 +78,9 @@
 
 ## 复现
 
-从上述提交及仓库根目录，先完成三种构建，再串行运行。构建/采样命令沿用[工具说明](../../specs/archive/heuristic-cost-attribution/tools/README.md)，输出目录换成新目录，二进制保留至分析结束。基线参数为 `--games 2000 --seed 7 --warmup 20`（5 次）及 seed 10007（3 次）。前三轮按 `default/fp/nofp`、`nofp/fp/default`、`fp/default/nofp` 交错，每轮随后运行默认 seed 10007，再补 seed 7 两次。
+采样与符号解析脚本保存在[清理前历史快照](https://github.com/NoneMore/sichuan-mahjong-sim/tree/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/tools)，当前 `main` 不再包含该工具目录；复现前请取回原脚本和对应历史源码。
+
+从上述提交及仓库根目录，先完成三种构建，再串行运行。构建/采样命令沿用[工具说明](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/specs/archive/heuristic-cost-attribution/tools/README.md)，输出目录换成新目录，二进制保留至分析结束。基线参数为 `--games 2000 --seed 7 --warmup 20`（5 次）及 seed 10007（3 次）。前三轮按 `default/fp/nofp`、`nofp/fp/default`、`fp/default/nofp` 交错，每轮随后运行默认 seed 10007，再补 seed 7 两次。
 
 采样按上表逐行运行。只将前五轮同一 fp 镜像的目录传给聚合器合并，nofp 和保持暂停分别分析。非采样控制使用同一 EXE 和完全相同参数，完整栈控制在所有采样后补跑。逐轮参数和次序也记录在证据 JSON 中。
 
