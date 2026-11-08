@@ -237,7 +237,3 @@ outputs, Debug/Release and Clippy checks, CI and Rust 1.75 compatibility.
 - [`docs/baseline-rules.md`](docs/baseline-rules.md) - intended fixed game rules.
 - [`docs/validation.md`](docs/validation.md) - validation index and historical
   native CPU measurements, not a current performance promise.
-- [`docs/studies/shanten-ukeire.md`](docs/studies/shanten-ukeire.md) - heuristic
-  implementation coverage, exploratory A/B results, and timing conditions.
-- [`docs/studies/missing-only-ablation.md`](docs/studies/missing-only-ablation.md) -
-  48,000-game missing-suit ablation with methods, results, and provenance.

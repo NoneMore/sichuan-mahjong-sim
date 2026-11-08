@@ -166,27 +166,43 @@ All measured runs matched these non-timing outputs exactly, before and after:
 
 ## Shanten-and-ukeire policy implementation milestone
 
-See the [shanten/ukeire implementation study](studies/shanten-ukeire.md) for
-validation coverage, exploratory 24-game A/B comparisons, historical release
-timings, reproduction instructions, and limitations.
+The initial four-seed, 24-game exploratory comparisons showed a mean heuristic
+advantage of **+4.375 terminal net score units per player per game** versus
+each first-legal and random-legal baseline. This was a small exploratory corpus,
+not confirmatory evidence of population-level strategy strength. The original
+[implementation and measurement study](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/shanten-ukeire.md)
+retains the coverage, per-seed scores, environment, and reproduction conditions.
 
 ## Missing-suit ablation: 1000x A/B study (2026-11-02)
 
-See the [missing-suit ablation study](studies/missing-only-ablation.md) for the
-48,000-game experimental setup, per-seed uncertainty convention, scores,
-reproduction commands, and artifact provenance.
+A balanced 2A2B experiment used 4,000 complete seed blocks per contrast,
+24,000 games each (**48,000 total**). With the study's **B minus A** convention,
+the mean terminal net score advantage per player per game was **+4.026667**
+for MissingOnly over FirstLegal (seed-block SE 0.082964, descriptive 95%
+interval [3.864058, 4.189275]) and **+2.962542** for Heuristic over
+MissingOnly (SE 0.028990, interval [2.905720, 3.019363]).
+The missing-suit choice therefore contributes materially in those settings,
+but does not explain the full heuristic advantage. These are different opponent
+mixtures; the contrasts are not additive, and convenience seeds and descriptive
+intervals do not establish population representativeness. The archived
+[study and provenance](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/missing-only-ablation.md)
+retain the full protocol, validation and reproduction limitations.
 
 ## Heuristic cost attribution
 
-See the [heuristic cost-attribution study](studies/heuristic-cost-attribution.md)
-for historical pre-optimization measurements. The
-[post-optimization refresh](studies/heuristic-cost-attribution-refresh.md) profiles
-`6d3173b` after both optimizations below, separating distance-only and masked suit
-DP, with per-run evidence, reproduction steps and limits. The
-[one-pass discard refresh](studies/heuristic-cost-attribution-discard.md) summarizes
-`06fb919`: masked suit DP dominates, chiefly the needed-mask path. Its temporary
-artifacts were deleted at the user's request; the summary retains measurement
-conditions and limits. These are historical observations, not performance guarantees.
+The initial, post-ukeire and post-one-pass-discard profiling studies describe
+**different historical revisions**, not current performance targets. At
+`06fb919`, masked per-suit DP accounted for **79.09%** of the sampled worker
+window (needed **57.25%**, surplus **21.84%**); this was a profiling
+observation, not an achievable speedup or a current hotspot guarantee.
+The original [initial](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/heuristic-cost-attribution.md),
+[intermediate](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/heuristic-cost-attribution-refresh.md), and
+[post-discard](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/heuristic-cost-attribution-discard.md)
+reports, including their limitations and committed
+[measurement summary](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/heuristic-cost-attribution-refresh/measurements.json),
+are preserved in the pinned pre-retirement snapshot. Some raw samples and
+original binaries were never committed or were already removed; the JSON alone
+cannot reconstruct that missing evidence.
 
 ## Heuristic hand-analysis optimization
 
