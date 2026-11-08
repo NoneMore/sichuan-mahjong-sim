@@ -20,6 +20,12 @@ with genuinely agent-specific guidance kept separate.
 - **Comments:** Preserve non-obvious local invariants, rationale, constraints,
   and interface semantics near the code. Avoid restating obvious behavior or
   duplicating architecture documentation; resolve or report material conflicts.
+- **Current baseline independence:** The `main` branch must support ordinary
+  setup, verification, understanding, and follow-on development from current
+  code, tests, and development or architecture guidance. Completed or
+  in-flight Changes and past agent sessions are not prerequisites. Keep
+  durable implemented constraints in their current authorities; consult
+  archived Changes only for specific historical rationale or evidence.
 
 ## Where to look
 
@@ -50,7 +56,8 @@ sub-Change. It may span tasks or PRs; trivial work does not need one.
 - Put useful working material in `specs/active/<change>/`; move it to
   `specs/archive/<change>/` when work is no longer advanced (including
   completion, cancellation, or supersession). Create no empty placeholders.
-- Use descriptive paths and only helpful files, such as `spec.md` for intended
+- Use descriptive paths, avoid redundant indexes or metadata, and keep only
+  helpful files, such as `spec.md` for intended
   behavior, `design.md` for trade-offs, or `tasks.md` for breakdowns. None
   is mandatory. These are change-scoped materials, not permanent authorities
   for implemented behavior.
@@ -60,6 +67,14 @@ sub-Change. It may span tasks or PRs; trivial work does not need one.
 - Keep owners, priorities, and progress in an existing tracker when available;
   avoid duplicating volatile state in `tasks.md`. Git, tests, and PRs supply
   implementation and verification evidence.
+- For substantial investigations, identify scratch outputs and likely retention
+  needs early when useful. When work stops, consider only the process artifacts
+  created or modified by that Change: promote durable code, tests, and current
+  knowledge; preserve useful positive and negative findings, limitations, and
+  provenance when not otherwise captured; retain required external evidence
+  with appropriate access, integrity, and retention; and discard disposable
+  outputs only after checking dependencies and obligations. Trivial work needs
+  no special review or additional file.
 
 Do not require one Change per PR, specifications for every PR, or
 archive-before-merge gates without separately adopting that stricter workflow.
