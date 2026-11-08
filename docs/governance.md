@@ -77,6 +77,9 @@ sub-Change. It may span tasks or PRs; trivial work does not need one.
 - Revise active specifications in place as requirements settle. Archived
   materials remain historical and need not track later code. Neither directory
   implies approval, implementation, validity, or continued applicability.
+  After preserving necessary current knowledge and verifying durable remote
+  recovery, completed Change artifacts may leave the active tree; the archive
+  directory is not an indefinite retention requirement.
 - Keep owners, priorities, and progress in an existing tracker when available;
   avoid duplicating volatile state in `tasks.md`. Git, tests, and PRs supply
   implementation and verification evidence.
