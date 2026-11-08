@@ -20,9 +20,9 @@
 //! hand-constructed tables. The oracle is the independent concrete-target
 //! enumeration from `oracle.rs`, not the candidate DP.
 
+use super::super::test_fixtures::{boundary_states, hand_from_counts, sampled_states, tile};
 use super::super::{suit_table_mask_bounded, suit_table_with_mask, DistanceEvaluator, INF};
 use super::oracle::{reference_hand_mask, reference_suit_table};
-use super::states::{boundary_states, hand_from_counts, sampled_states, tile};
 use crate::tile::{Suit, TILE_KINDS};
 
 fn grouped(groups: &[(Suit, &[u8])]) -> [u8; TILE_KINDS] {
@@ -427,7 +427,7 @@ fn bounded_physical_suit_tables_preserve_the_exact_prefix() {
     states.extend(sampled_states());
     for state in &states {
         let (cutoff, _) = reference_hand_mask(&state.hand, &state.melds, state.missing);
-        let capacity = super::states::capacity_by_suit(&state.melds, state.missing);
+        let capacity = super::super::test_fixtures::capacity_by_suit(&state.melds, state.missing);
         for suit in Suit::ALL {
             let mut local = [0u8; 9];
             let start = suit.index() * 9;

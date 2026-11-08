@@ -16,13 +16,25 @@ Pure `eval` and `rules` helpers supply facts, not competing state owners.
 | Types and actions | [`tile.rs`](../../src/tile.rs), [`hand.rs`](../../src/hand.rs), [`seat.rs`](../../src/seat.rs), [`action.rs`](../../src/action.rs) | Tiles, counted hands, seats, actions, and melds |
 | Hand evaluation | [`eval.rs`](../../src/eval.rs) | Winning shapes and waiting tiles |
 | Fixed-rule helpers | [`rules.rs`](../../src/rules.rs) | Legality and settlement facts used by `Game` |
-| Authoritative game | [`game.rs`](../../src/game.rs), [`game/tests.rs`](../../src/game/tests.rs) | Decisions, stage progression, claims, settlement, and invariants |
+| Authoritative game | [`game.rs`](../../src/game.rs), [`game/settlement.rs`](../../src/game/settlement.rs), [`game/diagnostics.rs`](../../src/game/diagnostics.rs), [`game/tests.rs`](../../src/game/tests.rs) | Decisions, stage progression, claims, settlement, and invariants |
 | Policies | [`policy.rs`](../../src/policy.rs), [`policy/heuristic.rs`](../../src/policy/heuristic.rs), [`policy/missing_only.rs`](../../src/policy/missing_only.rs), [`policy/analysis.rs`](../../src/policy/analysis.rs), [`policy/cache.rs`](../../src/policy/cache.rs) | `Policy` trait, legal baselines, deterministic shanten/ukeire `HeuristicPolicy`, and the `MissingOnlyPolicy` ablation that delegates to `FirstLegalPolicy` except for the shared missing-suit rule; private exact hand analysis with an explicit bounded masked-suit cache context |
 | Execution | [`runner.rs`](../../src/runner.rs), [`main.rs`](../../src/main.rs) | Driving games, aggregating results, and the native CLI |
 | Native policy comparison | [`examples/policy_ab.rs`](../../examples/policy_ab.rs) | Standalone balanced 2A2B comparison with selectable A/B policies, fresh policies and runner per game, and one explicit cache context shared by heuristic seats across the invocation; no new game rules |
 | Heuristic benchmark | [`examples/heuristic_bench.rs`](../../examples/heuristic_bench.rs) | Standalone `heuristic-benchmark-v2` four-seat self-play benchmark: explicit shared cache context, default cold measured batch or warmup-inheriting warm batch, status snapshots and initialization boundaries; warmup seeds precede the measured range; no new game rules |
 
 Public modules and exports are declared in [`src/lib.rs`](../../src/lib.rs).
+
+Private hand analysis keeps evaluator state, cache lifetimes, and query
+orchestration in `policy/analysis.rs`. Its implementation is divided into
+[per-suit DP](../../src/policy/analysis/suit_dp.rs),
+[standard-route combination](../../src/policy/analysis/standard.rs), and
+[seven-pairs analysis](../../src/policy/analysis/seven_pairs.rs).
+
+The example entry points retain process-level orchestration. Private modules
+under [`policy_ab/`](../../examples/policy_ab/) separate CLI parsing, comparison
+execution, records/statistics, and reporting; those under
+[`heuristic_bench/`](../../examples/heuristic_bench/) separate CLI/configuration,
+measurement phases, and reporting.
 
 ## Decision and information boundaries
 
@@ -50,7 +62,7 @@ physical concealed tiles: a discard or robbing winner has `13 - 3 * melds`
 tiles rather than the `14 - 3 * melds` of a self-draw winner. The winning tile
 is recovered from the referenced discard record for scoring.
 `Game::debug_validate` checks ownership and score invariants; it is not a
-policy-facing API. See [the game implementation](../../src/game.rs).
+policy-facing API. See [the diagnostic implementation](../../src/game/diagnostics.rs).
 
 ## Reproducibility boundary
 
@@ -114,9 +126,15 @@ so fresh instances reproduce continuation from a cloned game. The
   exact per-candidate removed-tile deficit references, optimal surplus unions,
   standard/seven-pairs ties, physical sampled states, lazy/context-isolated
   caches, candidate order, ukeire/fan ranking, and peng/kong decision regressions.
+  Heuristic checks are grouped by reference, candidates, selection, decisions,
+  and sampling under [`one_pass_discard/`](../../src/policy/heuristic/tests/one_pass_discard/).
 - [`src/policy/analysis/one_pass_tests.rs`](../../src/policy/analysis/one_pass_tests.rs)
   and its submodules: optimal-target masks, frozen ukeire/distance reference,
   concrete target oracles, full suit tables, ownership, ties, and cache ordering.
+  Physical fixtures and fixed-seed sampling are shared with the surplus tests
+  through [`test_fixtures.rs`](../../src/policy/analysis/test_fixtures.rs).
+  The frozen reference and concrete-target oracle remain separate from the
+  production DP.
   [`bounded_needed.rs`](../../src/policy/analysis/one_pass_tests/bounded_needed.rs)
   checks bounded tables and global masks against those oracles, including strict
   cutoff equality, zero-distance cases, complete/bounded cache isolation, and
@@ -133,16 +151,25 @@ so fresh instances reproduce continuation from a cloned game. The
   focused missing-suit, fallback, exchange, turn, and `Hu` cases for the
   ablation.
 - [`examples/policy_ab/tests.rs`](../../examples/policy_ab/tests.rs): A/B example
-  tests for seed-block aggregation, balanced placements, replay, and failure handling.
+  test entry point and shared fixtures, with CLI, record/statistics, execution,
+  and artifact cases in [`tests/`](../../examples/policy_ab/tests/).
 - [`examples/heuristic_bench/tests.rs`](../../examples/heuristic_bench/tests.rs):
   benchmark example tests for argument validation, seed planning and wrapping,
   phase isolation/reuse, cold/warm context inheritance, cache configuration,
-  report fields, warning deduplication, and failure propagation; included by
+  report fields, warning deduplication, and failure propagation, grouped under
+  [`tests/`](../../examples/heuristic_bench/tests/); included by
   `examples/heuristic_bench.rs` and run by `cargo test --all-targets`.
 - [`tests/settlement_matrix.rs`](../../tests/settlement_matrix.rs):
   payment-category combinations.
 - [`tests/state_stress.rs`](../../tests/state_stress.rs):
   seeded transitions, tile conservation, and zero-sum settlement.
-- [`src/game/tests.rs`](../../src/game/tests.rs): focused state and rule cases.
+- [`src/game/tests.rs`](../../src/game/tests.rs): entry point for focused
+  [setup](../../src/game/tests/setup.rs),
+  [response](../../src/game/tests/responses.rs),
+  [kong](../../src/game/tests/kongs.rs),
+  [settlement](../../src/game/tests/settlement.rs), and
+  [contract/invariant](../../src/game/tests/contracts.rs) scenarios; shared
+  synthetic-state builders live in
+  [`fixtures.rs`](../../src/game/tests/fixtures.rs).
 
 Build and test commands live in the [README](../../README.md).
