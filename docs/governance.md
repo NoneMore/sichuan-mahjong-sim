@@ -48,10 +48,6 @@ implemented changes, label prospective designs distinctly, and reflect
 implemented ADR outcomes without repeating decision rationale or function-level
 detail.
 
-Use project-consistent paths and filenames to convey an artifact's subject,
-scope, and role. Avoid redundant indexes or metadata; location alone does not
-establish implementation, approval, or continued applicability.
-
 ## Change-centered work
 
 A **Change** is a cohesive, bounded intent, not a task, PR, mandatory phase, or
@@ -60,7 +56,8 @@ sub-Change. It may span tasks or PRs; trivial work does not need one.
 - Put useful working material in `specs/active/<change>/`; move it to
   `specs/archive/<change>/` when work is no longer advanced (including
   completion, cancellation, or supersession). Create no empty placeholders.
-- Use descriptive paths and only helpful files, such as `spec.md` for intended
+- Use descriptive paths, avoid redundant indexes or metadata, and keep only
+  helpful files, such as `spec.md` for intended
   behavior, `design.md` for trade-offs, or `tasks.md` for breakdowns. None
   is mandatory. These are change-scoped materials, not permanent authorities
   for implemented behavior.
