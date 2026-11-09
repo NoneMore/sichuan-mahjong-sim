@@ -9,7 +9,13 @@
 //! The encoding is versioned by [`encoding::ENCODING_VERSION`], and the
 //! layout, scales, and category order are documented in the [`encoding`]
 //! module.
+//!
+//! [`collection`] adds the neural-side behavior-cloning teacher collector:
+//! strict versioned JSONL corpora, seeded splits, source provenance, exclusive
+//! writer locking, atomic publication/recovery, and zero-support reporting. It
+//! uses only public core and encoding interfaces.
 
 #![forbid(unsafe_code)]
 
+pub mod collection;
 pub mod encoding;
