@@ -33,7 +33,7 @@ with genuinely agent-specific guidance kept separate.
 | --- | --- |
 | Setup, build, run, test | [README quick start](../README.md#running), then [development guide](development.md) for checks, CLI and CI |
 | Fixed game semantics | [Baseline rules](baseline-rules.md) |
-| Current implementation | Relevant `src/` code, `tests/`, and executable evidence |
+| Current implementation | Relevant core `src/`, `crates/`, tests, and executable evidence |
 | Component boundaries | [Current architecture](architecture/overview.md), then code |
 | Past test coverage and measurements | [Validation](validation.md) |
 | Proposed change intent | `specs/active/<change>/`, when present |
@@ -121,9 +121,9 @@ do not edit the old ADR to point forward. Older ADRs may move to
   changes, check observation boundaries, legal actions, seeds, and policy
   checkpoint semantics as relevant.
 - Standard checks: `cargo fmt --all -- --check`,
-  `cargo clippy --all-targets -- -D warnings`, and
-  `cargo test --all-targets`. Add release, stress, or performance checks
-  when warranted.
+  `cargo clippy --workspace --all-targets -- -D warnings`, and
+  `cargo test --workspace --all-targets`. Add release, stress, or performance
+  checks when warranted.
 - Treat [validation measurements](validation.md) as historical observations,
   not a current performance guarantee. Record build, environment, seeds,
   policy, workload, and results for comparisons; measure before claiming

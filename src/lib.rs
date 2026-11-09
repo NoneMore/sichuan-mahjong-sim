@@ -7,6 +7,9 @@
 //! execution layer.
 //!
 //! The baseline rules are documented in `docs/baseline-rules.md`.
+//!
+//! Neural-policy feature encoding lives in the `sichuan-mahjong-neural`
+//! workspace crate, which depends on this core rather than the reverse.
 
 #![forbid(unsafe_code)]
 

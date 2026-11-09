@@ -14,12 +14,19 @@ intended Mahjong semantics.
 | Rule foundation | [Foundation](foundation.md) | Tile/hand model and pure shape, legality and settlement facts |
 | Authoritative game | [Game](game.md) | Sole mutable hand state, decisions, progression and payments |
 | Policies | [Policy](policy.md) | Player-visible action selection, exact analysis and optional memoization |
+| Neural adapters | [Neural](neural.md) | Separate consumer crate for versioned decision encoding |
 | Execution | [Runner and CLI](execution.md) | Drives games and policies without interpreting rules |
 | Research tools | [Experiments](experiments.md) | Repeatable policy comparisons, timings and evidence records |
 
 The gameplay rules specify *intent* for the foundation and Game; the
 foundation architecture describes *how the rule facts are implemented*.
 Keep these two distinct when checking a rules disagreement.
+
+## Crate boundary
+
+The workspace keeps `sichuan-mahjong-sim` at the repository root and
+`sichuan-mahjong-neural` under `crates/neural/`. The neural crate depends on
+the core’s public types; the core does not depend on neural code.
 
 ## Interactions and architectural outcomes
 

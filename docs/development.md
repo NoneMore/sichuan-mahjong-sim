@@ -9,11 +9,11 @@ for code navigation, and [governance](governance.md) for project conventions.
 
 [The Rust CI workflow](../.github/workflows/rust-ci.yml) runs on pull requests
 targeting `main`, pushes to `main`, and manual dispatch. Its stable job checks
-formatting, warning-denied Clippy, Debug and Release tests across all targets
-(including executable examples and their tests), and warning-denied rustdoc.
-The separate MSRV job compiles all targets with Rust 1.75.0, as declared in
-[Cargo.toml](../Cargo.toml). Compilation and test checks use the committed
-lockfile.
+formatting, warning-denied Clippy, Debug and Release tests across all workspace
+targets (including executable examples and their tests), doctests, and
+warning-denied rustdoc. The separate MSRV job checks all workspace targets with
+Rust 1.75.0, the minimum declared by both packages. Builds and tests use the
+committed root lockfile.
 
 Run the relevant checks locally before submitting changes. A successful CI run
 verifies that specific source revision; it does not establish a performance
@@ -25,13 +25,15 @@ and observations rather than the present test count.
 
 ## Running
 
-The crate has no third-party runtime dependencies. Its declared minimum Rust
-version is 1.75; use a recent stable toolchain for normal development:
+The workspace contains the dependency-free simulator core and a
+[neural adapter crate](../crates/neural/README.md) that depends only on the core.
+Both declare Rust 1.75 as their minimum; use a recent stable toolchain locally
+and leave minimum-version verification to CI:
 
 ```text
-cargo build --release
-cargo test --all-targets
-cargo clippy --all-targets -- -D warnings
+cargo build --workspace --release
+cargo test --workspace --all-targets
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
