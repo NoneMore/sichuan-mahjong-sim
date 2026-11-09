@@ -3,5 +3,12 @@
 version = 3
 
 [[package]]
+name = "sichuan-mahjong-neural"
+version = "0.1.0"
+dependencies = [
+ "sichuan-mahjong-sim",
+]
+
+[[package]]
 name = "sichuan-mahjong-sim"
 version = "0.1.0"

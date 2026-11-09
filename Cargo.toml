@@ -11,3 +11,8 @@ name = "sichuan_mahjong_sim"
 path = "src/lib.rs"
 
 [dependencies]
+
+[workspace]
+members = [".", "crates/neural"]
+default-members = [".", "crates/neural"]
+resolver = "2"

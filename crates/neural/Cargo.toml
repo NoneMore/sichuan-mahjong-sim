@@ -1,0 +1,14 @@
+[package]
+name = "sichuan-mahjong-neural"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Versioned neural-policy decision encoding for the Sichuan mahjong simulator core"
+publish = false
+
+[lib]
+name = "sichuan_mahjong_neural"
+path = "src/lib.rs"
+
+[dependencies]
+sichuan-mahjong-sim = { path = "../.." }

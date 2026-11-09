@@ -25,7 +25,9 @@ Wan 1–9, Tong 1–9, Tiao 1–9; suit axes follow Wan, Tong, Tiao.
 
 All numeric features use `f32`: per-kind counts divide by 4, concealed totals by
 14, wall count by 108, and scores by 16 without clipping.
-Categories use one-hot vectors and flags use 0/1.
+Categories use one-hot vectors and flags use 0/1. Meld-slot and response tile
+fields are one-hot tile identities, not scaled physical counts; meld kinds
+supply their physical multiplicities.
 
 The following category orders are fixed v1 mappings, independent of future enum
 reordering (indices start at zero):

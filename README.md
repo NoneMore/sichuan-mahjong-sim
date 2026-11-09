@@ -29,13 +29,20 @@ See the rules document for exact conditions, fan items, and excluded variants.
 
 ## Architecture
 
-The simulator is one Rust crate with an authoritative `Game`, a `Runner`
+The simulator core is a Rust crate with an authoritative `Game`, a `Runner`
 that drives games, and `Policy` implementations that choose actions from
 player-visible decisions. Pure tile, hand, rule, and winning-shape helpers
 support the core. See the [current architecture overview](docs/architecture/overview.md)
 for implemented component responsibilities, decision flow, information
 boundaries, and code navigation. The [baseline rules](docs/baseline-rules.md)
 define intended game semantics.
+
+### Neural modules
+
+[`sichuan-mahjong-neural`](crates/neural/README.md) is a separate workspace
+crate for neural-policy representations. It depends on the simulator’s public
+decision interface; the core has no neural dependency. See its
+[architecture guide](docs/architecture/neural.md) for the boundary.
 
 ### Policies
 
@@ -216,7 +223,7 @@ Rust 1.75 or newer is required; use the current stable toolchain for
 development. A quick verification and deterministic self-play run:
 
 ```sh
-cargo test --all-targets
+cargo test --workspace --all-targets
 cargo run --release -- --games 1000 --seed 7 --policy first
 ```
 
