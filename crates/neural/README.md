@@ -91,7 +91,8 @@ source, split, shapes, actions, and targets. They retain at most one episode;
 
 ### Reports and provenance
 
-Collection prints JSON and optionally writes it to `--report`.
+Collection prints JSON and optionally writes a new file at `--report`;
+existing paths are never overwritten.
 `committed_stats` covers only games committed by that invocation; `report`
 reconstructs whole-corpus statistics. Both include all stages and action kinds,
 including zero support. Kind opportunities count once per decision;

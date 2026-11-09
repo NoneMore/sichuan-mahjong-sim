@@ -34,7 +34,7 @@ collect options:
   --shard-games N      Positive complete games per shard for a new corpus.
   --decision-limit N   Positive per-game decision limit for a new corpus.
   --cache-bytes B      Shared heuristic cache budget; 0 disables.
-  --report PATH        Write the collection outcome JSON to PATH.
+  --report PATH        Write the collection outcome JSON to a new file.
   New-corpus defaults: seed-start 0, shard-games 100, decision-limit 10000,
   and the library default shared teacher cache budget.
   The corpus source revision is always the compiled binary's clean Git commit.
@@ -151,11 +151,19 @@ fn collect(args: &[String]) -> Result<(), CliError> {
     let json = serde_json::to_string_pretty(&outcome)
         .map_err(|error| CliError::runtime(format!("could not encode outcome JSON: {error}")))?;
     if let Some(path) = flags.get("report") {
-        fs::write(path, format!("{json}\n"))
-            .map_err(|error| CliError::runtime(format!("could not write {path}: {error}")))?;
+        write_report(Path::new(path), &json)?;
     }
     println!("{json}");
     Ok(())
+}
+
+fn write_report(path: &Path, json: &str) -> Result<(), CliError> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .and_then(|mut file| writeln!(file, "{json}"))
+        .map_err(|error| CliError::runtime(format!("could not write {}: {error}", path.display())))
 }
 
 fn check_immutable(corpus: &Corpus, flags: &BTreeMap<String, String>) -> Result<(), CliError> {
@@ -418,5 +426,38 @@ fn parse_seed(value: &str) -> Result<sichuan_mahjong_neural::collection::Seed, C
             .parse::<u64>()
             .map_err(|_| CliError::usage(format!("invalid seed {value:?}")))?;
         Ok(Seed::from_u64(parsed))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sichuan_mahjong_neural::collection::shard_path;
+
+    #[test]
+    fn report_cannot_overwrite_committed_corpus_files() {
+        let root = tempfile::tempdir().unwrap();
+        let source = SourceRevision::parse("0123456789abcdef0123456789abcdef01234567").unwrap();
+        let mut corpus = Corpus::create(root.path(), &CollectionConfig::new(source)).unwrap();
+        let outcome = corpus.append_with_cache(1, 0).unwrap();
+        for path in [
+            manifest_path(root.path()),
+            shard_path(root.path(), outcome.manifest.shards[0].first_seed),
+        ] {
+            let before = fs::read(&path).unwrap();
+            assert!(write_report(&path, "{}").is_err());
+            assert_eq!(fs::read(&path).unwrap(), before);
+        }
+        verify_corpus(root.path()).unwrap();
+    }
+
+    #[test]
+    fn report_creates_a_new_file_but_does_not_replace_it() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("outcome.json");
+        write_report(&path, "{}").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"{}\n");
+        assert!(write_report(&path, "null").is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"{}\n");
     }
 }

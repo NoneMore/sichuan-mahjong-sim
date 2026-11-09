@@ -395,20 +395,26 @@ mod tests {
         assert!(error.to_string().contains("final newline"));
 
         let text = String::from_utf8(original).unwrap();
-        let mut changed = String::new();
-        for line in text.lines() {
-            let mut row: serde_json::Value = serde_json::from_str(line).unwrap();
-            if row["type"] == "result" {
-                row["end_reason"] = "three_winners".into();
-                row["winners"] = serde_json::json!([false, false, false, false]);
+        for (end_reason, winners) in [
+            ("three_winners", [false; 4]),
+            ("three_winners", [true; 4]),
+            ("wall_exhausted", [true; 4]),
+        ] {
+            let mut changed = String::new();
+            for line in text.lines() {
+                let mut row: serde_json::Value = serde_json::from_str(line).unwrap();
+                if row["type"] == "result" {
+                    row["end_reason"] = end_reason.into();
+                    row["winners"] = serde_json::json!(winners);
+                }
+                changed.push_str(&serde_json::to_string(&row).unwrap());
+                changed.push('\n');
             }
-            changed.push_str(&serde_json::to_string(&row).unwrap());
-            changed.push('\n');
+            fs::write(&path, changed).unwrap();
+            let error = read_shard(root.path(), &manifest, shard, |_| {})
+                .err()
+                .expect("terminal result must be internally consistent");
+            assert!(error.to_string().contains("winner count"), "{error}");
         }
-        fs::write(&path, changed).unwrap();
-        let error = read_shard(root.path(), &manifest, shard, |_| {})
-            .err()
-            .expect("terminal result must be internally consistent");
-        assert!(error.to_string().contains("winner count"));
     }
 }

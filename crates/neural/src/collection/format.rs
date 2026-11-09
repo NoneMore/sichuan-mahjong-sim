@@ -452,7 +452,7 @@ pub(super) fn read_shard_file(
                     end_reason: end_reason.into(),
                 };
                 let winner_count = winners.iter().filter(|&&won| won).count();
-                if (result.end_reason == EndReason::ThreeWinners && winner_count < 3)
+                if (result.end_reason == EndReason::ThreeWinners && winner_count != 3)
                     || (result.end_reason == EndReason::WallExhausted && winner_count >= 3)
                 {
                     return Err(shard_invalid(
