@@ -25,7 +25,10 @@ pub fn canonicalize(action: Action) -> Action {
 
 impl ActionFeatures {
     /// One-hot kind, scaled tile parameters, and the optional chosen suit.
-    pub(super) fn new(action: Action) -> Self {
+    ///
+    /// This is the only v1 action-row construction; the collection reader
+    /// validates recorded rows against it instead of owning a copy.
+    pub(crate) fn new(action: Action) -> Self {
         let mut kind = [0.0f32; ACTION_KIND_FEATURES];
         kind[action_kind_id(&action)] = 1.0;
 
@@ -103,7 +106,10 @@ fn ordinary_actions(offered: &[Action]) -> Vec<Action> {
 }
 
 /// Candidate order: `(kind_id, tile_ids, suit_id)` with unscaled parameters.
-fn compare_actions(left: &Action, right: &Action) -> Ordering {
+///
+/// The collection reader verifies recorded candidate lists with this same
+/// comparison, so writer and reader cannot drift into different orders.
+pub(crate) fn compare_actions(left: &Action, right: &Action) -> Ordering {
     let (left_tiles, left_len) = action_tile_parameters(left);
     let (right_tiles, right_len) = action_tile_parameters(right);
     action_kind_id(left)

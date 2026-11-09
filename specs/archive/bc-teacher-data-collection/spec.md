@@ -1,6 +1,8 @@
 # Behavior-cloning teacher data collection specification
 
-Proposed contract; [design](design.md) explains the choices.
+Historical scope for the implemented collector; [design](design.md) records the
+rationale. Current usage and contracts live in the [crate guide](../../../crates/neural/README.md)
+and [collection module](../../../crates/neural/src/collection/mod.rs).
 
 ## Collection
 

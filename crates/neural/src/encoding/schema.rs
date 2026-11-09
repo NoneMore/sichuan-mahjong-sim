@@ -258,8 +258,11 @@ pub(super) fn exchange_direction_id(direction: ExchangeDirection) -> usize {
     }
 }
 
-/// One-hot index of a decision stage.
-pub(super) fn stage_id(stage: DecisionStage) -> usize {
+/// Wire numeric ID of a decision stage.
+///
+/// Shared with the collection format, which exposes it through its stable
+/// public wire API instead of owning a second mapping.
+pub(crate) fn stage_code(stage: DecisionStage) -> u8 {
     match stage {
         DecisionStage::Exchange => 0,
         DecisionStage::MissingSuit => 1,
@@ -267,6 +270,23 @@ pub(super) fn stage_id(stage: DecisionStage) -> usize {
         DecisionStage::DiscardResponse => 3,
         DecisionStage::AddedKongResponse => 4,
     }
+}
+
+/// Reverses [`stage_code`].
+pub(crate) fn stage_from_code(code: u8) -> Option<DecisionStage> {
+    match code {
+        0 => Some(DecisionStage::Exchange),
+        1 => Some(DecisionStage::MissingSuit),
+        2 => Some(DecisionStage::Turn),
+        3 => Some(DecisionStage::DiscardResponse),
+        4 => Some(DecisionStage::AddedKongResponse),
+        _ => None,
+    }
+}
+
+/// One-hot index of a decision stage.
+pub(super) fn stage_id(stage: DecisionStage) -> usize {
+    usize::from(stage_code(stage))
 }
 
 /// Discard category index. Hu claims win the classification of a record; a
@@ -281,8 +301,11 @@ pub(super) fn discard_category_id(record: &DiscardInfo) -> usize {
     }
 }
 
-/// One-hot index of an action kind.
-pub(super) fn action_kind_id(action: &Action) -> usize {
+/// Wire numeric ID of an action kind.
+///
+/// Shared with the collection format, which exposes it through its stable
+/// public wire API instead of owning a second mapping.
+pub(crate) fn action_kind_code(action: &Action) -> u8 {
     match action {
         Action::Exchange(_) => 0,
         Action::ChooseMissing(_) => 1,
@@ -294,6 +317,11 @@ pub(super) fn action_kind_id(action: &Action) -> usize {
         Action::Hu => 7,
         Action::Pass => 8,
     }
+}
+
+/// One-hot index of an action kind.
+pub(super) fn action_kind_id(action: &Action) -> usize {
+    usize::from(action_kind_code(action))
 }
 
 /// Chosen-suit index, or zero for actions without a suit parameter.

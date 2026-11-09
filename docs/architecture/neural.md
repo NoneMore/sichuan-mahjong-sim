@@ -1,51 +1,63 @@
 # Neural adapters
 
-[`sichuan-mahjong-neural`](../../crates/neural/) is a separate workspace crate
-that consumes the simulator's public decision surface. The simulator core at
-the repository root has no dependency on it. Building or testing the core with
-`-p sichuan-mahjong-sim` does not compile neural code.
+[`sichuan-mahjong-neural`](../../crates/neural/) consumes the simulator's public
+interfaces. The dependency is one-way: building the core with
+`-p sichuan-mahjong-sim` does not compile neural code or its dependencies.
+`Game` retains sole ownership of legality, hidden state, transitions, and settlement.
 
-```text
-sichuan-mahjong-neural
-        |
-        | public Decision, Action, Hand, Meld, Seat, Tile
-        v
-sichuan-mahjong-sim
-```
+## Decision encoding
 
-This is a compile-time dependency boundary. `Game` still owns legality,
-transitions and settlement; the neural crate has no privileged access to hidden
-hands, wall contents or internal game state. Its production encoder invokes
-neither teacher analysis nor simulated transitions. Teacher policies appear in
-consumer examples and acceptance tests only.
-
-## Encoding responsibilities
-
-The public API is `sichuan_mahjong_neural::encoding`. It represents one valid
-pending `Decision` as structured state and a complete legal candidate list.
-It is stateless, not a `Policy` implementation or a Game checkpoint.
+`encoding` converts a player-scoped `Decision` into state features and canonical
+legal candidates. It is deterministic and stateless, with no teacher analysis
+or simulated transitions. Versioning covers feature meaning, layout, scales,
+and candidate order, not just tensor dimensions.
 
 | Entry point | Responsibility |
 | --- | --- |
-| [`encoding/mod.rs`](../../crates/neural/src/encoding/mod.rs) | Public API, encoding assembly and semantic label lookup |
-| [`schema.rs`](../../crates/neural/src/encoding/schema.rs) | Feature types, frozen v1 mappings and flattening |
+| [`encoding/mod.rs`](../../crates/neural/src/encoding/mod.rs) | Assembly and semantic target lookup |
+| [`schema.rs`](../../crates/neural/src/encoding/schema.rs) | Feature types, frozen mappings and flattening |
 | [`state.rs`](../../crates/neural/src/encoding/state.rs) | Player-visible state conversion |
-| [`candidates.rs`](../../crates/neural/src/encoding/candidates.rs) | Legal candidate enumeration, canonical order and action features |
+| [`candidates.rs`](../../crates/neural/src/encoding/candidates.rs) | Candidate enumeration, canonical order and action features |
 
-The [crate guide](../../crates/neural/README.md) covers usage; encoding rustdoc
-defines the exact feature and compatibility contract.
+## Teacher collection
 
-## Verification and extension
+The neural-side collector drives `Game`, `HeuristicPolicy`, and the encoder
+without extending Runner. It labels the original decision once and records the
+pre-action encoding only after submission succeeds. All seats, stages, forced
+actions, passes, and losing trajectories are retained.
 
-Tests live with the neural crate. The
-[feature fixtures](../../crates/neural/tests/encoding_features.rs) freeze v1
-layout and physical-ownership semantics. The
-[contract tests](../../crates/neural/tests/encoding_contract.rs) drive real Game
-decisions, submit candidates to cloned pending games, and reconstruct teacher
-inputs from the encoding. Seeded collision checks retain both decisions on
-conflicting labels; sampled agreement is not a proof over every reachable
-position.
+Modules under [`collection/`](../../crates/neural/src/collection/) separate
+execution from persistence:
 
-Only encoding is implemented. Future network and training integrations belong
-on the neural side of the dependency boundary, without adding learning-framework
-dependencies to the simulator core.
+| Module | Responsibility |
+| --- | --- |
+| `corpus.rs` | Seed ranges, shard boundaries, committed inventory and read coordination |
+| `driver.rs` | One teacher episode into a fallible record sink; no filesystem knowledge |
+| `storage.rs` | OS lock, pending shards and atomic publication |
+| `format.rs` | JSONL protocol and validation, reusing encoder mappings/order/features |
+| `manifest.rs`, `seed.rs` | Inventory, identity and deterministic split contracts |
+| `source.rs`, `build.rs` | Compiled provenance and build/environment facts |
+| `stats.rs`, `report.rs` | Coverage, choice metrics and measurement outputs |
+
+A corpus fixes source and encoding versions. Complete episodes form immutable
+JSONL shards; per-shard manifest entries keep inventory proportional to shard
+count. The seed-only split remains stable across growth and source revisions.
+An OS-locked writer validates and publishes each shard before atomically
+committing the manifest. Retry ignores unlisted work and resumes from the first
+uncommitted seed; append checks metadata without rescanning old decisions.
+Strict readers validate listed shards one episode at a time; only `read_corpus`
+materializes the entire corpus.
+
+The [crate guide](../../crates/neural/README.md) covers commands and reporting;
+module rustdoc defines the encoding and storage contracts. Network and training
+integrations belong on this side of the boundary, not in the simulator core.
+
+## Verification
+
+[Feature fixtures](../../crates/neural/tests/encoding_features.rs) freeze v1
+layout and ownership semantics. [Encoding contract tests](../../crates/neural/tests/encoding_contract.rs)
+check candidate legality, information isolation, replay and teacher projection.
+Collector tests cover strict round trips, source/split/seed boundaries,
+publication recovery, manifest-scale resume, subprocess locks, and record-sink
+failures. Sampled collision checks are evidence over their fixtures, not a proof
+for every reachable position.

@@ -26,7 +26,8 @@ and observations rather than the present test count.
 ## Running
 
 The workspace contains the dependency-free simulator core and a
-[neural adapter crate](../crates/neural/README.md) that depends only on the core.
+[neural adapter crate](../crates/neural/README.md) that consumes the public core
+API and owns its serialization, hashing, and filesystem dependencies.
 Both declare Rust 1.75 as their minimum; use a recent stable toolchain locally
 and leave minimum-version verification to CI:
 
@@ -70,6 +71,14 @@ per seat, win counts, total decisions, separate rules/policy timings, and
 Measurements are single-threaded and include game construction in the batch
 wall time. When comparing builds, record the command, seed, policy, and observed
 rates.
+
+### Behavior-cloning collection
+
+The neural crate provides `bc-collect` for complete heuristic teacher
+trajectories. See the [collection guide](../crates/neural/README.md#teacher-data-collection)
+for clean-build requirements, commands, storage/recovery, and measurement reports.
+Collector contract and subprocess-lock tests run with the standard all-target
+checks.
 
 ### Policy A/B comparison example
 

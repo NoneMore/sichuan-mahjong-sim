@@ -109,6 +109,14 @@ pub use schema::{
     StateFeatures, ACTION_WIDTH, ENCODING_VERSION, MELD_SLOTS, STATE_WIDTH,
 };
 
+/// Crate-internal v1 mappings and canonical action order shared with the
+/// collection format.
+///
+/// The collection layer exposes these through its own stable public wire API;
+/// they are not part of the encoder's public surface.
+pub(crate) use candidates::compare_actions;
+pub(crate) use schema::{action_kind_code, stage_code, stage_from_code};
+
 use candidates::candidate_actions;
 use state::encode_state;
 
