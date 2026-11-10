@@ -49,7 +49,9 @@
 //! manifest. Readers use only manifest-listed immutable shards and verify
 //! shapes, canonical actions, target bounds, splits, completeness, counts, and
 //! SHA-256. Unlisted files are ignored; they are replayed from the first
-//! uncommitted seed on retry.
+//! uncommitted seed on retry. [`CorpusSnapshot`] captures one exact committed
+//! manifest and exposes fallible streaming over only its listed shards, so
+//! later appends cannot change a prepared dataset.
 //!
 //! # Provenance
 //!
@@ -80,7 +82,9 @@ mod source;
 mod stats;
 mod storage;
 
-pub use corpus::{read_corpus, read_manifest, report_corpus, verify_corpus, Corpus};
+pub use corpus::{
+    read_corpus, read_manifest, report_corpus, verify_corpus, Corpus, CorpusSnapshot,
+};
 pub use error::{CollectionError, Result};
 pub use format::{
     action_kind_id, decode_action, encode_action, stage_from_id, stage_id, DecisionSample, Episode,

@@ -215,7 +215,7 @@ impl std::error::Error for SourceProvenanceError {
 }
 
 /// Build facts captured when the neural crate was compiled.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildInfo {
     /// Neural crate package version.
     pub package_version: String,
@@ -267,7 +267,7 @@ pub fn build_info() -> BuildInfo {
 }
 
 /// Runtime platform facts relevant to pilot measurements.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EnvironmentInfo {
     /// Operating system name.
     pub os: String,

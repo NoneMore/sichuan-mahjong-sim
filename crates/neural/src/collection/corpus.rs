@@ -14,12 +14,13 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+use sha2::{Digest, Sha256};
 use sichuan_mahjong_sim::policy::DEFAULT_BUDGET_BYTES;
 use sichuan_mahjong_sim::{HeuristicCache, HeuristicPolicy, PLAYER_COUNT};
 
 use super::driver::collect_episode;
 use super::error::{io, CollectionError, Result};
-use super::format::{read_shard_file, ShardExpectations};
+use super::format::{lower_hex, read_shard_file, Episode, ShardExpectations};
 use super::manifest::{manifest_path, shards_dir, CollectionConfig, Manifest, ShardEntry};
 use super::report::{
     elapsed_ns, CacheReport, CollectionOutcome, CollectionTimings, CorpusData, CorpusReport,
@@ -221,23 +222,105 @@ pub fn read_manifest(root: impl AsRef<Path>) -> Result<Manifest> {
     read_manifest_at(&manifest_path(root), root)
 }
 
-fn read_manifest_at(path: &Path, root: &Path) -> Result<Manifest> {
-    let bytes = match fs::read(path) {
-        Ok(bytes) => bytes,
+fn read_manifest_bytes_at(path: &Path, root: &Path) -> Result<Vec<u8>> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(bytes),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return Err(CollectionError::CorpusMissing {
+            Err(CollectionError::CorpusMissing {
                 root: root.to_owned(),
-            });
+            })
         }
-        Err(error) => return Err(io(path, error)),
-    };
+        Err(error) => Err(io(path, error)),
+    }
+}
+
+fn parse_manifest(path: &Path, bytes: &[u8]) -> Result<Manifest> {
     let manifest: Manifest =
-        serde_json::from_slice(&bytes).map_err(|source| CollectionError::ManifestJson {
+        serde_json::from_slice(bytes).map_err(|source| CollectionError::ManifestJson {
             path: path.to_owned(),
             source,
         })?;
     manifest.validate_at(path)?;
     Ok(manifest)
+}
+
+fn read_manifest_at(path: &Path, root: &Path) -> Result<Manifest> {
+    let bytes = read_manifest_bytes_at(path, root)?;
+    parse_manifest(path, &bytes)
+}
+
+/// Immutable captured view of one committed corpus manifest and its listed
+/// shards.
+///
+/// Capture parses and validates one exact `manifest.json` byte snapshot. Later
+/// corpus appends only add shards and atomically replace the manifest; they do
+/// not change the captured shard list, so preparation from a snapshot always
+/// consumes the same committed dataset. Every [`visit_shard`](Self::visit_shard)
+/// call revalidates the listed shard bytes, records, source, split, counts, and
+/// checksum with the normal corpus reader.
+#[derive(Clone, Debug)]
+pub struct CorpusSnapshot {
+    root: PathBuf,
+    manifest: Manifest,
+    manifest_sha256: String,
+}
+
+impl CorpusSnapshot {
+    /// Captures and validates the current committed manifest without taking
+    /// the writer lock.
+    ///
+    /// Shard availability and contents are checked only when consumed by
+    /// [`visit_shard`](Self::visit_shard).
+    pub fn capture(root: impl AsRef<Path>) -> Result<Self> {
+        let root = root.as_ref();
+        let path = manifest_path(root);
+        let bytes = read_manifest_bytes_at(&path, root)?;
+        let manifest = parse_manifest(&path, &bytes)?;
+        let manifest_sha256 = lower_hex(&Sha256::digest(&bytes));
+        Ok(Self {
+            root: root.to_owned(),
+            manifest,
+            manifest_sha256,
+        })
+    }
+
+    /// Corpus root the snapshot was captured from.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// Captured committed manifest.
+    pub fn manifest(&self) -> &Manifest {
+        &self.manifest
+    }
+
+    /// Lowercase SHA-256 of the exact captured `manifest.json` bytes.
+    pub fn manifest_sha256(&self) -> &str {
+        &self.manifest_sha256
+    }
+
+    /// Strictly validates and streams one captured listed shard.
+    ///
+    /// Episodes are delivered one at a time; memory is bounded by one episode.
+    /// A visitor error stops reading immediately. The shard checksum and
+    /// metadata are only established at EOF, so callers must keep any output
+    /// provisional until this method returns `Ok`.
+    pub fn visit_shard(
+        &self,
+        index: usize,
+        on_episode: impl FnMut(Episode) -> Result<()>,
+    ) -> Result<()> {
+        let shard =
+            self.manifest
+                .shards
+                .get(index)
+                .ok_or(CollectionError::SnapshotShardOutOfRange {
+                    index,
+                    shards: self.manifest.shards.len(),
+                })?;
+        stream_shard(&self.root, &self.manifest, shard, on_episode)?;
+        Ok(())
+    }
 }
 
 /// Reads every committed episode and validates all shards and checksums.
@@ -248,7 +331,10 @@ pub fn read_corpus(root: impl AsRef<Path>) -> Result<CorpusData> {
     let manifest = read_manifest(root)?;
     let mut episodes = Vec::new();
     for shard in &manifest.shards {
-        read_shard(root, &manifest, shard, |episode| episodes.push(episode))?;
+        stream_shard(root, &manifest, shard, |episode| {
+            episodes.push(episode);
+            Ok(())
+        })?;
     }
     Ok(CorpusData { manifest, episodes })
 }
@@ -259,7 +345,7 @@ pub fn report_corpus(root: impl AsRef<Path>) -> Result<CorpusReport> {
     let manifest = read_manifest(root)?;
     let mut stats = StatsAccumulator::new();
     for shard in &manifest.shards {
-        read_shard(root, &manifest, shard, |episode| {
+        stream_shard(root, &manifest, shard, |episode| {
             stats.observe_episode(episode.split, &episode.result);
             for sample in episode.decisions {
                 stats.observe_decision(
@@ -269,6 +355,7 @@ pub fn report_corpus(root: impl AsRef<Path>) -> Result<CorpusReport> {
                     sample.target_index,
                 );
             }
+            Ok(())
         })?;
     }
     let (shard_bytes, manifest_bytes) = storage_bytes(root, &manifest)?;
@@ -287,11 +374,11 @@ pub fn verify_corpus(root: impl AsRef<Path>) -> Result<CorpusReport> {
     report_corpus(root)
 }
 
-fn read_shard(
+fn stream_shard(
     root: &Path,
     manifest: &Manifest,
     shard: &ShardEntry,
-    on_episode: impl FnMut(super::format::Episode),
+    on_episode: impl FnMut(Episode) -> Result<()>,
 ) -> Result<super::format::ParsedShard> {
     let path = manifest.shard_path(root, shard);
     read_shard_file(
@@ -356,9 +443,10 @@ mod tests {
         fs::write(&path, prefix).unwrap();
 
         let mut delivered = 0;
-        let error = read_shard(root.path(), &manifest, shard, |episode| {
+        let error = stream_shard(root.path(), &manifest, shard, |episode| {
             assert_eq!(episode.id.seed, shard.first_seed);
             delivered += 1;
+            Ok(())
         })
         .err()
         .expect("invalid tail must reject the shard");
@@ -375,7 +463,7 @@ mod tests {
         let (root, outcome) = fixture();
         let mut manifest = outcome.manifest;
         manifest.decision_limit = 1;
-        let error = read_shard(root.path(), &manifest, &manifest.shards[0], |_| {})
+        let error = stream_shard(root.path(), &manifest, &manifest.shards[0], |_| Ok(()))
             .err()
             .expect("decision limit must also be checked while reading");
         assert!(error.to_string().contains("exceeds decision limit"));
@@ -389,7 +477,7 @@ mod tests {
         let path = manifest.shard_path(root.path(), shard);
         let original = fs::read(&path).unwrap();
         fs::write(&path, &original[..original.len() - 1]).unwrap();
-        let error = read_shard(root.path(), &manifest, shard, |_| {})
+        let error = stream_shard(root.path(), &manifest, shard, |_| Ok(()))
             .err()
             .expect("a JSONL record must end with a newline");
         assert!(error.to_string().contains("final newline"));
@@ -411,10 +499,29 @@ mod tests {
                 changed.push('\n');
             }
             fs::write(&path, changed).unwrap();
-            let error = read_shard(root.path(), &manifest, shard, |_| {})
+            let error = stream_shard(root.path(), &manifest, shard, |_| Ok(()))
                 .err()
                 .expect("terminal result must be internally consistent");
             assert!(error.to_string().contains("winner count"), "{error}");
         }
+    }
+
+    #[test]
+    fn captured_snapshot_delivers_fallibly_and_aborts_on_visitor_error() {
+        let (root, _outcome) = fixture();
+        let snapshot = CorpusSnapshot::capture(root.path()).unwrap();
+        let mut delivered = 0;
+        let error = snapshot
+            .visit_shard(0, |episode| {
+                delivered += 1;
+                assert_eq!(episode.id.seed, snapshot.manifest().shards[0].first_seed);
+                Err(CollectionError::InvalidConfig {
+                    message: "visitor stopped".to_owned(),
+                })
+            })
+            .unwrap_err();
+        assert_eq!(delivered, 1);
+        assert!(error.to_string().contains("visitor stopped"));
+        assert!(snapshot.visit_shard(99, |_| Ok(())).is_err());
     }
 }

@@ -80,6 +80,14 @@ for clean-build requirements, commands, storage/recovery, and measurement report
 Collector contract and subprocess-lock tests run with the standard all-target
 checks.
 
+### Cache preparation
+
+`bc-prepare` converts a fixed teacher-corpus snapshot into a self-contained
+NumPy cache; `verify` works without the original corpus. See the
+[crate guide](../crates/neural/README.md#dataset-preparation) for commands,
+publication/retry behavior, buffer limits, provenance, and the array protocol.
+Contract and CLI tests run with the standard all-target checks.
+
 ### Policy A/B comparison example
 
 `examples/policy_ab.rs` runs a balanced 2A2B comparison. By default A is

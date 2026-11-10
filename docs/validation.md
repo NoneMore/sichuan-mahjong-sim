@@ -97,6 +97,51 @@ and [post-discard](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fd
 reports and the committed
 [measurement summary](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/heuristic-cost-attribution-refresh/measurements.json).
 
+## Rust BC preparation smoke validation
+
+A PR 1 working tree based on `2b49dd4`, extracting Rust preparation from
+`298bbee`, passed acceptance on Windows x86-64 with Rust/Cargo 1.98.0,
+Python 3.12.10 and NumPy 2.5.4. Collection used a clean build at
+`2b49dd4e812bcc56e5844068b7594adbf8db6425`; preparation recorded its dirty
+build separately. Reproduce the dataset from the respective checkouts with
+fresh outputs outside the source trees:
+
+```text
+cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
+  --root ../phase1-corpus --games 4 --seed-start 0 --shard-games 2 \
+  --cache-bytes 0 --report ../phase1-collection.json
+cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- prepare \
+  --corpus ../phase1-corpus --out ../phase1-cache \
+  --shard-decisions 60 --shard-candidates 400
+# Move phase1-corpus away before verifying the self-contained cache.
+cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- verify \
+  --cache ../phase1-cache
+```
+
+The cache retained **232 decisions, 1,374 candidates and 56 forced choices**.
+Train/validation/test eligible support was **137 / 39 / 0**; the empty test
+split had no shards. Independent `numpy.load(..., mmap_mode="r")` reads
+matched every state/candidate float32 bit, candidate order, local target,
+episode seed, decision index, actor, stage and target kind against the listed
+JSONL records, and checked array checksums and inventory. Rust verification
+passed after moving the original corpus away.
+
+- Captured manifest SHA-256:
+  `360e6716c586b9838eb5571b1112f18b0d2b1a3b306ab6c337cf44ccb86f72c4`.
+- Cache ID:
+  `8d5aa96394bd2dfa90218e19afd4778abf48bc8d2c6bfc7798c10533c629cf90`.
+
+Rust formatting, warning-denied workspace Clippy, Debug/Release all-target
+tests, doctests, warning-denied rustdoc, and the Rust 1.75 all-target check
+passed on the integrated working tree. The MSRV check retained pre-existing
+dead-code warnings. The preparation suite ran 12 tests on Windows; its
+Unix-only dangling-symlink test was not exercised locally.
+
+This checks the Rust/NumPy handoff, not a Python loader or training.
+Temporary corpus, caches, reports, probe, and builds were removed after
+verification. Permanent regression coverage is in
+[`prepare_contract.rs`](../crates/neural/tests/prepare_contract.rs).
+
 ## Recovery and new measurements
 
 The studies ran primarily on Windows 10 / Ryzen 7 3700X with Rust 1.98.

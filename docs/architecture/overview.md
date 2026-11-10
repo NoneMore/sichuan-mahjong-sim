@@ -14,7 +14,7 @@ intended Mahjong semantics.
 | Rule foundation | [Foundation](foundation.md) | Tile/hand model and pure shape, legality and settlement facts |
 | Authoritative game | [Game](game.md) | Sole mutable hand state, decisions, progression and payments |
 | Policies | [Policy](policy.md) | Player-visible action selection, exact analysis and optional memoization |
-| Neural adapters | [Neural](neural.md) | Separate consumer crate for versioned decision encoding and teacher data collection |
+| Neural adapters | [Neural](neural.md) | Separate consumer crate for versioned decision encoding, teacher data collection and offline NumPy cache preparation |
 | Execution | [Runner and CLI](execution.md) | Drives games and policies without interpreting rules |
 | Research tools | [Experiments](experiments.md) | Repeatable policy comparisons, timings and evidence records |
 
@@ -48,7 +48,9 @@ shared tile / hand / action types
 This is logical dataflow, not a compile-time dependency graph. `Game`
 commits transitions; policies select from player-scoped decisions and
 Runner drives the loop. Neural teacher collection drives a separate public
-Game/Policy loop to record accepted decisions without changing Runner. The
+Game/Policy loop to record accepted decisions without changing Runner. Offline
+preparation captures that corpus and publishes a self-contained NumPy cache;
+neither collection nor preparation changes Runner or the simulator core. The
 subsystem guides explain ownership, cache and checkpoint constraints in detail.
 
 These are current **implemented outcomes**, not prospective designs.
