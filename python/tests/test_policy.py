@@ -288,9 +288,16 @@ def test_public_selection_entries_keep_their_own_validation():
             check_finite=False,
         )
     with pytest.raises(DataError):
-        sample_indices(
-            logits, mask, generator=torch.Generator(device="cuda")
-        )
+        sample_indices(logits.double(), mask, generator=torch.Generator())
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_sampling_rejects_generator_on_a_different_device():
+    logits = torch.zeros(2, 3)
+    mask = torch.ones(2, 3, dtype=torch.bool)
+    generator = torch.Generator(device="cuda")
+    with pytest.raises(DataError, match="generator device.*does not match"):
+        sample_indices(logits, mask, generator=generator)
 
 
 def test_masked_cross_entropy_gradient_ignores_padding():
