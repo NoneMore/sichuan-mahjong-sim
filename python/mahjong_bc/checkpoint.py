@@ -545,8 +545,6 @@ def save_checkpoint(
 def _torch_load(path: Path) -> Any:
     try:
         return torch.load(path, map_location="cpu", weights_only=True)
-    except CheckpointError:
-        raise
     except Exception as exc:
         raise CheckpointError(f"failed to read checkpoint {path}: {exc}") from exc
 
@@ -671,20 +669,17 @@ def restore_random_state(
 
     torch.set_rng_state(state.torch_rng_state)
     if device.type == "cuda":
-        if state.torch_cuda_rng_states is None:
+        cuda_states = state.torch_cuda_rng_states
+        if not cuda_states:
             raise ResumeError(
                 "checkpoint has no CUDA RNG state but this run uses a CUDA device"
             )
-        if not state.torch_cuda_rng_states:
-            raise ResumeError("checkpoint has an empty CUDA RNG state list")
         cuda_device = (
             device
             if device.index is not None
             else torch.device("cuda", torch.cuda.current_device())
         )
-        torch.cuda.set_rng_state(
-            state.torch_cuda_rng_states[0], device=cuda_device
-        )
+        torch.cuda.set_rng_state(cuda_states[0], device=cuda_device)
     order_generator.set_state(state.order_rng_state)
 
 

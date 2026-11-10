@@ -520,8 +520,10 @@ def test_resume_rejects_model_configuration_identity_dependency_and_role(
         output_dir=tmp_path / "best-role",
         device="cpu",
     )
-    with pytest.raises(ResumeError, match="last"):
-        best_role.train(resume_from=best)
+    for source in (best, load_checkpoint(best)):
+        with pytest.raises(ResumeError, match="last"):
+            best_role.train(resume_from=source)
+        assert not best_role.output_dir.exists()
 
     policy = tmp_path / "policy.pt"
     save_checkpoint(
@@ -536,6 +538,9 @@ def test_resume_rejects_model_configuration_identity_dependency_and_role(
             output_dir=tmp_path / "policy-role",
             device="cpu",
         ).train(resume_from=policy)
+    with pytest.raises(ResumeError, match="last"):
+        best_role.train(resume_from=load_policy_checkpoint(policy))
+    assert not best_role.output_dir.exists()
 
 
 def test_resume_rejects_checkpoint_device_type_mismatch(tmp_path):
@@ -990,6 +995,29 @@ def test_cuda_training_and_checkpoint_reload_smoke(tmp_path):
     assert loaded.role == ROLE_LAST
     assert loaded.training.device_type == "cuda"
     assert loaded.training.torch_cuda_rng_states
+    expected_torch_rng = loaded.training.torch_rng_state.clone()
+    expected_cuda_rng = loaded.training.torch_cuda_rng_states[0].clone()
+    best_state = {
+        name: value.clone()
+        for name, value in loaded.training.best_model_state.items()
+    }
+    migrated = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=2, batch_size=2, learning_rate=0.01),
+        output_dir=tmp_path / "cuda-migrated",
+        device="cuda",
+    )
+    migrated.train(resume_from=loaded.path)
+    # Copying the loaded model replaces random initialization during migration,
+    # so both restored streams must survive unchanged.
+    assert torch.equal(torch.get_rng_state(), expected_torch_rng)
+    assert torch.equal(
+        torch.cuda.get_rng_state(torch.device("cuda")), expected_cuda_rng
+    )
+    migrated_best = load_checkpoint(migrated.best_path, require_training=True)
+    _assert_state_dict_equal(migrated_best.model.state_dict(), best_state)
     report = evaluate_checkpoint(
         tmp_path / "cuda" / "best.pt", test, batch_size=2, device="cuda"
     )
@@ -1136,6 +1164,7 @@ def test_completed_resume_to_new_output_copies_best_and_last_and_does_not_train(
     assert summary.completed_epochs == 2
     old_best = load_checkpoint(old / "best.pt", require_training=True)
     old_last = load_checkpoint(old / "last.pt", require_training=True)
+    expected_torch_rng = old_last.training.torch_rng_state.clone()
     best_weights = {
         name: value.clone() for name, value in old_best.model.state_dict().items()
     }
@@ -1155,6 +1184,8 @@ def test_completed_resume_to_new_output_copies_best_and_last_and_does_not_train(
         device="cpu",
     )
     resumed_summary = resumed.train(resume_from=old / "last.pt")
+    # Completed migration restores and then must not consume either RNG stream.
+    assert torch.equal(torch.get_rng_state(), expected_torch_rng)
     assert recorder.visited == []
     assert resumed_summary.to_dict() == summary.to_dict()
     new_best = load_checkpoint(new / "best.pt", require_training=True)

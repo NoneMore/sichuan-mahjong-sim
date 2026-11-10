@@ -102,7 +102,9 @@ is not an input; padding is masked before loss and action selection.
 Seeded epochs visit every eligible decision once with equal-weight cross-entropy,
 including partial batches. `metrics.py` aggregates complete splits by decision,
 stage and teacher action kind, reporting forced counts separately. Validation NLL
-alone selects `best.pt`; frozen test evaluation is separate from selection.
+alone selects `best.pt`; frozen test evaluation is separate from selection. A
+shared run-progress object feeds the epoch loop, checkpoints and summaries. The
+CLI reuses one loaded checkpoint to resolve configuration and resume training.
 
 `checkpoint.py` validates versioned policy/recovery payloads and publishes
 individual files atomically. `last.pt` commits the last completed epoch, including

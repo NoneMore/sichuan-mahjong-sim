@@ -342,6 +342,19 @@ Temporary corpus/cache, checkpoints, wheels and reports were removed after
 verification. Tests and the handoff/recovery probes retain reproduction coverage;
 raw artifacts are not archived. The repository `.venv` remains an editable install.
 
+The maintainability follow-up to `dcf7f41` passed **228 tests** in editable and
+wheel installs in the same environment, including CPU/CUDA migration and the
+single-checkpoint-read CLI regression. A clean `dcf7f41` worktree produced
+format-3 checkpoints from a CPU fixture (12 train / 6 validation decisions,
+seed 7, three epochs, batch size 5, learning rate 0.01, widths 16, one thread).
+After one uncommitted batch of epoch two, the refactored code resumed the old
+checkpoint and matched uninterrupted order, history, **9 steps / 36 samples**,
+model/optimizer/best weights and Torch/order RNG states with `rtol=0, atol=0`.
+The imported follow-up source SHA-256 was
+`946230ff6096351242dd4ad4c77c40aaa862899d9972d7924195374a14143080`.
+Checkpoint/run-record schemas were unchanged; temporary compatibility fixtures,
+worktree and wheel were removed after verification.
+
 ## Recovery and new measurements
 
 The studies ran primarily on Windows 10 / Ryzen 7 3700X with Rust 1.98.

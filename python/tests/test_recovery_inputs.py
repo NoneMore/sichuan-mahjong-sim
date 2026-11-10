@@ -69,7 +69,7 @@ def _damage(payload, kind):
 
 
 @pytest.mark.parametrize("kind", [
-    "missing_keys", "missing_params", "lr", "tensor_lr", "param_order",
+    "missing_keys", "missing_params", "lr", "param_order",
     "shape", "dtype", "step", "missing_slot", "missing_parameter",
     "global_step", "samples_seen",
 ])
@@ -86,6 +86,24 @@ def test_damaged_resume_rejected_before_publication(completed_run, tmp_path, kin
         trainer.train(resume_from=source)
     assert not output.exists()
     assert source.read_bytes() == before
+
+
+def test_tensor_optimizer_hyperparameter_is_rejected_explicitly(
+    completed_run, tmp_path
+):
+    original, _, options = completed_run
+    payload = torch.load(original.last_path, weights_only=True)
+    _damage(payload, "tensor_lr")
+    source = tmp_path / "tensor-lr" / "last.pt"
+    atomic_torch_save(payload, source)
+    output = tmp_path / "destination"
+    with pytest.raises(
+        ResumeError, match=r"parameter group 'lr'.*unsupported"
+    ) as error:
+        Trainer(output_dir=output, **options).train(resume_from=source)
+    assert "ambiguous" not in str(error.value)
+    assert "Boolean value" not in str(error.value)
+    assert not output.exists()
 
 
 @pytest.mark.parametrize("name", ["best.pt", "last.pt", "run.json"])

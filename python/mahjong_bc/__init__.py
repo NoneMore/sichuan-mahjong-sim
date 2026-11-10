@@ -24,12 +24,9 @@ from .checkpoint import (
     LoadedCheckpoint,
     TrainingCheckpointState,
     build_payload,
-    check_model_config_identity,
     load_checkpoint,
     load_policy_checkpoint,
-    restore_random_state,
     save_checkpoint,
-    validate_training_state_compatible,
 )
 from .config import (
     DatasetIdentity,
@@ -138,7 +135,6 @@ __all__ = [
     "TrainingSummary",
     "build_payload",
     "build_policy",
-    "check_model_config_identity",
     "collate_decisions",
     "collect_dependency_versions",
     "contains_memory_mapped_arrays",
@@ -153,9 +149,7 @@ __all__ = [
     "load_prepared_cache",
     "masked_cross_entropy",
     "resolve_device",
-    "restore_random_state",
     "sample_indices",
     "save_checkpoint",
-    "validate_training_state_compatible",
     "__version__",
 ]

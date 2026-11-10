@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import mahjong_bc
+import mahjong_bc.checkpoint as checkpoint_module
 from mahjong_bc.checkpoint import (
     load_checkpoint,
     load_policy_checkpoint,
@@ -531,6 +532,28 @@ def test_cli_resume_to_new_output_and_conflicting_options(tmp_path, capsys):
     ) == 2
     assert "recoverable training state" in capsys.readouterr().err
     assert not policy_output.exists()
+
+
+def test_cli_resume_reads_last_checkpoint_once(tmp_path, capsys, monkeypatch):
+    fixture = synthetic_cache(tmp_path / "cache")
+    old = tmp_path / "old"
+    assert main(_train_args(fixture.root, old)) == 0
+    capsys.readouterr()
+
+    real_load = checkpoint_module.torch.load
+    reads: list[Path] = []
+
+    def counting_load(*args, **kwargs):
+        reads.append(Path(args[0]))
+        return real_load(*args, **kwargs)
+
+    monkeypatch.setattr(checkpoint_module.torch, "load", counting_load)
+    new = tmp_path / "new"
+    assert main(_resume_args(fixture.root, new, old / "last.pt")) == 0
+    result = _parse(capsys)
+    assert result["summary"]["completed_epochs"] == 1
+    assert reads == [old / "last.pt"]
+    assert (new / "last.pt").is_file()
 
 
 def test_cli_resume_output_and_log_paths_remain_protected(tmp_path, capsys):

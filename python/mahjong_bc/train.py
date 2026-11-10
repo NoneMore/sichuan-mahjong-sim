@@ -10,9 +10,10 @@ point for each recoverable epoch.
 
 from __future__ import annotations
 
+import copy
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -21,6 +22,7 @@ import torch
 from ._device import resolve_device
 from ._source import collect_training_source
 from .checkpoint import (
+    LoadedCheckpoint,
     TrainingCheckpointState,
     atomic_write_json,
     check_model_config_identity,
@@ -79,6 +81,50 @@ class TrainingSummary:
             "best_epoch": self.best_epoch,
             "history": [dict(entry) for entry in self.history],
         }
+
+
+@dataclass
+class _TrainingProgress:
+    """Mutable counters and best-selection state for one training run.
+
+    Fresh and resumed runs differ only in how this object is initialized; the
+    epoch loop and its checkpoint/summary conversions read and update one
+    source of truth instead of threading the same fields through call chains.
+    """
+
+    completed_epochs: int = 0
+    global_step: int = 0
+    samples_seen: int = 0
+    best_validation_nll: float | None = None
+    best_epoch: int | None = None
+    best_model_state: dict[str, torch.Tensor] | None = None
+    best_metrics: dict[str, Any] | None = None
+    history: list[dict[str, Any]] = field(default_factory=list)
+
+    @classmethod
+    def from_checkpoint(
+        cls, state: TrainingCheckpointState
+    ) -> "_TrainingProgress":
+        return cls(
+            completed_epochs=state.completed_epochs,
+            global_step=state.global_step,
+            samples_seen=state.samples_seen,
+            best_validation_nll=state.best_validation_nll,
+            best_epoch=state.best_epoch,
+            best_model_state=dict(state.best_model_state or {}),
+            best_metrics=dict(state.best_metrics or {}),
+            history=list(state.history),
+        )
+
+    def summary(self) -> TrainingSummary:
+        return TrainingSummary(
+            completed_epochs=self.completed_epochs,
+            global_step=self.global_step,
+            samples_seen=self.samples_seen,
+            best_validation_nll=self.best_validation_nll,
+            best_epoch=self.best_epoch,
+            history=tuple(self.history),
+        )
 
 
 def _order_seed(seed: int) -> int:
@@ -177,7 +223,22 @@ def _validate_optimizer_state(
             f"missing {missing}, unknown {extra}"
         )
     for key in sorted(expected_keys - {"params"}):
-        if group[key] != expected_group[key]:
+        value = group[key]
+        # Optimizer options are plain scalars/tuples. Reject tensors and other
+        # containers before ``!=``, which would otherwise resolve to an
+        # ambiguous tensor boolean or an unrelated comparison error.
+        plain_value = isinstance(value, (bool, int, float, type(None))) or (
+            isinstance(value, tuple)
+            and all(
+                isinstance(item, (bool, int, float)) for item in value
+            )
+        )
+        if not plain_value:
+            raise _invalid_optimizer(
+                f"parameter group {key!r} has unsupported value type "
+                f"{type(value).__name__}"
+            )
+        if value != expected_group[key]:
             raise _invalid_optimizer(
                 f"parameter group {key!r} is {group[key]!r}, but the requested "
                 f"training configuration requires {expected_group[key]!r}"
@@ -261,6 +322,27 @@ def _validate_optimizer_state(
             )
 
 
+def _require_last_role(loaded: LoadedCheckpoint) -> None:
+    if loaded.role != ROLE_LAST:
+        raise ResumeError(
+            f"resume requires a {ROLE_LAST!r} checkpoint, "
+            f"got role {loaded.role!r}"
+        )
+
+
+def load_resume_checkpoint(path: Path | str) -> LoadedCheckpoint:
+    """Load a recoverable ``last`` checkpoint once for resume orchestration.
+
+    The CLI calls this before constructing datasets and a :class:`Trainer` so
+    it can read the checkpoint's configuration; passing the returned value to
+    ``Trainer.train(resume_from=...)`` reuses the same deserialized artifact.
+    """
+
+    loaded = load_checkpoint(path, device="cpu", require_training=True)
+    _require_last_role(loaded)
+    return loaded
+
+
 class Trainer:
     """Train one candidate-scoring policy with recoverable epoch boundaries."""
 
@@ -334,12 +416,28 @@ class Trainer:
 
     # ---- public training entry point ------------------------------------
 
-    def train(self, *, resume_from: Path | str | None = None) -> TrainingSummary:
-        """Train from scratch or continue from a completed-epoch ``last``."""
+    def train(
+        self,
+        *,
+        resume_from: Path | str | LoadedCheckpoint | None = None,
+    ) -> TrainingSummary:
+        """Train from scratch or continue from a completed-epoch ``last``.
+
+        ``resume_from`` normally names a checkpoint. A loader-validated
+        ``LoadedCheckpoint`` may be passed unchanged to reuse an artifact read
+        while resolving configuration. Its original source path determines
+        in-place versus migrated output; resume identity and recovery checks
+        still run here.
+        """
 
         if resume_from is None:
             return self._train_from_scratch()
-        return self._resume_and_train(Path(resume_from))
+        loaded = (
+            resume_from
+            if isinstance(resume_from, LoadedCheckpoint)
+            else load_resume_checkpoint(resume_from)
+        )
+        return self._resume_and_train(loaded)
 
     # ---- run setup -------------------------------------------------------
 
@@ -363,28 +461,10 @@ class Trainer:
         model, optimizer = self._new_model_and_optimizer()
         self.model = model
         self.optimizer = optimizer
-        return self._run_epochs(
-            start_epoch=0,
-            global_step=0,
-            samples_seen=0,
-            best_validation_nll=None,
-            best_epoch=None,
-            best_model_state=None,
-            best_metrics=None,
-            history=[],
-        )
+        return self._run_epochs(_TrainingProgress())
 
-    def _resume_and_train(self, checkpoint_path: Path) -> TrainingSummary:
-        loaded = load_checkpoint(
-            checkpoint_path,
-            device=self.device,
-            require_training=True,
-        )
-        if loaded.role != ROLE_LAST:
-            raise ResumeError(
-                f"resume requires a {ROLE_LAST!r} checkpoint, "
-                f"got role {loaded.role!r}"
-            )
+    def _resume_and_train(self, loaded: LoadedCheckpoint) -> TrainingSummary:
+        _require_last_role(loaded)
         check_model_config_identity(loaded, self.model_config)
         state = loaded.training
         assert state is not None
@@ -397,7 +477,7 @@ class Trainer:
             device_type=self.device.type,
         )
         self._require_resume_progress(state)
-        self._require_resume_output_target(checkpoint_path)
+        self._require_resume_output_target(loaded.path)
         model = loaded.model.to(self.device).float()
         optimizer = torch.optim.AdamW(
             model.parameters(),
@@ -432,49 +512,25 @@ class Trainer:
         # makes a changed output directory self-contained even if training is
         # already complete or never improves on the embedded best.
         self._publish_migrated_outputs(loaded)
+        progress = _TrainingProgress.from_checkpoint(state)
         if state.completed_epochs >= self.training_config.epochs:
-            summary = TrainingSummary(
-                completed_epochs=state.completed_epochs,
-                global_step=state.global_step,
-                samples_seen=state.samples_seen,
-                best_validation_nll=state.best_validation_nll,
-                best_epoch=state.best_epoch,
-                history=tuple(state.history),
-            )
+            summary = progress.summary()
             self._write_run_record(summary)
             return summary
-        return self._run_epochs(
-            start_epoch=state.completed_epochs,
-            global_step=state.global_step,
-            samples_seen=state.samples_seen,
-            best_validation_nll=state.best_validation_nll,
-            best_epoch=state.best_epoch,
-            best_model_state=dict(state.best_model_state or {}),
-            best_metrics=dict(state.best_metrics or {}),
-            history=list(state.history),
-        )
+        return self._run_epochs(progress)
 
-    def _publish_migrated_outputs(self, loaded) -> None:
+    def _publish_migrated_outputs(self, loaded: LoadedCheckpoint) -> None:
         """Re-publish best and last artifacts into this run's output directory."""
 
         state = loaded.training
         assert state is not None
         if state.best_model_state is None or state.best_metrics is None:
             raise ResumeError("checkpoint has no embedded best model state")
-        # Constructing the destination model must not consume training RNG.
-        # ``last`` is written second and is the self-contained commit point.
-        torch_rng = torch.get_rng_state()
-        cuda_rng = (
-            [torch.cuda.get_rng_state(self.device)]
-            if self.device.type == "cuda"
-            else None
-        )
-        try:
-            best_model = CandidatePolicy(self.model_config)
-        finally:
-            torch.set_rng_state(torch_rng)
-            if cuda_rng is not None:
-                torch.cuda.set_rng_state(cuda_rng[0], device=self.device)
+        # Copy the already constructed model instead of initializing a new one:
+        # migration must not consume the restored training RNG streams. Keep
+        # the migrated best model on CPU with its saved state tensors. ``last``
+        # is written second and is the self-contained commit point.
+        best_model = copy.deepcopy(loaded.model).cpu()
         try:
             best_model.load_state_dict(state.best_model_state, strict=True)
         except Exception as exc:
@@ -560,25 +616,14 @@ class Trainer:
 
     # ---- epoch loop ------------------------------------------------------
 
-    def _run_epochs(
-        self,
-        *,
-        start_epoch: int,
-        global_step: int,
-        samples_seen: int,
-        best_validation_nll: float | None,
-        best_epoch: int | None,
-        best_model_state: dict[str, torch.Tensor] | None,
-        best_metrics: dict[str, Any] | None,
-        history: list[dict[str, Any]],
-    ) -> TrainingSummary:
+    def _run_epochs(self, progress: _TrainingProgress) -> TrainingSummary:
         model = self.model
         optimizer = self.optimizer
         assert model is not None and optimizer is not None
         eligible_indices = self.train_dataset.eligible_indices()
         eligible_count = int(eligible_indices.size)
         batch_size = self.training_config.batch_size
-        for epoch in range(start_epoch, self.training_config.epochs):
+        for epoch in range(progress.completed_epochs, self.training_config.epochs):
             model.train()
             permutation = torch.randperm(
                 eligible_count, generator=self.order_generator
@@ -608,10 +653,10 @@ class Trainer:
                 )
                 loss.backward()
                 optimizer.step()
-                global_step += 1
+                progress.global_step += 1
                 epoch_steps += 1
                 decisions = moved.batch_size
-                samples_seen += decisions
+                progress.samples_seen += decisions
                 train_decisions += decisions
                 train_nll_sum += float(loss.detach().double().item()) * decisions
             if train_decisions != eligible_count:
@@ -632,37 +677,29 @@ class Trainer:
                     "validation split produced no eligible primary metric"
                 )
             improved = (
-                best_validation_nll is None or validation.nll < best_validation_nll
+                progress.best_validation_nll is None
+                or validation.nll < progress.best_validation_nll
             )
             if improved:
-                best_validation_nll = validation.nll
-                best_epoch = epoch
-                best_metrics = validation.to_dict()
-                best_model_state = _cpu_state_dict(model)
-            completed_epochs = epoch + 1
-            history.append(
+                progress.best_validation_nll = validation.nll
+                progress.best_epoch = epoch
+                progress.best_metrics = validation.to_dict()
+                progress.best_model_state = _cpu_state_dict(model)
+            progress.completed_epochs = epoch + 1
+            progress.history.append(
                 {
                     "epoch": epoch,
-                    "completed_epochs": completed_epochs,
+                    "completed_epochs": progress.completed_epochs,
                     "steps": epoch_steps,
                     "samples": train_decisions,
                     "train_nll": train_nll,
                     "validation": validation.to_dict(),
                     "best_updated": improved,
-                    "best_validation_nll": best_validation_nll,
-                    "best_epoch": best_epoch,
+                    "best_validation_nll": progress.best_validation_nll,
+                    "best_epoch": progress.best_epoch,
                 }
             )
-            state = self._training_state(
-                completed_epochs=completed_epochs,
-                global_step=global_step,
-                samples_seen=samples_seen,
-                best_validation_nll=best_validation_nll,
-                best_epoch=best_epoch,
-                best_model_state=best_model_state,
-                best_metrics=best_metrics,
-                history=history,
-            )
+            state = self._training_state(progress)
             metrics = validation.to_dict()
             if improved:
                 save_checkpoint(
@@ -679,35 +716,11 @@ class Trainer:
                 training=state,
                 metrics=metrics,
             )
-            summary = TrainingSummary(
-                completed_epochs=completed_epochs,
-                global_step=global_step,
-                samples_seen=samples_seen,
-                best_validation_nll=best_validation_nll,
-                best_epoch=best_epoch,
-                history=tuple(history),
-            )
-            self._write_run_record(summary)
-        return TrainingSummary(
-            completed_epochs=self.training_config.epochs,
-            global_step=global_step,
-            samples_seen=samples_seen,
-            best_validation_nll=best_validation_nll,
-            best_epoch=best_epoch,
-            history=tuple(history),
-        )
+            self._write_run_record(progress.summary())
+        return progress.summary()
 
     def _training_state(
-        self,
-        *,
-        completed_epochs: int,
-        global_step: int,
-        samples_seen: int,
-        best_validation_nll: float | None,
-        best_epoch: int | None,
-        best_model_state: dict[str, torch.Tensor] | None,
-        best_metrics: dict[str, Any] | None,
-        history: list[dict[str, Any]],
+        self, progress: _TrainingProgress
     ) -> TrainingCheckpointState:
         assert self.optimizer is not None
         cuda_states = (
@@ -721,18 +734,18 @@ class Trainer:
             validation_dataset_identity=self.validation_identity,
             dependencies=self.dependencies,
             device_type=self.device.type,
-            completed_epochs=completed_epochs,
-            global_step=global_step,
-            samples_seen=samples_seen,
-            best_validation_nll=best_validation_nll,
-            best_epoch=best_epoch,
-            history=list(history),
+            completed_epochs=progress.completed_epochs,
+            global_step=progress.global_step,
+            samples_seen=progress.samples_seen,
+            best_validation_nll=progress.best_validation_nll,
+            best_epoch=progress.best_epoch,
+            history=list(progress.history),
             optimizer_state=self.optimizer.state_dict(),
             torch_rng_state=torch.get_rng_state(),
             torch_cuda_rng_states=cuda_states,
             order_rng_state=self.order_generator.get_state(),
-            best_model_state=best_model_state,
-            best_metrics=best_metrics,
+            best_model_state=progress.best_model_state,
+            best_metrics=progress.best_metrics,
         )
 
     def run_payload(self, summary: TrainingSummary) -> dict[str, Any]:

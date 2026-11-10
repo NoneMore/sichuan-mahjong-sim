@@ -11,8 +11,8 @@ from typing import Any, Sequence
 
 from .cache import load_prepared_cache
 from .checkpoint import (
+    LoadedCheckpoint,
     atomic_write_json,
-    load_checkpoint,
     load_policy_checkpoint,
 )
 from .config import (
@@ -21,9 +21,23 @@ from .config import (
     TrainingConfig,
     collect_dependency_versions,
 )
-from .constants import PACKAGE_VERSION, ROLE_LAST, SPLIT_NAMES
-from .errors import ConfigurationError, MahjongBCError, ResumeError
-from .train import TRAIN_OUTPUT_NAMES, Trainer, evaluate_checkpoint
+from .constants import PACKAGE_VERSION, SPLIT_NAMES
+from .errors import ConfigurationError, MahjongBCError
+from .train import (
+    TRAIN_OUTPUT_NAMES,
+    Trainer,
+    evaluate_checkpoint,
+    load_resume_checkpoint,
+)
+
+_REQUIRED_RUN_OPTIONS = ("seed", "epochs", "batch_size", "learning_rate")
+_TRAINING_OPTION_NAMES = ("weight_decay", "beta1", "beta2", "num_workers")
+_MODEL_OPTION_NAMES = ("state_hidden", "scorer_hidden", "activation")
+_RESUME_FORBIDDEN_OPTIONS = (
+    *_REQUIRED_RUN_OPTIONS,
+    *_TRAINING_OPTION_NAMES,
+    *_MODEL_OPTION_NAMES,
+)
 
 
 def _parse_widths(text: str) -> tuple[int, ...]:
@@ -113,14 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _new_run_config(args: argparse.Namespace) -> tuple[ModelConfig, TrainingConfig]:
     missing = [
-        name
-        for name, value in (
-            ("--seed", args.seed),
-            ("--epochs", args.epochs),
-            ("--batch-size", args.batch_size),
-            ("--learning-rate", args.learning_rate),
-        )
-        if value is None
+        f"--{name.replace('_', '-')}"
+        for name in _REQUIRED_RUN_OPTIONS
+        if getattr(args, name) is None
     ]
     if missing:
         raise MahjongBCError(
@@ -128,52 +137,36 @@ def _new_run_config(args: argparse.Namespace) -> tuple[ModelConfig, TrainingConf
             "use --resume to continue from a last checkpoint"
         )
     training_values: dict[str, Any] = {
-        "seed": args.seed,
-        "epochs": args.epochs,
-        "batch_size": args.batch_size,
-        "learning_rate": args.learning_rate,
+        name: getattr(args, name) for name in _REQUIRED_RUN_OPTIONS
     }
-    for name in ("weight_decay", "beta1", "beta2", "num_workers"):
+    for name in _TRAINING_OPTION_NAMES:
         value = getattr(args, name)
         if value is not None:
             training_values[name] = value
     model_values: dict[str, Any] = {}
-    for name in ("state_hidden", "scorer_hidden", "activation"):
+    for name in _MODEL_OPTION_NAMES:
         value = getattr(args, name)
         if value is not None:
             model_values[name] = value
     return ModelConfig(**model_values), TrainingConfig(**training_values)
 
 
-def _resume_config(args: argparse.Namespace) -> tuple[ModelConfig, TrainingConfig]:
+def _require_no_resume_overrides(args: argparse.Namespace) -> None:
     conflicting = [
-        name
-        for name, value in (
-            ("--seed", args.seed),
-            ("--epochs", args.epochs),
-            ("--batch-size", args.batch_size),
-            ("--learning-rate", args.learning_rate),
-            ("--weight-decay", args.weight_decay),
-            ("--beta1", args.beta1),
-            ("--beta2", args.beta2),
-            ("--num-workers", args.num_workers),
-            ("--state-hidden", args.state_hidden),
-            ("--scorer-hidden", args.scorer_hidden),
-            ("--activation", args.activation),
-        )
-        if value is not None
+        f"--{name.replace('_', '-')}"
+        for name in _RESUME_FORBIDDEN_OPTIONS
+        if getattr(args, name) is not None
     ]
     if conflicting:
         raise MahjongBCError(
             "--resume uses the checkpoint's model/training configuration; "
             f"remove {', '.join(conflicting)}"
         )
-    loaded = load_checkpoint(args.resume, device="cpu", require_training=True)
-    if loaded.role != ROLE_LAST:
-        raise ResumeError(
-            f"--resume requires a {ROLE_LAST!r} checkpoint, "
-            f"got role {loaded.role!r}"
-        )
+
+
+def _resume_config(
+    loaded: LoadedCheckpoint,
+) -> tuple[ModelConfig, TrainingConfig]:
     state = loaded.training
     assert state is not None
     return loaded.model_config, state.training_config
@@ -295,8 +288,11 @@ def _emit(
 
 
 def _cmd_train(args: argparse.Namespace) -> int:
+    resume = None
     if args.resume:
-        model_config, training_config = _resume_config(args)
+        _require_no_resume_overrides(args)
+        resume = load_resume_checkpoint(args.resume)
+        model_config, training_config = _resume_config(resume)
     else:
         model_config, training_config = _new_run_config(args)
     cache = load_prepared_cache(args.dataset)
@@ -313,7 +309,7 @@ def _cmd_train(args: argparse.Namespace) -> int:
         device=args.device,
         dataset_provenance=dataset_metadata,
     )
-    summary = trainer.train(resume_from=args.resume)
+    summary = trainer.train(resume_from=resume)
     payload = trainer.run_payload(summary)
     result = {
         "command": "train",
