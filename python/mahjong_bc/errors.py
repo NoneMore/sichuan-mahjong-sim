@@ -19,3 +19,7 @@ class CacheContractError(MahjongBCError):
 
 class CheckpointError(MahjongBCError):
     """A policy checkpoint is corrupt, incompatible, or not supported here."""
+
+
+class ResumeError(MahjongBCError, ValueError):
+    """A recovery checkpoint does not match the requested run identity."""

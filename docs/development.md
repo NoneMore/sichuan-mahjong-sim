@@ -99,8 +99,9 @@ Contract and CLI tests run with the standard all-target checks.
 ### Python offline behavior cloning
 
 See the [package guide](../python/README.md) for `.venv` installation, cache
-loading, fresh training, checkpoint inspection and frozen evaluation commands.
-Training supports CPU or one local CUDA device; recovery is not implemented.
+loading, training/resume, checkpoint inspection and frozen evaluation commands.
+Training supports CPU or one local CUDA device, epoch-boundary recovery and
+output-directory migration.
 After installation, run `python -m pytest python/tests` from the repository root.
 The [Python CPU workflow](../.github/workflows/python-ci.yml) installs the package
 and runs loader, batching, policy, metrics, checkpoint, training and CLI tests
@@ -108,7 +109,9 @@ independently of Rust.
 The [handoff validation](validation.md#python-dataset-loader-smoke-validation)
 records a real Rust prepare → Python load/batch check. The
 [training validation](validation.md#offline-bc-training-smoke-validation) records
-wheel installation, training, checkpoint reload and frozen test evaluation.
+wheel installation, training, checkpoint reload and frozen test evaluation. The
+[recovery validation](validation.md#offline-bc-recovery-validation) adds real-cache
+epoch replay, output migration and CUDA training/reload checks.
 
 ### Policy A/B comparison example
 

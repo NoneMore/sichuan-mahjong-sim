@@ -10,10 +10,15 @@ from pathlib import Path
 import pytest
 
 import mahjong_bc
-from mahjong_bc.checkpoint import load_policy_checkpoint, save_checkpoint
+import mahjong_bc.checkpoint as checkpoint_module
+from mahjong_bc.checkpoint import (
+    load_checkpoint,
+    load_policy_checkpoint,
+    save_checkpoint,
+)
 from mahjong_bc.cli import build_parser, main
 from mahjong_bc.config import ACTIVATION_NAMES, ModelConfig, TrainingConfig
-from mahjong_bc.constants import PACKAGE_VERSION, ROLE_BEST
+from mahjong_bc.constants import PACKAGE_VERSION, ROLE_POLICY
 from mahjong_bc.policy import build_policy
 from mahjong_bc.train import TRAIN_OUTPUT_NAMES
 
@@ -68,6 +73,27 @@ def _train_args(
     return args
 
 
+def _resume_args(
+    cache_root: Path,
+    output: Path,
+    resume: Path,
+    *,
+    log_file: Path | None = None,
+) -> list[str]:
+    args = [
+        "train",
+        "--dataset",
+        str(cache_root),
+        "--output",
+        str(output),
+        "--resume",
+        str(resume),
+    ]
+    if log_file is not None:
+        args.extend(["--log-file", str(log_file)])
+    return args
+
+
 def _evaluate_args(
     cache_root: Path,
     checkpoint: Path,
@@ -97,7 +123,7 @@ def _write_checkpoint(path: Path) -> Path:
     model = build_policy(
         ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=3
     )
-    save_checkpoint(path, model, role=ROLE_BEST, metrics={"nll": 0.5})
+    save_checkpoint(path, model, role=ROLE_POLICY, metrics={"nll": 0.5})
     return path
 
 
@@ -261,9 +287,10 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
     assert result["source"]["package_version"] == PACKAGE_VERSION
     assert len(result["source"]["hash"]) == 64
     assert result["checkpoints"]["best"] == str(output / "best.pt")
+    assert result["checkpoints"]["last"] == str(output / "last.pt")
     assert (output / "best.pt").is_file()
+    assert (output / "last.pt").is_file()
     assert (output / "run.json").is_file()
-    assert not (output / "last.pt").exists()
     assert log.is_file()
     logged = json.loads(log.read_text(encoding="utf-8"))
     assert logged["summary"]["completed_epochs"] == 2
@@ -285,6 +312,8 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
     assert record["summary"] == result["summary"]
     assert record["dataset"]["provenance"]["cache_id"] == manifest["cache_id"]
     assert record["training_config"]["seed"] == 1
+    assert record["best_checkpoint"] == "best.pt"
+    assert record["last_checkpoint"] == "last.pt"
     assert set(result) == {
         "command",
         "package_version",
@@ -312,6 +341,11 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
     }
     loaded = load_policy_checkpoint(output / "best.pt")
     assert loaded.role == "best"
+    loaded_last = load_checkpoint(
+        output / "last.pt", require_training=True
+    )
+    assert loaded_last.role == "last"
+    assert loaded_last.training.completed_epochs == 2
 
     metrics_path = tmp_path / "metrics.json"
     eval_log = tmp_path / "eval.log.json"
@@ -346,8 +380,9 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
     inspected = _parse(capsys)
     assert inspected["command"] == "inspect"
     assert inspected["role"] == "best"
-    assert inspected["has_training_state"] is False
-    assert inspected["checkpoint_format_version"] == 2
+    assert inspected["has_training_state"] is True
+    assert inspected["completed_epochs"] == 2
+    assert inspected["checkpoint_format_version"] == 3
     assert inspected["model_format_version"] == 1
 
 
@@ -461,32 +496,108 @@ def test_cli_activation_choices_match_config_names():
         )
 
 
-def test_cli_has_no_resume_option_and_rejects_training_split_evaluation(
-    tmp_path, capsys
-):
+def test_cli_resume_to_new_output_and_conflicting_options(tmp_path, capsys):
     fixture = synthetic_cache(tmp_path / "cache")
-    with pytest.raises(SystemExit):
-        main(
-            [
-                "train",
-                "--dataset",
-                str(fixture.root),
-                "--output",
-                str(tmp_path / "resume"),
-                "--resume",
-                str(tmp_path / "last.pt"),
-                "--seed",
-                "1",
-                "--epochs",
-                "1",
-                "--batch-size",
-                "2",
-                "--learning-rate",
-                "0.02",
-            ]
-        )
-    assert "unrecognized arguments" in capsys.readouterr().err
+    old = tmp_path / "old"
+    assert main(_train_args(fixture.root, old)) == 0
+    capsys.readouterr()
 
+    new = tmp_path / "new"
+    log = tmp_path / "resume.log.json"
+    assert main(
+        _resume_args(fixture.root, new, old / "last.pt", log_file=log)
+    ) == 0
+    result = _parse(capsys)
+    assert result["summary"]["completed_epochs"] == 1
+    assert (new / "best.pt").is_file()
+    assert (new / "last.pt").is_file()
+    assert (new / "run.json").is_file()
+    assert log.is_file()
+    resumed_last = load_checkpoint(new / "last.pt", require_training=True)
+    assert resumed_last.role == "last"
+    assert resumed_last.training.completed_epochs == 1
+
+    conflict = tmp_path / "conflict"
+    args = _resume_args(fixture.root, conflict, old / "last.pt")
+    args.extend(["--seed", "3"])
+    assert main(args) == 2
+    captured = capsys.readouterr()
+    assert "uses the checkpoint's" in captured.err
+    assert not conflict.exists()
+
+    policy = _write_checkpoint(tmp_path / "policy.pt")
+    policy_output = tmp_path / "policy-resume"
+    assert main(
+        _resume_args(fixture.root, policy_output, policy)
+    ) == 2
+    assert "recoverable training state" in capsys.readouterr().err
+    assert not policy_output.exists()
+
+
+def test_cli_resume_reads_last_checkpoint_once(tmp_path, capsys, monkeypatch):
+    fixture = synthetic_cache(tmp_path / "cache")
+    old = tmp_path / "old"
+    assert main(_train_args(fixture.root, old)) == 0
+    capsys.readouterr()
+
+    real_load = checkpoint_module.torch.load
+    reads: list[Path] = []
+
+    def counting_load(*args, **kwargs):
+        reads.append(Path(args[0]))
+        return real_load(*args, **kwargs)
+
+    monkeypatch.setattr(checkpoint_module.torch, "load", counting_load)
+    new = tmp_path / "new"
+    assert main(_resume_args(fixture.root, new, old / "last.pt")) == 0
+    result = _parse(capsys)
+    assert result["summary"]["completed_epochs"] == 1
+    assert reads == [old / "last.pt"]
+    assert (new / "last.pt").is_file()
+
+
+def test_cli_resume_output_and_log_paths_remain_protected(tmp_path, capsys):
+    fixture = synthetic_cache(tmp_path / "cache")
+    old = tmp_path / "old"
+    assert main(_train_args(fixture.root, old)) == 0
+    capsys.readouterr()
+    before = _cache_snapshot(fixture.root)
+
+    inside = fixture.root / "resumed"
+    assert main(
+        _resume_args(fixture.root, inside, old / "last.pt")
+    ) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "inside prepared cache" in captured.err
+    assert _cache_snapshot(fixture.root) == before
+
+    output = tmp_path / "resume-output"
+    log = output / "best.pt"
+    assert main(
+        _resume_args(fixture.root, output, old / "last.pt", log_file=log)
+    ) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "aliases the training output" in captured.err
+    assert not output.exists()
+
+    existing = tmp_path / "existing-resume.log.json"
+    sentinel = b"existing report"
+    existing.write_bytes(sentinel)
+    assert main(
+        _resume_args(
+            fixture.root, output, old / "last.pt", log_file=existing
+        )
+    ) == 2
+    captured = capsys.readouterr()
+    assert "already exists" in captured.err
+    assert existing.read_bytes() == sentinel
+    assert not output.exists()
+
+
+def test_cli_rejects_training_split_evaluation(tmp_path):
+    fixture = synthetic_cache(tmp_path / "cache")
     with pytest.raises(SystemExit):
         main(
             [

@@ -98,16 +98,24 @@ indices, includes partial batches and requires `num_workers=0` for mmap data.
 scores state/candidate pairs with a pointwise nonlinear MLP. Candidate position
 is not an input; padding is masked before loss and action selection.
 
-`train.py` owns fresh-run CPU or single-local-GPU optimization. Seeded epochs
-visit every eligible decision once with equal-weight cross-entropy, including
-partial batches. `metrics.py` aggregates complete splits by decision, stage and
-teacher action kind, reporting forced counts separately. Validation NLL alone
-selects `best.pt`; frozen test evaluation is separate from selection.
+`train.py` owns CPU or single-local-GPU optimization and epoch-boundary recovery.
+Seeded epochs visit every eligible decision once with equal-weight cross-entropy,
+including partial batches. `metrics.py` aggregates complete splits by decision,
+stage and teacher action kind, reporting forced counts separately. Validation NLL
+alone selects `best.pt`; frozen test evaluation is separate from selection. A
+shared run-progress object feeds the epoch loop, checkpoints and summaries. The
+CLI reuses one loaded checkpoint to resolve configuration and resume training.
 
-`checkpoint.py` validates versioned policy payloads and publishes atomically.
+`checkpoint.py` validates versioned policy/recovery payloads and publishes
+individual files atomically. `last.pt` commits the last completed epoch, including
+optimizer, random/traversal and best-model state; an interrupted epoch is replayed.
+Resume validates dataset/configuration, device type and dependency identities
+before continuation. Output-directory migration republishes both best and last
+even when no further epoch or validation improvement occurs.
+
 Run records bind configuration, dataset identities/provenance, dependencies and
 metrics to the imported Python source hash; `_source.py` adds Git metadata only
-for in-repository source installs. Recovery and `last.pt` are not implemented.
+for in-repository source installs.
 See the [package guide](../../python/README.md#training-metrics-and-checkpoints)
 for policy, checkpoint-format and CLI contracts.
 
