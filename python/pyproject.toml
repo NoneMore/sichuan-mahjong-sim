@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mahjong-bc"
 version = "0.1.0"
-description = "Prepared cache loading and padded decision batches for Sichuan mahjong behavior cloning"
+description = "Offline behavior-cloning datasets, training, and policy checkpoints for Sichuan mahjong"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

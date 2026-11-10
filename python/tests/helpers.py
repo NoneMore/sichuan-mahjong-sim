@@ -6,7 +6,7 @@ from typing import Sequence
 
 import numpy as np
 
-from mahjong_bc.config import DatasetIdentity
+from mahjong_bc.config import DatasetIdentity, ModelConfig
 from mahjong_bc.constants import (
     ACTION_KIND_WIDTH,
     CANDIDATE_WIDTH,
@@ -111,3 +111,33 @@ def make_dataset(
         ),
         target_kinds=kind_values,
     )
+
+
+def learnable_pair(
+    *,
+    train_decisions: int = 12,
+    validation_decisions: int = 6,
+    cache_id: str = "learnable-fixture",
+) -> tuple[PackedDecisionDataset, PackedDecisionDataset]:
+    """Two-candidate decisions where one feature identifies the target."""
+
+    train = make_dataset(
+        split="train",
+        decisions=train_decisions,
+        counts=[2] * train_decisions,
+        seed=11,
+        cache_id=cache_id,
+        signal=True,
+    )
+    validation = make_dataset(
+        split="validation",
+        decisions=validation_decisions,
+        counts=[2] * validation_decisions,
+        seed=12,
+        cache_id=cache_id,
+        signal=True,
+    )
+    return train, validation
+
+
+SMALL_MODEL = ModelConfig(state_hidden=(16,), scorer_hidden=(16,))

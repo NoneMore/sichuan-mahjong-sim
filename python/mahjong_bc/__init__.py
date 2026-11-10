@@ -1,10 +1,10 @@
-"""Prepared Sichuan mahjong behavior-cloning datasets and decision batches.
+"""Shared Sichuan mahjong behavior-cloning policy and offline training tools.
 
-The Rust neural crate owns decision encoding, corpus collection, and NumPy cache
-preparation. This package validates those caches, exposes sharded memory-mapped
-decision datasets, and collates padded PyTorch batches. Policy scoring,
-training, checkpoint recovery, and evaluation are later deliveries and are not
-imported here; PyO3 bindings and online play are out of scope.
+The Rust neural crate owns encoding, corpus collection, and NumPy cache
+preparation. This package validates caches, exposes sharded memory-mapped
+decisions, collates padded PyTorch batches, trains a candidate-scoring policy,
+and loads versioned policy checkpoints for frozen evaluation. Recovery,
+PyO3/environment bindings, and online game evaluation remain out of scope.
 """
 
 from __future__ import annotations
@@ -19,13 +19,27 @@ from .cache import (
     load_cache_split,
     load_prepared_cache,
 )
-from .config import DatasetIdentity, DependencyVersions, collect_dependency_versions
+from .checkpoint import (
+    LoadedCheckpoint,
+    build_payload,
+    load_policy_checkpoint,
+    save_checkpoint,
+)
+from .config import (
+    DatasetIdentity,
+    DependencyVersions,
+    ModelConfig,
+    TrainingConfig,
+    collect_dependency_versions,
+)
 from .constants import (
     ACTION_KIND_NAMES,
     CANDIDATE_WIDTH,
+    CHECKPOINT_FORMAT_VERSION,
     DATASET_FORMAT,
     ENCODING_VERSION,
     FORCED_CANDIDATE_COUNT,
+    MODEL_FORMAT_VERSION,
     PACKAGE_VERSION,
     PREPARATION_FORMAT_VERSION,
     PREPARATION_VERSION,
@@ -46,22 +60,43 @@ from .data import (
 )
 from .errors import (
     CacheContractError,
+    CheckpointError,
     ConfigurationError,
     DataError,
     MahjongBCError,
 )
+from .metrics import (
+    ActionKindMetrics,
+    MetricAccumulator,
+    MetricsReport,
+    StageMetrics,
+    evaluate_dataset,
+)
+from .policy import (
+    CandidatePolicy,
+    build_policy,
+    decision_nll,
+    greedy_indices,
+    masked_cross_entropy,
+    sample_indices,
+)
+from .train import Trainer, TrainingSummary, evaluate_checkpoint, resolve_device
 
 __version__ = PACKAGE_VERSION
 
 __all__ = [
     "ACTION_KIND_NAMES",
     "ARRAY_NAMES",
+    "ActionKindMetrics",
     "CacheArray",
     "CacheContractError",
     "CacheCounts",
     "CacheShard",
     "CacheSplit",
+    "CandidatePolicy",
     "CANDIDATE_WIDTH",
+    "CHECKPOINT_FORMAT_VERSION",
+    "CheckpointError",
     "ConfigurationError",
     "DATASET_FORMAT",
     "DataError",
@@ -72,7 +107,12 @@ __all__ = [
     "DependencyVersions",
     "ENCODING_VERSION",
     "FORCED_CANDIDATE_COUNT",
+    "LoadedCheckpoint",
+    "MODEL_FORMAT_VERSION",
     "MahjongBCError",
+    "MetricAccumulator",
+    "MetricsReport",
+    "ModelConfig",
     "PACKAGE_VERSION",
     "PREPARATION_FORMAT_VERSION",
     "PREPARATION_VERSION",
@@ -83,11 +123,26 @@ __all__ = [
     "STAGE_NAMES",
     "STATE_WIDTH",
     "ShardedDecisionDataset",
+    "StageMetrics",
+    "Trainer",
+    "TrainingConfig",
+    "TrainingSummary",
+    "build_payload",
+    "build_policy",
     "collate_decisions",
     "collect_dependency_versions",
     "contains_memory_mapped_arrays",
+    "decision_nll",
+    "evaluate_checkpoint",
+    "evaluate_dataset",
+    "greedy_indices",
     "iter_batches",
     "load_cache_split",
+    "load_policy_checkpoint",
     "load_prepared_cache",
+    "masked_cross_entropy",
+    "resolve_device",
+    "sample_indices",
+    "save_checkpoint",
     "__version__",
 ]

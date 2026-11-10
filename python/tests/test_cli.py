@@ -10,8 +10,11 @@ from pathlib import Path
 import pytest
 
 import mahjong_bc
+from mahjong_bc.checkpoint import load_policy_checkpoint, save_checkpoint
 from mahjong_bc.cli import main
-from mahjong_bc.constants import PACKAGE_VERSION
+from mahjong_bc.config import ModelConfig
+from mahjong_bc.constants import PACKAGE_VERSION, ROLE_BEST
+from mahjong_bc.policy import build_policy
 
 from .cache_fixture import synthetic_cache
 
@@ -24,6 +27,77 @@ def _parse(capsys) -> dict:
 
 def _read_manifest(root: Path) -> dict:
     return json.loads((root / "dataset.json").read_text(encoding="utf-8"))
+
+
+def _cache_snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(root).as_posix(): path.read_bytes()
+        for path in root.rglob("*")
+        if path.is_file()
+    }
+
+
+def _train_args(
+    cache_root: Path,
+    output: Path,
+    *,
+    log_file: Path | None = None,
+) -> list[str]:
+    args = [
+        "train",
+        "--dataset",
+        str(cache_root),
+        "--output",
+        str(output),
+        "--seed",
+        "1",
+        "--epochs",
+        "1",
+        "--batch-size",
+        "2",
+        "--learning-rate",
+        "0.02",
+        "--state-hidden",
+        "8",
+        "--scorer-hidden",
+        "8",
+    ]
+    if log_file is not None:
+        args.extend(["--log-file", str(log_file)])
+    return args
+
+
+def _evaluate_args(
+    cache_root: Path,
+    checkpoint: Path,
+    *,
+    output: Path | None = None,
+    log_file: Path | None = None,
+) -> list[str]:
+    args = [
+        "evaluate",
+        "--dataset",
+        str(cache_root),
+        "--checkpoint",
+        str(checkpoint),
+        "--split",
+        "test",
+        "--batch-size",
+        "2",
+    ]
+    if output is not None:
+        args.extend(["--output", str(output)])
+    if log_file is not None:
+        args.extend(["--log-file", str(log_file)])
+    return args
+
+
+def _write_checkpoint(path: Path) -> Path:
+    model = build_policy(
+        ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=3
+    )
+    save_checkpoint(path, model, role=ROLE_BEST, metrics={"nll": 0.5})
+    return path
 
 
 def test_cache_info_reports_manifest_inventory(tmp_path, capsys):
@@ -90,6 +164,9 @@ def test_help_lists_available_commands(capsys):
     assert exc_info.value.code == 0
     output = capsys.readouterr().out
     assert "cache-info" in output
+    assert "train" in output
+    assert "evaluate" in output
+    assert "inspect" in output
     assert "version" in output
 
     with pytest.raises(SystemExit) as exc_info:
@@ -135,3 +212,374 @@ def test_installed_metadata_and_console_script():
     )
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["package"] == "mahjong-bc"
+
+
+def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
+    fixture = synthetic_cache(tmp_path / "cache")
+    manifest = _read_manifest(fixture.root)
+    output = tmp_path / "run"
+    log = tmp_path / "train.log.json"
+    rc = main(
+        [
+            "train",
+            "--dataset",
+            str(fixture.root),
+            "--output",
+            str(output),
+            "--seed",
+            "1",
+            "--epochs",
+            "2",
+            "--batch-size",
+            "2",
+            "--learning-rate",
+            "0.02",
+            "--state-hidden",
+            "8",
+            "--scorer-hidden",
+            "8",
+            "--log-file",
+            str(log),
+        ]
+    )
+    assert rc == 0
+    result = _parse(capsys)
+    assert result["command"] == "train"
+    assert result["summary"]["completed_epochs"] == 2
+    assert result["device_type"] == "cpu"
+    assert result["dataset"]["cache_id"] == manifest["cache_id"]
+    assert result["dataset"]["provenance"] == manifest["provenance"]
+    assert set(result["source"]) == {
+        "package",
+        "package_version",
+        "hash",
+        "revision",
+        "dirty",
+    }
+    assert result["source"]["package"] == "mahjong-bc"
+    assert result["source"]["package_version"] == PACKAGE_VERSION
+    assert len(result["source"]["hash"]) == 64
+    assert result["checkpoints"]["best"] == str(output / "best.pt")
+    assert (output / "best.pt").is_file()
+    assert (output / "run.json").is_file()
+    assert not (output / "last.pt").exists()
+    assert log.is_file()
+    logged = json.loads(log.read_text(encoding="utf-8"))
+    assert logged["summary"]["completed_epochs"] == 2
+    record = json.loads((output / "run.json").read_text(encoding="utf-8"))
+    assert record["source"] == result["source"]
+    assert record["dataset"]["provenance"]["cache_id"] == manifest["cache_id"]
+    assert record["training_config"]["seed"] == 1
+    loaded = load_policy_checkpoint(output / "best.pt")
+    assert loaded.role == "best"
+
+    metrics_path = tmp_path / "metrics.json"
+    eval_log = tmp_path / "eval.log.json"
+    rc = main(
+        [
+            "evaluate",
+            "--dataset",
+            str(fixture.root),
+            "--checkpoint",
+            str(output / "best.pt"),
+            "--split",
+            "test",
+            "--batch-size",
+            "2",
+            "--output",
+            str(metrics_path),
+            "--log-file",
+            str(eval_log),
+        ]
+    )
+    assert rc == 0
+    evaluation = _parse(capsys)
+    assert evaluation["command"] == "evaluate"
+    assert evaluation["split"] == "test"
+    test_counts = manifest["splits"]["test"]["counts"]
+    assert evaluation["metrics"]["eligible"] == test_counts["eligible_decisions"]
+    assert evaluation["metrics"]["forced"] == test_counts["forced_decisions"]
+    assert metrics_path.is_file()
+    assert eval_log.is_file()
+
+    assert main(["inspect", "--checkpoint", str(output / "best.pt")]) == 0
+    inspected = _parse(capsys)
+    assert inspected["command"] == "inspect"
+    assert inspected["role"] == "best"
+    assert inspected["has_training_state"] is False
+    assert inspected["checkpoint_format_version"] == 2
+    assert inspected["model_format_version"] == 1
+
+
+def test_cli_fresh_run_protects_existing_outputs_and_requires_config(
+    tmp_path, capsys
+):
+    fixture = synthetic_cache(tmp_path / "cache")
+    output = tmp_path / "existing"
+    args = [
+        "train",
+        "--dataset",
+        str(fixture.root),
+        "--output",
+        str(output),
+        "--seed",
+        "1",
+        "--epochs",
+        "1",
+        "--batch-size",
+        "2",
+        "--learning-rate",
+        "0.02",
+        "--state-hidden",
+        "8",
+        "--scorer-hidden",
+        "8",
+    ]
+    assert main(args) == 0
+    capsys.readouterr()
+    before = (output / "best.pt").read_bytes()
+    assert main(args) == 2
+    assert "already contains" in capsys.readouterr().err
+    assert (output / "best.pt").read_bytes() == before
+
+    reserved = tmp_path / "reserved"
+    reserved.mkdir()
+    sentinel = reserved / "last.pt"
+    sentinel.write_bytes(b"future recovery artifact")
+    assert main([*args[:4], str(reserved), *args[5:]]) == 2
+    assert "last.pt" in capsys.readouterr().err
+    assert sentinel.read_bytes() == b"future recovery artifact"
+
+    missing = tmp_path / "missing"
+    assert main(
+        [
+            "train",
+            "--dataset",
+            str(fixture.root),
+            "--output",
+            str(missing),
+        ]
+    ) == 2
+    assert "requires" in capsys.readouterr().err
+    assert not missing.exists()
+
+
+def test_cli_has_no_resume_option_and_rejects_training_split_evaluation(
+    tmp_path, capsys
+):
+    fixture = synthetic_cache(tmp_path / "cache")
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "train",
+                "--dataset",
+                str(fixture.root),
+                "--output",
+                str(tmp_path / "resume"),
+                "--resume",
+                str(tmp_path / "last.pt"),
+                "--seed",
+                "1",
+                "--epochs",
+                "1",
+                "--batch-size",
+                "2",
+                "--learning-rate",
+                "0.02",
+            ]
+        )
+    assert "unrecognized arguments" in capsys.readouterr().err
+
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "evaluate",
+                "--dataset",
+                str(fixture.root),
+                "--checkpoint",
+                str(tmp_path / "missing.pt"),
+                "--split",
+                "train",
+            ]
+        )
+
+
+@pytest.mark.parametrize("relative", [None, "nested-output"])
+def test_cli_train_output_must_be_outside_cache_root(
+    tmp_path, capsys, relative
+):
+    fixture = synthetic_cache(tmp_path / "cache")
+    output = fixture.root if relative is None else fixture.root / relative
+    before = _cache_snapshot(fixture.root)
+    assert main(_train_args(fixture.root, output)) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "inside prepared cache" in captured.err
+    assert _cache_snapshot(fixture.root) == before
+    assert not (tmp_path / "best.pt").exists()
+    assert not (tmp_path / "run.json").exists()
+
+
+@pytest.mark.parametrize(
+    "log_path",
+    ["best.pt", "last.pt", "run.json", None],
+)
+def test_cli_train_log_file_cannot_alias_training_outputs(
+    tmp_path, capsys, log_path
+):
+    fixture = synthetic_cache(tmp_path / "cache")
+    output = tmp_path / "train"
+    log = output if log_path is None else output / log_path
+    before = _cache_snapshot(fixture.root)
+    assert main(_train_args(fixture.root, output, log_file=log)) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "aliases the training output" in captured.err
+    assert not output.exists()
+    assert _cache_snapshot(fixture.root) == before
+
+
+def test_cli_train_log_file_must_be_outside_cache_and_not_preexisting(
+    tmp_path, capsys
+):
+    fixture = synthetic_cache(tmp_path / "cache")
+    before = _cache_snapshot(fixture.root)
+    output = tmp_path / "train"
+
+    inside = fixture.root / "train.log.json"
+    assert main(_train_args(fixture.root, output, log_file=inside)) == 2
+    captured = capsys.readouterr()
+    assert "inside prepared cache" in captured.err
+    assert not output.exists()
+    assert _cache_snapshot(fixture.root) == before
+
+    existing = tmp_path / "existing.log.json"
+    sentinel = b"existing report"
+    existing.write_bytes(sentinel)
+    assert main(_train_args(fixture.root, output, log_file=existing)) == 2
+    captured = capsys.readouterr()
+    assert "already exists" in captured.err
+    assert not output.exists()
+    assert existing.read_bytes() == sentinel
+    assert _cache_snapshot(fixture.root) == before
+
+
+def test_cli_evaluate_report_paths_cannot_alias_checkpoint_or_touch_cache(
+    tmp_path, capsys
+):
+    fixture = synthetic_cache(tmp_path / "cache")
+    checkpoint = _write_checkpoint(tmp_path / "policy.pt")
+    checkpoint_before = checkpoint.read_bytes()
+    cache_before = _cache_snapshot(fixture.root)
+
+    cases = (
+        ("--output", checkpoint, "checkpoint"),
+        ("--log-file", checkpoint, "checkpoint"),
+        ("--output", fixture.root / "dataset.json", "cache"),
+        ("--log-file", fixture.root / "extra-report.json", "cache"),
+    )
+    for option, destination, reason in cases:
+        kwargs = {
+            "output": destination if option == "--output" else None,
+            "log_file": destination if option == "--log-file" else None,
+        }
+        assert main(
+            _evaluate_args(fixture.root, checkpoint, **kwargs)
+        ) == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert reason in captured.err
+        assert checkpoint.read_bytes() == checkpoint_before
+        assert _cache_snapshot(fixture.root) == cache_before
+
+
+@pytest.mark.parametrize("destination_option", ["--output", "--log-file"])
+def test_cli_evaluate_report_outputs_do_not_overwrite_existing_files(
+    tmp_path, capsys, destination_option
+):
+    fixture = synthetic_cache(tmp_path / "cache")
+    checkpoint = _write_checkpoint(tmp_path / "policy.pt")
+    checkpoint_before = checkpoint.read_bytes()
+    cache_before = _cache_snapshot(fixture.root)
+    destination = tmp_path / "existing-report.json"
+    sentinel = b"existing report bytes"
+    destination.write_bytes(sentinel)
+    kwargs = {
+        "output": destination if destination_option == "--output" else None,
+        "log_file": destination if destination_option == "--log-file" else None,
+    }
+    assert main(_evaluate_args(fixture.root, checkpoint, **kwargs)) == 2
+    captured = capsys.readouterr()
+    assert "already exists" in captured.err
+    assert destination.read_bytes() == sentinel
+    assert checkpoint.read_bytes() == checkpoint_before
+    assert _cache_snapshot(fixture.root) == cache_before
+
+
+def test_cli_cache_info_output_cannot_be_inside_cache_root(tmp_path, capsys):
+    fixture = synthetic_cache(tmp_path / "cache")
+    manifest = fixture.root / "dataset.json"
+    before_bytes = manifest.read_bytes()
+    before = _cache_snapshot(fixture.root)
+    assert main(
+        ["cache-info", "--dataset", str(fixture.root), "--output", str(manifest)]
+    ) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "inside prepared cache" in captured.err
+    assert manifest.read_bytes() == before_bytes
+    assert _cache_snapshot(fixture.root) == before
+
+
+def test_cli_report_output_and_log_may_share_a_fresh_destination(tmp_path, capsys):
+    fixture = synthetic_cache(tmp_path / "cache")
+    checkpoint = _write_checkpoint(tmp_path / "policy.pt")
+    destination = tmp_path / "evaluation.json"
+    assert main(
+        _evaluate_args(
+            fixture.root,
+            checkpoint,
+            output=destination,
+            log_file=destination,
+        )
+    ) == 0
+    reported = _parse(capsys)
+    written = json.loads(destination.read_text(encoding="utf-8"))
+    assert reported == written
+    assert written["command"] == "evaluate"
+
+
+def test_cli_path_checks_resolve_symlinked_parent_directories(tmp_path, capsys):
+    fixture = synthetic_cache(tmp_path / "cache")
+    output = tmp_path / "train"
+    output.mkdir()
+    alias = tmp_path / "output-alias"
+    try:
+        alias.symlink_to(output, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("cannot create directory symlinks in this environment")
+    before = _cache_snapshot(fixture.root)
+    assert main(
+        _train_args(fixture.root, output, log_file=alias / "best.pt")
+    ) == 2
+    captured = capsys.readouterr()
+    assert "aliases the training output" in captured.err
+    assert not (output / "best.pt").exists()
+    assert not (output / "run.json").exists()
+    assert _cache_snapshot(fixture.root) == before
+
+
+@pytest.mark.skipif(os.name != "nt", reason="case-insensitive path alias test")
+def test_cli_path_checks_normalize_filesystem_case(tmp_path, capsys):
+    fixture = synthetic_cache(tmp_path / "cache")
+    output = tmp_path / "TrainCase"
+    output.mkdir()
+    log = Path(str(output).upper()) / "BEST.PT"
+    before = _cache_snapshot(fixture.root)
+    assert main(
+        _train_args(fixture.root, output, log_file=log)
+    ) == 2
+    captured = capsys.readouterr()
+    assert "aliases the training output" in captured.err
+    assert not (output / "best.pt").exists()
+    assert _cache_snapshot(fixture.root) == before

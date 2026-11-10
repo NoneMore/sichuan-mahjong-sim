@@ -1,8 +1,8 @@
-"""Frozen encoding and prepared-cache constants.
+"""Frozen encoding, cache, policy, and checkpoint constants.
 
 The encoding and split constants mirror the Rust neural crate. A change to any
 of them requires a matching version change on both sides; this package rejects
-caches that declare an unsupported version.
+caches or checkpoints that declare an unsupported version.
 """
 
 #: Decision encoding version implemented by ``sichuan-mahjong-neural``.
@@ -58,8 +58,25 @@ PREPARATION_VERSION = 1
 #: Seed split algorithm recorded by the prepared cache.
 SPLIT_ALGORITHM = "seed-sha256-80-10-10-v1"
 
+#: Checkpoint container format. Format 2 carries a policy payload with a
+#: reserved ``training: null`` recovery-state boundary; recovery itself is not
+#: implemented yet. The original format 1 required recovery state in ``best``
+#: checkpoints and is therefore incompatible.
+CHECKPOINT_FORMAT_VERSION = 2
+
+#: Candidate-scoring model architecture/serialization format.
+MODEL_FORMAT_VERSION = 1
+
 #: Dataset split names accepted by this package.
 SPLIT_NAMES = ("train", "validation", "test")
 
-#: Package version recorded by the CLI and run metadata.
+#: Checkpoint role names written by this package.
+ROLE_POLICY = "policy"
+ROLE_BEST = "best"
+ROLES = (ROLE_POLICY, ROLE_BEST)
+
+#: Top-level checkpoint format marker.
+CHECKPOINT_KIND = "mahjong-bc-checkpoint"
+
+#: Package version recorded in checkpoints and run metadata.
 PACKAGE_VERSION = "0.1.0"
