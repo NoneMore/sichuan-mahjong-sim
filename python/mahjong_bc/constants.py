@@ -1,0 +1,65 @@
+"""Frozen encoding and prepared-cache constants.
+
+The encoding and split constants mirror the Rust neural crate. A change to any
+of them requires a matching version change on both sides; this package rejects
+caches that declare an unsupported version.
+"""
+
+#: Decision encoding version implemented by ``sichuan-mahjong-neural``.
+ENCODING_VERSION = 1
+
+#: Width of the flattened v1 decision state.
+STATE_WIDTH = 1013
+
+#: Width of one flattened v1 candidate action.
+CANDIDATE_WIDTH = 39
+
+#: Number of one-hot action-kind features at the start of a candidate.
+ACTION_KIND_WIDTH = 9
+
+#: Number of decision stages in v1 encoding order.
+STAGE_COUNT = 5
+
+#: Number of action kinds in v1 encoding order.
+ACTION_KIND_COUNT = 9
+
+#: Stable v1 stage names, indexed by wire stage id.
+STAGE_NAMES = (
+    "exchange",
+    "missing_suit",
+    "turn",
+    "discard_response",
+    "added_kong_response",
+)
+
+#: Stable v1 action-kind names, indexed by wire kind id.
+ACTION_KIND_NAMES = (
+    "exchange",
+    "choose_missing",
+    "discard",
+    "peng",
+    "open_kong",
+    "concealed_kong",
+    "added_kong",
+    "hu",
+    "pass",
+)
+
+#: Candidate count of a forced decision.
+FORCED_CANDIDATE_COUNT = 1
+
+#: Prepared cache manifest format.
+DATASET_FORMAT = "mahjong-bc-dataset"
+
+#: Prepared cache preparation-format and preparation versions.
+PREPARATION_FORMAT_VERSION = 1
+PREPARATION_VERSION = 1
+
+#: Seed split algorithm recorded by the prepared cache.
+SPLIT_ALGORITHM = "seed-sha256-80-10-10-v1"
+
+#: Dataset split names accepted by this package.
+SPLIT_NAMES = ("train", "validation", "test")
+
+#: Package version recorded by the CLI and run metadata.
+PACKAGE_VERSION = "0.1.0"

@@ -45,7 +45,8 @@ collection, and offline NumPy cache preparation. It depends on the simulator’s
 public decision interface; the core has no neural dependency. See its
 [architecture guide](docs/architecture/neural.md) for the boundary and the
 [crate guide](crates/neural/README.md#dataset-preparation) for the prepared-cache
-commands and layout.
+commands and layout. The separate [Python package](python/README.md) provides
+cache validation, sharded mmap datasets and padded PyTorch batches.
 
 ### Policies
 
