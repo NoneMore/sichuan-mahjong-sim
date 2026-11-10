@@ -1,8 +1,10 @@
 # Offline BC 分阶段交付计划
 
+四个阶段已分别通过 [#27](https://github.com/NoneMore/sichuan-mahjong-sim/pull/27)、[#28](https://github.com/NoneMore/sichuan-mahjong-sim/pull/28)、[#29](https://github.com/NoneMore/sichuan-mahjong-sim/pull/29)、[#30](https://github.com/NoneMore/sichuan-mahjong-sim/pull/30) 合并。以下保留原拆分与验收计划。
+
 ## 范围与来源
 
-将 `bc-offline-training` 拆为四个依次合并、可独立验证的实现 PR。代码抽取来源为 `298bbee`，拆分基线为 `main` 的 `ea5acec`（teacher collection）。完整行为范围见 `specs/archive/bc-offline-training/{spec,design}.md`。
+将 `bc-offline-training` 拆为四个依次合并、可独立验证的实现 PR。代码抽取来源为 `298bbee`，拆分基线为 `main` 的 `ea5acec`（teacher collection）。完整行为范围见 [spec](spec.md) 和 [design](design.md)。
 
 保持规则、teacher、encoding v1 和 seed-based splits 不变。PyO3、在线游戏评估和 RL 不在本次实现范围；`python-policy-evaluation` 保留为独立提案。
 
