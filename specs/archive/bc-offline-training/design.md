@@ -1,7 +1,7 @@
 # Offline behavior-cloning training design
 
 Rationale for the [specification](spec.md). This Change produces the policy used
-by [closed-loop evaluation](../python-policy-evaluation/design.md), while keeping
+by [closed-loop evaluation](../../active/python-policy-evaluation/design.md), while keeping
 offline training independent of environment bindings.
 
 ## Ownership and data flow

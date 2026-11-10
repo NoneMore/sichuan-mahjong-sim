@@ -97,6 +97,40 @@ and [post-discard](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fd
 reports and the committed
 [measurement summary](https://github.com/NoneMore/sichuan-mahjong-sim/blob/f57e48fdd39a9571371194b46d61bfba2b20d795/docs/studies/heuristic-cost-attribution-refresh/measurements.json).
 
+## Offline behavior-cloning smoke validation
+
+The BC working-tree implementation based on `d04e1f4` passed Rust formatting,
+warning-denied workspace Clippy, Debug/Release all-target tests, doctests and a
+Rust 1.75 all-target check. Python passed 76 tests, including CUDA. Environment:
+Windows x86-64, Rust 1.98.0, Python 3.12.10, NumPy 2.5.4, PyTorch 2.14.1+cu126,
+RTX 2070 and NVIDIA driver 591.74.
+
+A clean collector at `d04e1f45b774a3a7821187edfaf29c464dda09d5` generated
+20 heuristic games (seeds 0–19, five games/shard, 10,000-decision limit).
+Preparation used the default 20,000-decision / 500,000-candidate shard limits,
+recording its dirty build separately. The cache retained 1,145 decisions,
+7,129 candidates and 285 forced choices; eligible train/validation/test support
+was 742 / 91 / 27. Independent NumPy reads matched every feature bit, candidate
+order, target and metadata field against JSONL; the Python loader accepted it.
+
+- Captured manifest SHA-256:
+  `4a3a92684be6b4abf86ac8264a892c66397201a8d3b72f0e397ab790fcdc63b9`.
+- Cache ID:
+  `4a241e6bc8f2be98d61db5535c9d7c2367e69c99cf1a80a90beb7b4537bb61ce`.
+
+CPU acceptance used one thread, seed 17, ReLU hidden widths `[16]` / `[16]`,
+AdamW (learning rate 0.001, weight decay 0), batch size 64 and three epochs:
+36 steps / 2,226 sample visits. Restart after epoch one reproduced the continuous
+run's summary exactly and checkpoint tensors at `atol=1e-7, rtol=1e-6`.
+Validation NLL was 1.781281; frozen test NLL/top-1 was 1.591500 / 10 of 27.
+A separate CUDA epoch completed 12 steps, checkpoint reload, output-directory
+migration and frozen evaluation with usable best/last artifacts.
+
+These are pipeline/recovery observations, not strategy-strength measurements.
+Local corpus, caches, weights and acceptance probes were not committed; this
+summary does not provide raw-artifact recovery. Reproduction guidance is in the
+[Python](../python/README.md) and [neural crate](../crates/neural/README.md) guides.
+
 ## Recovery and new measurements
 
 The studies ran primarily on Windows 10 / Ryzen 7 3700X with Rust 1.98.

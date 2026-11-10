@@ -5,7 +5,7 @@
 Prepare the existing heuristic corpus, train a PyTorch policy, evaluate imitation,
 and recover training from checkpoints without requiring PyO3. Rules, teacher
 behavior, and encoding v1 remain unchanged. Closed-loop play belongs to the
-[companion Change](../python-policy-evaluation/design.md); RL training is outside
+[companion Change](../../active/python-policy-evaluation/design.md); RL training is outside
 this Change. [Design](design.md) explains the structural choices.
 
 ## Data contract

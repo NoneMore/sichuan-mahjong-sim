@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mahjong-bc"
+version = "0.1.0"
+description = "Offline behavior-cloning policy and training for Sichuan mahjong"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+mahjong-bc = "mahjong_bc.cli:main"
+
+[tool.setuptools]
+packages = ["mahjong_bc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+filterwarnings = ["error::DeprecationWarning:mahjong_bc.*"]

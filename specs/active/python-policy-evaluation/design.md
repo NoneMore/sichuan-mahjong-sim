@@ -5,7 +5,7 @@
 Run complete games with Python-controlled PyTorch policies and compare them with
 `HeuristicPolicy`. This Change owns the PyO3 extension, environment lifecycle,
 synchronous multi-game inference, and online evaluation. It reuses the policy
-package from [offline BC](../bc-offline-training/design.md); binding development
+[offline BC package](../../../python/README.md); binding development
 can begin with simple test policies before a trained checkpoint exists.
 
 ```text
