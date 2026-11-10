@@ -10,15 +10,19 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from .cache import load_prepared_cache
-from .checkpoint import atomic_write_json, load_policy_checkpoint
+from .checkpoint import (
+    atomic_write_json,
+    load_checkpoint,
+    load_policy_checkpoint,
+)
 from .config import (
     ACTIVATION_NAMES,
     ModelConfig,
     TrainingConfig,
     collect_dependency_versions,
 )
-from .constants import PACKAGE_VERSION, SPLIT_NAMES
-from .errors import ConfigurationError, MahjongBCError
+from .constants import PACKAGE_VERSION, ROLE_LAST, SPLIT_NAMES
+from .errors import ConfigurationError, MahjongBCError, ResumeError
 from .train import TRAIN_OUTPUT_NAMES, Trainer, evaluate_checkpoint
 
 
@@ -46,15 +50,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     train = subparsers.add_parser(
         "train",
-        help="train a fresh policy and save its validation-selected best checkpoint",
+        help="train a policy, or resume a recoverable last checkpoint",
     )
     train.add_argument("--dataset", required=True, help="prepared cache root")
     train.add_argument("--output", required=True, help="checkpoint output directory")
+    train.add_argument(
+        "--resume",
+        help="resume from a last checkpoint; model/training configuration comes "
+        "from the checkpoint and output/log paths may change",
+    )
     train.add_argument("--device", default="cpu", help="cpu or cuda[:index]")
-    train.add_argument("--seed", type=int, help="training seed")
-    train.add_argument("--epochs", type=int, help="epoch count")
-    train.add_argument("--batch-size", type=int, help="batch size")
-    train.add_argument("--learning-rate", type=float, help="AdamW learning rate")
+    train.add_argument("--seed", type=int, help="new-run training seed")
+    train.add_argument("--epochs", type=int, help="new-run epoch count")
+    train.add_argument("--batch-size", type=int, help="new-run batch size")
+    train.add_argument("--learning-rate", type=float, help="new-run AdamW learning rate")
     train.add_argument("--weight-decay", type=float)
     train.add_argument("--beta1", type=float)
     train.add_argument("--beta2", type=float)
@@ -62,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--state-hidden", type=_parse_widths, help="e.g. 256,128")
     train.add_argument("--scorer-hidden", type=_parse_widths, help="e.g. 128")
     train.add_argument(
-        "--activation", choices=ACTIVATION_NAMES, help="model activation"
+        "--activation", choices=ACTIVATION_NAMES, help="new-run activation"
     )
     train.add_argument(
         "--log-file", help="optional JSON summary destination"
@@ -115,7 +124,8 @@ def _new_run_config(args: argparse.Namespace) -> tuple[ModelConfig, TrainingConf
     ]
     if missing:
         raise MahjongBCError(
-            f"a fresh training run requires {', '.join(missing)}"
+            f"a fresh training run requires {', '.join(missing)}; "
+            "use --resume to continue from a last checkpoint"
         )
     training_values: dict[str, Any] = {
         "seed": args.seed,
@@ -133,6 +143,40 @@ def _new_run_config(args: argparse.Namespace) -> tuple[ModelConfig, TrainingConf
         if value is not None:
             model_values[name] = value
     return ModelConfig(**model_values), TrainingConfig(**training_values)
+
+
+def _resume_config(args: argparse.Namespace) -> tuple[ModelConfig, TrainingConfig]:
+    conflicting = [
+        name
+        for name, value in (
+            ("--seed", args.seed),
+            ("--epochs", args.epochs),
+            ("--batch-size", args.batch_size),
+            ("--learning-rate", args.learning_rate),
+            ("--weight-decay", args.weight_decay),
+            ("--beta1", args.beta1),
+            ("--beta2", args.beta2),
+            ("--num-workers", args.num_workers),
+            ("--state-hidden", args.state_hidden),
+            ("--scorer-hidden", args.scorer_hidden),
+            ("--activation", args.activation),
+        )
+        if value is not None
+    ]
+    if conflicting:
+        raise MahjongBCError(
+            "--resume uses the checkpoint's model/training configuration; "
+            f"remove {', '.join(conflicting)}"
+        )
+    loaded = load_checkpoint(args.resume, device="cpu", require_training=True)
+    if loaded.role != ROLE_LAST:
+        raise ResumeError(
+            f"--resume requires a {ROLE_LAST!r} checkpoint, "
+            f"got role {loaded.role!r}"
+        )
+    state = loaded.training
+    assert state is not None
+    return loaded.model_config, state.training_config
 
 
 def _cache_metadata(cache: Any) -> dict[str, Any]:
@@ -251,7 +295,10 @@ def _emit(
 
 
 def _cmd_train(args: argparse.Namespace) -> int:
-    model_config, training_config = _new_run_config(args)
+    if args.resume:
+        model_config, training_config = _resume_config(args)
+    else:
+        model_config, training_config = _new_run_config(args)
     cache = load_prepared_cache(args.dataset)
     _validate_train_paths(args.output, args.log_file, cache.root)
     train_dataset = cache.load_split("train")
@@ -266,7 +313,7 @@ def _cmd_train(args: argparse.Namespace) -> int:
         device=args.device,
         dataset_provenance=dataset_metadata,
     )
-    summary = trainer.train()
+    summary = trainer.train(resume_from=args.resume)
     payload = trainer.run_payload(summary)
     result = {
         "command": "train",
@@ -282,7 +329,10 @@ def _cmd_train(args: argparse.Namespace) -> int:
             "validation_dataset_identity"
         ],
         "summary": payload["summary"],
-        "checkpoints": {"best": str(trainer.best_path)},
+        "checkpoints": {
+            "best": str(trainer.best_path),
+            "last": str(trainer.last_path),
+        },
         "run_record": str(trainer.run_record_path),
     }
     _emit(result, log_file=args.log_file)

@@ -47,7 +47,8 @@ public decision interface; the core has no neural dependency. See its
 [crate guide](crates/neural/README.md#dataset-preparation) for the prepared-cache
 commands and layout. The separate [Python package](python/README.md) provides
 cache validation, sharded mmap datasets, padded PyTorch batches and offline
-behavior-cloning training with versioned policy checkpoints.
+behavior-cloning training with versioned policy checkpoints, epoch-boundary
+recovery and frozen evaluation.
 
 ### Policies
 

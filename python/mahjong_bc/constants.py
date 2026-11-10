@@ -58,11 +58,11 @@ PREPARATION_VERSION = 1
 #: Seed split algorithm recorded by the prepared cache.
 SPLIT_ALGORITHM = "seed-sha256-80-10-10-v1"
 
-#: Checkpoint container format. Format 2 carries a policy payload with a
-#: reserved ``training: null`` recovery-state boundary; recovery itself is not
-#: implemented yet. The original format 1 required recovery state in ``best``
-#: checkpoints and is therefore incompatible.
-CHECKPOINT_FORMAT_VERSION = 2
+#: Checkpoint container format. Format 3 adds a recoverable epoch-boundary
+#: ``training`` payload to the format 2 policy container. Format 2 checkpoints
+#: (reserved ``training: null``) remain readable for evaluation but cannot be
+#: resumed.
+CHECKPOINT_FORMAT_VERSION = 3
 
 #: Candidate-scoring model architecture/serialization format.
 MODEL_FORMAT_VERSION = 1
@@ -73,7 +73,8 @@ SPLIT_NAMES = ("train", "validation", "test")
 #: Checkpoint role names written by this package.
 ROLE_POLICY = "policy"
 ROLE_BEST = "best"
-ROLES = (ROLE_POLICY, ROLE_BEST)
+ROLE_LAST = "last"
+ROLES = (ROLE_POLICY, ROLE_BEST, ROLE_LAST)
 
 #: Top-level checkpoint format marker.
 CHECKPOINT_KIND = "mahjong-bc-checkpoint"

@@ -2,9 +2,10 @@
 
 The Rust neural crate owns encoding, corpus collection, and NumPy cache
 preparation. This package validates caches, exposes sharded memory-mapped
-decisions, collates padded PyTorch batches, trains a candidate-scoring policy,
-and loads versioned policy checkpoints for frozen evaluation. Recovery,
-PyO3/environment bindings, and online game evaluation remain out of scope.
+decisions, collates padded PyTorch batches, trains a candidate-scoring policy
+with epoch-boundary recovery, and loads versioned policy checkpoints for frozen
+evaluation. PyO3/environment bindings and online game evaluation remain out of
+scope.
 """
 
 from __future__ import annotations
@@ -21,9 +22,14 @@ from .cache import (
 )
 from .checkpoint import (
     LoadedCheckpoint,
+    TrainingCheckpointState,
     build_payload,
+    check_model_config_identity,
+    load_checkpoint,
     load_policy_checkpoint,
+    restore_random_state,
     save_checkpoint,
+    validate_training_state_compatible,
 )
 from .config import (
     DatasetIdentity,
@@ -64,6 +70,7 @@ from .errors import (
     ConfigurationError,
     DataError,
     MahjongBCError,
+    ResumeError,
 )
 from .metrics import (
     ActionKindMetrics,
@@ -117,6 +124,7 @@ __all__ = [
     "PREPARATION_FORMAT_VERSION",
     "PREPARATION_VERSION",
     "PackedDecisionDataset",
+    "ResumeError",
     "PreparedCache",
     "SPLIT_ALGORITHM",
     "SPLIT_NAMES",
@@ -125,10 +133,12 @@ __all__ = [
     "ShardedDecisionDataset",
     "StageMetrics",
     "Trainer",
+    "TrainingCheckpointState",
     "TrainingConfig",
     "TrainingSummary",
     "build_payload",
     "build_policy",
+    "check_model_config_identity",
     "collate_decisions",
     "collect_dependency_versions",
     "contains_memory_mapped_arrays",
@@ -138,11 +148,14 @@ __all__ = [
     "greedy_indices",
     "iter_batches",
     "load_cache_split",
+    "load_checkpoint",
     "load_policy_checkpoint",
     "load_prepared_cache",
     "masked_cross_entropy",
     "resolve_device",
+    "restore_random_state",
     "sample_indices",
     "save_checkpoint",
+    "validate_training_state_compatible",
     "__version__",
 ]

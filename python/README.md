@@ -4,7 +4,7 @@ Offline behavior cloning for Sichuan mahjong: Rust
 [prepared caches](../crates/neural/README.md#dataset-preparation) → mmap datasets
 → padded PyTorch batches → candidate policy training and frozen evaluation.
 No Rust bindings or original corpus are needed after preparation. Online play
-and training recovery are not implemented.
+is outside this package.
 
 ## Setup and commands
 
@@ -35,15 +35,26 @@ The installed `mahjong-bc` console script exposes the same commands as
   --learning-rate X`: train a fresh policy, select `best.pt` by validation mean
   NLL, and write `run.json`. `--device cpu|cuda[:index]`, `--log-file`, and model
   architecture options are optional.
+- `train --dataset CACHE --output DIR --resume RUN/last.pt`: continue a run
+  from its last completed epoch.
 - `evaluate --dataset CACHE --checkpoint FILE --split validation|test`: evaluate
   a frozen checkpoint on a complete split, optionally writing `--output` metrics.
 - `inspect --checkpoint FILE`: print checkpoint metadata without training.
 - `version`: print package, Python, NumPy, PyTorch and CUDA build versions.
 
-Fresh training rejects existing `best.pt`, `last.pt` or `run.json`; `last.pt`
-is reserved but not produced. CLI run/report destinations must stay outside
-the cache. Report files must be new paths and cannot alias checkpoints or
-reserved run artifacts; conflicts are rejected before execution. `evaluate`
+Fresh training requires `best.pt`, `last.pt` and `run.json` to be absent.
+Resume accepts only a `last` checkpoint, loads its configuration without flag
+overrides and replays any interrupted epoch. Dataset identities, model/training
+configuration (including total epochs), device type and dependency versions must
+match; output and log paths may change.
+
+In-place resume updates the source run. A different destination must contain
+none of the three run artifacts. Migration republishes best/last before further
+training, even when the run is complete or no new best is found. If migration
+fails after publishing only some files, choose a clean destination.
+
+CLI run/report destinations must stay outside the cache. Report files must be
+new paths and cannot alias checkpoints or reserved run artifacts; conflicts are rejected before execution. `evaluate`
 may send both report flags to the same new path, writing it once.
 
 ## Loading and batching
@@ -113,11 +124,13 @@ NLL alone selects `best.pt`; test evaluation loads the frozen checkpoint and
 never influences selection or updates the file.
 
 `run.json` records the resolved model/training configuration, training seed,
-device type, dependencies, dataset identities and provenance, best-checkpoint
-name, and per-epoch history including validation metrics. History `train_nll` is
+device type, dependencies, dataset identities and provenance, checkpoint names,
+and per-epoch history including validation metrics. History `train_nll` is
 the decision-weighted mean of pre-update batch losses, not an epoch-end
 re-evaluation. Checkpoint publication and the run record use write-then-replace
-atomic publication.
+atomic publication per file. `last.pt` is the epoch commit point: a failed write
+leaves its predecessor usable. The files are not one multi-file transaction;
+resuming from last republishes its embedded best state before continuing.
 
 The run `source` record captures package/version and a SHA-256 `hash` of the
 imported package's sorted `.py` paths and contents, excluding `__pycache__`.
@@ -126,12 +139,15 @@ Editable installs at `<git root>/python/mahjong_bc` also report the repository's
 `null`, without borrowing an outer repository's identity. Source identity is
 independent of the process working directory and captured once per `Trainer`.
 
-Checkpoint format **2** stores model configuration, weights and optional
-metrics, with `training: null` reserving the recovery-state boundary. Supported
-roles are `policy`/`best`, model format **1**, encoding **1**. The loader rejects
-unknown keys, unsupported versions/roles and non-null recovery state, uses
-`torch.load(..., weights_only=True)`, validates weights strictly and returns an
-eval-mode model. Incompatible schema changes require an explicit version bump.
+Checkpoint format **3** separates the policy payload (model configuration,
+weights and metrics) from optional recovery state. `last.pt` includes optimizer,
+completed epoch/step/sample counters, Torch CPU/CUDA random states, the
+shuffle generator and embedded best weights/metrics. No scheduler is used.
+Model format **1** and encoding **1** are unchanged. The loader validates the
+schema and weights, uses `torch.load(..., weights_only=True)` and returns an
+eval-mode model. Format **2** policy/best artifacts remain readable for
+inspection/evaluation, but cannot be resumed. Incompatible schema changes
+require an explicit version bump.
 
 ## Verification
 
@@ -140,13 +156,18 @@ After installation, in the activated environment:
 ```text
 python -m pytest python/tests
 python python/tools/verify_rust_handoff.py --corpus ../bc-data --cache ../bc-cache
+python python/tools/verify_recovery.py --dataset ../bc-cache --output ../bc-recovery
 ```
 
 The [CPU workflow](../.github/workflows/python-ci.yml) runs loader, batching,
 policy, metrics, checkpoint, training and CLI tests. The handoff probe compares a
 small real Rust corpus/cache pair bit-for-bit, including candidate order,
-targets, metadata and padded batches. It materializes the probe's input records,
-unlike the runtime loader. See
+targets, metadata and padded batches. The recovery probe injects a mid-epoch
+CPU failure, compares replay order/steps and model/optimizer states exactly with
+a continuous run, migrates a completed run and evaluates the frozen best model.
+It uses one CPU thread and requires a new output directory. See
 [loader validation](../docs/validation.md#python-dataset-loader-smoke-validation)
 and [training validation](../docs/validation.md#offline-bc-training-smoke-validation)
-for reproducible inputs and observed results.
+for reproducible inputs and observed results. The
+[recovery validation](../docs/validation.md#offline-bc-recovery-validation) records
+the real-cache replay, directory migration and CUDA smoke checks.

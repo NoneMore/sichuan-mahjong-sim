@@ -285,6 +285,63 @@ Temporary worktrees/builds, corpus/cache, wheel, checkpoints and reports were
 removed; tests and the handoff probe preserve regression coverage. The project
 `.venv` was restored to an editable install.
 
+## Offline BC recovery validation
+
+Recovery was verified on `9e57481` plus the recovery changes, on Windows 10
+x86-64 with Rust/Cargo 1.98.0, Python 3.12.10, NumPy 2.5.4 and PyTorch
+2.14.1+cu126. Editable and installed-wheel runs each passed **227 Python tests**,
+including replay, RNG restoration, incompatible/corrupt recovery rejection,
+atomic-write failures, and migration with no improvement or a completed run.
+Rust formatting, warning-denied workspace Clippy and Debug all-target tests passed.
+
+A clean Release build of `9e5748128699130a2bafdbb927b58cc165e7ecb0` collected
+13 games at seeds 0–12, four games per shard, with `--cache-bytes 0`. Preparation
+used `--shard-decisions 60 --shard-candidates 400`. Rust verify and the bitwise
+Python handoff probe passed. The 13-shard cache held 773 decisions / 4,604
+candidates; train/validation/test eligible counts were 460/91/27 and forced
+counts 150/34/11. Reproduce inputs with the
+[training smoke commands](#offline-bc-training-smoke-validation), substituting
+`9e57481` and fresh `bc-phase4-*` paths.
+
+The CPU recovery probe used one thread, seed 7, three epochs, batch size 17,
+learning rate 0.01 and state/scorer widths 16. After one batch of the second
+epoch it interrupted, resumed from the first completed epoch into a new directory,
+and matched uninterrupted sample order, history, **84 steps / 1,380 samples**,
+and model/optimizer states exactly (**`rtol=0, atol=0`**). A second migration
+republished the completed run without further steps. Frozen evaluation preserved
+checkpoint bytes and reported test NLL **1.431383**, top-1 **12/27**.
+
+The same configuration passed on an **RTX 2070 (8 GiB), driver 591.74, CUDA build
+12.6**: training, checkpoint reload, completed-run migration, module/console
+inspection and frozen evaluation. Migrated model weights matched exactly and
+the checkpoint retained the selected local device's RNG state. Validation NLL
+was **1.735905 / 1.666422 / 1.637446**; test NLL **1.431555**, top-1 **12/27**.
+Repeated evaluation preserved checkpoint bytes. These checks establish neither
+cross-runtime/device equivalence nor online playing strength.
+
+After [package installation](../python/README.md#setup-and-commands):
+
+```text
+python python/tools/verify_recovery.py --dataset ../bc-phase4-cache --output ../bc-phase4-recovery
+python -m mahjong_bc train --dataset ../bc-phase4-cache --output ../bc-phase4-gpu \
+  --seed 7 --epochs 3 --batch-size 17 --learning-rate 0.01 \
+  --state-hidden 16 --scorer-hidden 16 --device cuda:0
+python -m mahjong_bc train --dataset ../bc-phase4-cache --output ../bc-phase4-gpu-migrated \
+  --resume ../bc-phase4-gpu/last.pt --device cuda:0
+python -m mahjong_bc evaluate --dataset ../bc-phase4-cache \
+  --checkpoint ../bc-phase4-gpu-migrated/best.pt --split test --batch-size 17 --device cuda:0
+```
+
+Provenance identifiers:
+
+- Captured manifest SHA-256: `26411a72c29bedc7297f4227a052fca62d3e7172668e0c2dc9c6fc9640244de5`.
+- Cache ID: `95147694b1d202759b9abfc2ed00fb11bc0b7992d863cf03923aa846d911f714`.
+- Training-source SHA-256: `8f3024c465f8622fb5c64ebd094bb5be5c0193390469e2a25aa979c6058fbc10`.
+
+Temporary corpus/cache, checkpoints, wheels and reports were removed after
+verification. Tests and the handoff/recovery probes retain reproduction coverage;
+raw artifacts are not archived. The repository `.venv` remains an editable install.
+
 ## Recovery and new measurements
 
 The studies ran primarily on Windows 10 / Ryzen 7 3700X with Rust 1.98.
