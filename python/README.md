@@ -62,8 +62,11 @@ without recomputing its hash.
 its cache metadata in one call. Each split is a `ShardedDecisionDataset` of
 `PackedDecisionDataset` shards, mapped read-only by default. Global indices
 follow manifest shard order without concatenating feature arrays; empty splits
-have no shards. `close()` releases dataset-owned arrays and rejects further
-sample reads. Outstanding sample/array views keep their maps alive until released.
+have no shards. A packed shard may have `identity=None`; a loaded split always
+has its complete `DatasetIdentity`. Custom `DecisionDataset` implementations
+must implement `is_memory_mapped` so worker restrictions also apply to wrappers.
+`close()` releases dataset-owned arrays and rejects further sample reads.
+Outstanding sample/array views keep their maps alive until released.
 
 Forced decisions are retained. `eligible_indices()` selects decisions with
 more than one candidate; `forced_by_stage()` reports forced counts. Collation

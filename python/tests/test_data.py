@@ -8,6 +8,7 @@ import torch
 
 from mahjong_bc.constants import CANDIDATE_WIDTH, STATE_WIDTH
 from mahjong_bc.data import (
+    DecisionDataset,
     PackedDecisionDataset,
     ShardedDecisionDataset,
     collate_decisions,
@@ -18,6 +19,92 @@ from mahjong_bc.data import (
 from mahjong_bc.errors import DataError
 
 from .helpers import identity, make_dataset
+
+
+class _DelegatingDataset(DecisionDataset):
+    """Contract-only wrapper with no concrete packed arrays to inspect."""
+
+    def __init__(self, inner: DecisionDataset) -> None:
+        self.inner = inner
+        self.identity = inner.identity
+
+    @property
+    def is_memory_mapped(self) -> bool:
+        return self.inner.is_memory_mapped
+
+    def __len__(self) -> int:
+        return len(self.inner)
+
+    def __getitem__(self, index: int):
+        return self.inner[index]
+
+    def eligible_indices(self) -> np.ndarray:
+        return self.inner.eligible_indices()
+
+    def forced_by_stage(self) -> tuple[int, ...]:
+        return self.inner.forced_by_stage()
+
+    def candidate_counts(self) -> np.ndarray:
+        return self.inner.candidate_counts()
+
+
+class _MissingMmapContract(DecisionDataset):
+    """A subclass that omits the required mmap contract."""
+
+    identity = None
+
+    def __len__(self) -> int:
+        return 0
+
+    def __getitem__(self, index: int):
+        raise IndexError(index)
+
+    def eligible_indices(self) -> np.ndarray:
+        return np.empty(0, dtype=np.int64)
+
+    def forced_by_stage(self) -> tuple[int, ...]:
+        return (0,) * 5
+
+    def candidate_counts(self) -> np.ndarray:
+        return np.empty(0, dtype=np.int64)
+
+
+def _write_memmap(tmp_path, name: str, values: np.ndarray) -> np.ndarray:
+    path = tmp_path / f"{name}.npy"
+    np.save(path, values, allow_pickle=False)
+    return np.load(path, mmap_mode="r")
+
+
+def _memory_mapped_dataset(tmp_path) -> PackedDecisionDataset:
+    source = make_dataset(split="train", counts=[2, 1, 3], seed=45)
+    decisions = len(source)
+    values = {
+        "states": source.states,
+        "candidate_features": source.candidate_features,
+        "offsets": source.offsets,
+        "targets": source.targets,
+        "stages": source.stages,
+        "actor_seats": np.zeros(decisions, dtype=np.uint8),
+        "decision_indices": np.arange(decisions, dtype=np.uint64),
+        "episode_ids": np.arange(decisions, dtype=np.uint64),
+        "target_kinds": np.asarray(source.target_kinds, dtype=np.uint8),
+    }
+    mapped = {
+        name: _write_memmap(tmp_path, name, value)
+        for name, value in values.items()
+    }
+    return PackedDecisionDataset(
+        states=mapped["states"],
+        candidate_features=mapped["candidate_features"],
+        offsets=mapped["offsets"],
+        targets=mapped["targets"],
+        stages=mapped["stages"],
+        identity=source.identity,
+        actor_seats=mapped["actor_seats"],
+        decision_indices=mapped["decision_indices"],
+        episode_ids=mapped["episode_ids"],
+        target_kinds=mapped["target_kinds"],
+    )
 
 
 def test_packed_dataset_exposes_layout_and_metadata():
@@ -269,3 +356,65 @@ def test_collate_rejects_empty_batches_and_invalid_samples():
     )
     with pytest.raises(DataError):
         collate_decisions([bad_target])
+
+
+def test_shard_identity_is_optional_but_sharded_split_identity_is_required():
+    source = make_dataset(split="train", counts=[2, 1, 3], seed=45)
+    shard = PackedDecisionDataset(
+        states=source.states,
+        candidate_features=source.candidate_features,
+        offsets=source.offsets,
+        targets=source.targets,
+        stages=source.stages,
+        identity=None,
+        target_kinds=source.target_kinds,
+    )
+    assert shard.identity is None
+    assert len(shard) == len(source)
+    complete = ShardedDecisionDataset((shard,), source.identity)
+    assert complete.identity is source.identity
+    with pytest.raises(DataError, match="DatasetIdentity"):
+        ShardedDecisionDataset((shard,), None)
+
+
+def test_memory_map_contract_delegates_and_blocks_workers(tmp_path):
+    packed = _memory_mapped_dataset(tmp_path)
+    dataset = ShardedDecisionDataset((packed,), packed.identity)
+    try:
+        assert packed.is_memory_mapped
+        assert contains_memory_mapped_arrays(packed)
+        assert dataset.is_memory_mapped
+        assert contains_memory_mapped_arrays(dataset)
+        wrapper = _DelegatingDataset(dataset)
+        assert wrapper.is_memory_mapped
+        assert contains_memory_mapped_arrays(wrapper)
+        with pytest.raises(DataError, match="memory-mapped"):
+            list(
+                iter_batches(
+                    wrapper, [0], batch_size=1, num_workers=1
+                )
+            )
+        sample = wrapper[0]
+        expected_state = sample.state.copy()
+        dataset.close()
+        assert np.array_equal(sample.state, expected_state)
+        with pytest.raises(DataError, match="closed"):
+            wrapper[0]
+    finally:
+        dataset.close()
+
+
+def test_in_memory_wrapper_has_no_map_and_still_iterates_without_workers():
+    dataset = make_dataset(split="train", counts=[2, 2], seed=46)
+    wrapper = _DelegatingDataset(dataset)
+    assert not wrapper.is_memory_mapped
+    assert not contains_memory_mapped_arrays(wrapper)
+    batches = list(iter_batches(wrapper, [0, 1], batch_size=1))
+    assert [batch.batch_size for batch in batches] == [1, 1]
+
+
+def test_unknown_dataset_implementations_cannot_be_assumed_map_free():
+    with pytest.raises(TypeError, match="is_memory_mapped"):
+        _MissingMmapContract()
+    with pytest.raises(DataError, match="DecisionDataset"):
+        contains_memory_mapped_arrays(object())  # type: ignore[arg-type]

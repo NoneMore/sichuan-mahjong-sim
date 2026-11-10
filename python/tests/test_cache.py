@@ -15,47 +15,24 @@ from mahjong_bc.constants import SPLIT_NAMES
 from mahjong_bc.data import iter_batches
 from mahjong_bc.errors import CacheContractError, DataError
 
-from .cache_fixture import read_manifest, write_cache, write_manifest
-from .helpers import make_dataset
+from .cache_fixture import CacheFixture, read_manifest, write_cache, write_manifest
 
 
-def _sources():
-    train = make_dataset(
-        split="train",
-        counts=[2, 3, 1, 2, 3, 1, 2, 3, 1],
-        seed=31,
-        cache_id="source-cache",
-        signal=True,
-    )
-    validation = make_dataset(
-        split="validation",
-        counts=[2, 1, 2, 1, 2],
-        seed=32,
-        cache_id="source-cache",
-        signal=True,
-    )
-    test = make_dataset(
-        split="test",
-        counts=[2, 2, 1],
-        seed=33,
-        cache_id="source-cache",
-        signal=True,
-    )
-    return train, validation, test
-
-
-def _cache(root: Path, **kwargs):
-    sources = _sources()
-    write_cache(
+def _cache(root: Path, **kwargs) -> CacheFixture:
+    return write_cache(
         root,
-        train=sources[0],
-        validation=sources[1],
-        test=sources[2],
         decisions_per_episode=2,
         episodes_per_shard=2,
         **kwargs,
     )
-    return sources
+
+
+def _episode_seeds(dataset) -> tuple[int, ...]:
+    return tuple(
+        dict.fromkeys(
+            int(dataset[index].episode_id) for index in range(len(dataset))
+        )
+    )
 
 
 def _rewrite_array(root: Path, manifest: dict, split: str, shard_index: int, name: str, array: np.ndarray) -> None:
@@ -114,15 +91,7 @@ def test_close_preserves_outstanding_mmap_views_and_rejects_new_reads(tmp_path):
 
 
 def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
-    sources = _sources()
-    write_cache(
-        tmp_path,
-        train=sources[0],
-        validation=sources[1],
-        test=sources[2],
-        decisions_per_episode=2,
-        episodes_per_shard=2,
-    )
+    fixture = _cache(tmp_path)
     cache = load_prepared_cache(tmp_path)
     assert cache.cache_id == "synthetic-cache-id"
     assert cache.encoding_version == 1
@@ -130,10 +99,14 @@ def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
     assert cache.preparation_version == 1
     assert cache.split_algorithm == "seed-sha256-80-10-10-v1"
     assert len(cache.splits["train"].shards) == 3
-    assert cache.counts.decisions == 17
+    assert cache.counts.decisions == sum(
+        value.decisions for value in fixture.counts.values()
+    )
     manifest = read_manifest(tmp_path)
 
-    for split, source in zip(SPLIT_NAMES, sources):
+    for split in SPLIT_NAMES:
+        source = fixture.sources[split]
+        assert source is not None
         dataset = cache.load_split(split)
         try:
             assert len(dataset) == len(source)
@@ -141,6 +114,7 @@ def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
             assert dataset.identity.split == split
             assert dataset.identity.decisions == len(source)
             assert dataset.identity.eligible_decisions == source.identity.eligible_decisions
+            assert _episode_seeds(dataset) == fixture.seeds[split]
             expected_index = 0
             for shard in manifest["splits"][split]["shards"]:
                 seeds = np.load(tmp_path / shard["arrays"]["episode_seeds"]["file"])
@@ -173,8 +147,9 @@ def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
 
 
 def test_empty_split_has_zero_counts_and_no_shards(tmp_path):
-    sources = _sources()
-    write_cache(tmp_path, train=sources[0], validation=sources[1], test=None)
+    fixture = _cache(tmp_path, seed_start=0, games=3)
+    assert fixture.seeds["test"] == ()
+    assert fixture.sources["test"] is None
     manifest = read_manifest(tmp_path)
     assert manifest["splits"]["test"]["shards"] == []
     cache = load_prepared_cache(tmp_path)
@@ -254,14 +229,14 @@ def test_memmap_datasets_reject_worker_processes(tmp_path):
 
 def test_inventory_is_complete_and_portable(tmp_path):
     root = tmp_path / "first"
-    _cache(root)
+    fixture = _cache(root)
     moved = tmp_path / "moved"
     shutil.copytree(root, moved)
     cache = load_prepared_cache(moved)
     assert cache.cache_id == "synthetic-cache-id"
     dataset = cache.load_split("test")
     try:
-        assert len(dataset) == 3
+        assert len(dataset) == fixture.counts["test"].decisions
     finally:
         dataset.close()
 

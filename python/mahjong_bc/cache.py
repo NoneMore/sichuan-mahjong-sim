@@ -13,11 +13,16 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, Mapping
 
 import numpy as np
 
+from ._array_contract import (
+    ArrayContractViolation,
+    expected_shapes,
+    validate_packed_arrays,
+)
 from .config import DatasetIdentity
 from .constants import (
     ACTION_KIND_COUNT,
@@ -272,6 +277,26 @@ def _sum_counts(counts: list[CacheCounts], name: str) -> CacheCounts:
     )
 
 
+def _require_matching_identity(
+    label: str,
+    *,
+    source_revision: str,
+    encoding_version: int,
+    split_algorithm: str,
+    dataset_source_revision: str,
+    dataset_encoding_version: int,
+    dataset_split_algorithm: str,
+) -> None:
+    """Require a captured or provenance section to match the dataset top level."""
+
+    if source_revision != dataset_source_revision:
+        raise CacheContractError(f"{label} source_revision differs from the dataset")
+    if encoding_version != dataset_encoding_version:
+        raise CacheContractError(f"{label} encoding_version differs from the dataset")
+    if split_algorithm != dataset_split_algorithm:
+        raise CacheContractError(f"{label} split_algorithm differs from the dataset")
+
+
 def _validate_captured_corpus(
     corpus: Mapping[str, Any],
     *,
@@ -303,30 +328,18 @@ def _validate_captured_corpus(
     captured_encoding = _require_positive_int(
         corpus["encoding_version"], "corpus_manifest.encoding_version"
     )
-    if captured_encoding != ENCODING_VERSION:
-        raise CacheContractError(
-            f"captured corpus encoding_version {captured_encoding}; "
-            f"supported version is {ENCODING_VERSION}"
-        )
     captured_algorithm = _require_nonempty_string(
         corpus["split_algorithm"], "corpus_manifest.split_algorithm"
     )
-    if captured_algorithm != SPLIT_ALGORITHM:
-        raise CacheContractError(
-            f"unsupported captured split_algorithm {captured_algorithm!r}"
-        )
-    if captured_revision != source_revision:
-        raise CacheContractError(
-            "captured corpus source_revision differs from the dataset"
-        )
-    if captured_encoding != encoding_version:
-        raise CacheContractError(
-            "captured corpus encoding_version differs from the dataset"
-        )
-    if captured_algorithm != split_algorithm:
-        raise CacheContractError(
-            "captured corpus split_algorithm differs from the dataset"
-        )
+    _require_matching_identity(
+        "captured corpus",
+        source_revision=captured_revision,
+        encoding_version=captured_encoding,
+        split_algorithm=captured_algorithm,
+        dataset_source_revision=source_revision,
+        dataset_encoding_version=encoding_version,
+        dataset_split_algorithm=split_algorithm,
+    )
     seed_start = _require_seed(corpus["seed_start"], "corpus_manifest.seed_start")
     _require_positive_int(
         corpus["decision_limit"], "corpus_manifest.decision_limit"
@@ -402,18 +415,15 @@ def _validate_provenance(
     collected_algorithm = _require_nonempty_string(
         collection["split_algorithm"], "provenance.collection.split_algorithm"
     )
-    if collected_revision != source_revision:
-        raise CacheContractError(
-            "collection provenance source_revision differs from the dataset"
-        )
-    if collected_encoding != encoding_version:
-        raise CacheContractError(
-            "collection provenance encoding_version differs from the dataset"
-        )
-    if collected_algorithm != split_algorithm:
-        raise CacheContractError(
-            "collection provenance split_algorithm differs from the dataset"
-        )
+    _require_matching_identity(
+        "collection provenance",
+        source_revision=collected_revision,
+        encoding_version=collected_encoding,
+        split_algorithm=collected_algorithm,
+        dataset_source_revision=source_revision,
+        dataset_encoding_version=encoding_version,
+        dataset_split_algorithm=split_algorithm,
+    )
     _require_mapping(provenance["preparation"], "provenance.preparation")
 
 
@@ -440,14 +450,9 @@ class CacheArray:
         value = _require_mapping(value, f"array {name!r}")
         _require_exact_keys(value, _ARRAY_KEYS, f"array {name!r}")
         relative = _require_nonempty_string(value["file"], f"array {name!r}.file")
-        if "\\" in relative:
-            raise CacheContractError(f"array {name!r}.file must use '/' separators")
-        path = PurePosixPath(relative)
-        if path.is_absolute() or ".." in path.parts or "." in path.parts:
-            raise CacheContractError(
-                f"array {name!r}.file must be a relative path without '..'"
-            )
         expected = f"arrays/{split}/{shard_index:05d}.{name}.npy"
+        # Exact protocol equality is the containment check: a manifest path
+        # cannot escape ``arrays/`` or name another shard's file.
         if relative != expected:
             raise CacheContractError(
                 f"array {name!r}.file must be {expected!r}, got {relative!r}"
@@ -652,20 +657,6 @@ def _validate_layout(layout: Mapping[str, Any]) -> None:
             )
 
 
-def _expected_shapes(decisions: int, candidates: int) -> dict[str, tuple[int, ...]]:
-    return {
-        "states": (decisions, STATE_WIDTH),
-        "candidate_features": (candidates, CANDIDATE_WIDTH),
-        "candidate_offsets": (decisions + 1,),
-        "targets": (decisions,),
-        "episode_seeds": (decisions,),
-        "decision_indices": (decisions,),
-        "actor_seats": (decisions,),
-        "stages": (decisions,),
-        "target_kinds": (decisions,),
-    }
-
-
 def _validate_array_header(
     root: Path,
     descriptor: CacheArray,
@@ -834,71 +825,50 @@ def _parse_split(
             raise CacheContractError(
                 f"splits.{name}.shards[{position}] counts do not match array shapes"
             )
-        expected_shapes = _expected_shapes(decisions, candidates)
+        shapes = expected_shapes(decisions, candidates)
         for array_name in ARRAY_NAMES:
             descriptor = descriptors[array_name]
-            if descriptor.shape != expected_shapes[array_name]:
+            if descriptor.shape != shapes[array_name]:
                 raise CacheContractError(
                     f"{descriptor.file} declares shape {descriptor.shape}; "
-                    f"manifest structure requires {expected_shapes[array_name]}"
+                    f"manifest structure requires {shapes[array_name]}"
                 )
         arrays = {
             array_name: _validate_array_header(
-                root, descriptors[array_name], expected_shapes[array_name]
+                root, descriptors[array_name], shapes[array_name]
             )
             for array_name in ARRAY_NAMES
         }
-        offsets = arrays["candidate_offsets"]
-        if len(offsets) != decisions + 1 or int(offsets[0]) != 0:
-            raise CacheContractError(
-                f"{descriptors['candidate_offsets'].file} has invalid offsets"
+        try:
+            layout = validate_packed_arrays(
+                states=arrays["states"],
+                candidate_features=arrays["candidate_features"],
+                candidate_offsets=arrays["candidate_offsets"],
+                targets=arrays["targets"],
+                stages=arrays["stages"],
+                actor_seats=arrays["actor_seats"],
+                decision_indices=arrays["decision_indices"],
+                target_kinds=arrays["target_kinds"],
             )
-        if int(offsets[-1]) != candidates:
-            raise CacheContractError(
-                f"{descriptors['candidate_offsets'].file} does not span candidates"
-            )
-        bounds = np.diff(offsets.astype(np.int64, copy=False))
-        if np.any(bounds <= 0):
-            raise CacheContractError(
-                f"{descriptors['candidate_offsets'].file} contains an empty range"
-            )
-        targets = arrays["targets"]
-        target_values = targets.astype(np.int64, copy=False)
-        if np.any(target_values < 0) or np.any(target_values >= bounds):
-            raise CacheContractError(
-                f"{descriptors['targets'].file} indexes outside its decision range"
-            )
-        stages = arrays["stages"].astype(np.int64, copy=False)
-        if np.any(stages < 0) or np.any(stages >= STAGE_COUNT):
-            raise CacheContractError(f"{descriptors['stages'].file} has invalid stages")
-        seats = arrays["actor_seats"].astype(np.int64, copy=False)
-        if np.any(seats < 0) or np.any(seats > 3):
-            raise CacheContractError(
-                f"{descriptors['actor_seats'].file} has invalid seats"
-            )
-        kinds = arrays["target_kinds"].astype(np.int64, copy=False)
-        if np.any(kinds < 0) or np.any(kinds >= ACTION_KIND_COUNT):
-            raise CacheContractError(
-                f"{descriptors['target_kinds'].file} has invalid kinds"
-            )
-        if counts.forced_decisions != int(np.count_nonzero(bounds == 1)):
+        except ArrayContractViolation as exc:
+            file_prefix = descriptors[exc.array].file
+            raise CacheContractError(f"{file_prefix}: {exc}") from None
+        if counts.forced_decisions != layout.forced_count:
             raise CacheContractError(
                 f"{descriptors['candidate_offsets'].file} forced count mismatch"
             )
-        if counts.eligible_decisions != int(np.count_nonzero(bounds > 1)):
+        if counts.eligible_decisions != layout.eligible_count:
             raise CacheContractError(
                 f"{descriptors['candidate_offsets'].file} eligible count mismatch"
             )
-        if candidates != int(bounds.sum()):
-            raise CacheContractError("shard candidates do not equal offset spans")
-        if counts.min_candidates != int(bounds.min()):
+        if counts.min_candidates != int(layout.candidate_counts.min()):
             raise CacheContractError("shard min_candidates mismatch")
-        if counts.max_candidates != int(bounds.max()):
+        if counts.max_candidates != int(layout.candidate_counts.max()):
             raise CacheContractError("shard max_candidates mismatch")
         _validate_target_kinds(
             arrays["candidate_features"],
-            offsets,
-            targets,
+            arrays["candidate_offsets"],
+            arrays["targets"],
             arrays["target_kinds"],
             file_prefix=f"splits.{name}.shards[{position}]",
         )

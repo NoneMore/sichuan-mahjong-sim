@@ -27,10 +27,10 @@ def _read_manifest(root: Path) -> dict:
 
 
 def test_cache_info_reports_manifest_inventory(tmp_path, capsys):
-    cache = synthetic_cache(tmp_path / "cache")
-    manifest = _read_manifest(cache)
+    fixture = synthetic_cache(tmp_path / "cache")
+    manifest = _read_manifest(fixture.root)
 
-    assert main(["cache-info", "--dataset", str(cache)]) == 0
+    assert main(["cache-info", "--dataset", str(fixture.root)]) == 0
     info = _parse(capsys)
 
     assert info["command"] == "cache-info"
@@ -56,6 +56,7 @@ def test_cache_info_reports_manifest_inventory(tmp_path, capsys):
     assert info["counts"]["decisions"] == sum(
         info["splits"][split]["counts"]["decisions"] for split in info["splits"]
     )
+    assert info["counts"] == manifest["counts"]
     assert info["counts"]["eligible_decisions"] > 0
 
 

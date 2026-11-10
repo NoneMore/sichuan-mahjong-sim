@@ -200,6 +200,16 @@ Generated corpus, cache, reports, wheels and isolated builds were removed after
 verification. The loader tests and [`verify_rust_handoff.py`](../python/tools/verify_rust_handoff.py)
 preserve regression and reproduction coverage.
 
+The maintenance follow-up based on `926be42` passed **114 Python tests** from
+both source and an installed wheel, including delegated mmap checks and a
+100-episode fixed-interval fixture. The same Rust checks passed again. Repeating
+the four-game workload above with a clean Rust build at
+`926be4270b7a14310a02dfd09dace254aedc475e` preserved all counts and bitwise
+handoff checks, including corpus-independent loading. Its snapshot SHA-256 was
+`de51e7b39a9997237332598a4969ffff74b4794a7e22d38437bf6ccc79e8f1fa`, and cache ID
+`991af57a3eae6dda9311ff38b4e08e451072f33a9faae1e5ca687b5d822afc12`.
+Follow-up artifacts were also removed after verification.
+
 ## Recovery and new measurements
 
 The studies ran primarily on Windows 10 / Ryzen 7 3700X with Rust 1.98.

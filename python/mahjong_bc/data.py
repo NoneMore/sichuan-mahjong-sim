@@ -18,9 +18,9 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
+from ._array_contract import ArrayContractViolation, validate_packed_arrays
 from .config import DatasetIdentity
 from .constants import (
-    ACTION_KIND_COUNT,
     ACTION_KIND_WIDTH,
     CANDIDATE_WIDTH,
     FORCED_CANDIDATE_COUNT,
@@ -114,33 +114,26 @@ class DecisionBatch:
         )
 
 
-def _require_integer_array(value: np.ndarray, name: str, shape: tuple[int, ...]) -> None:
-    if not isinstance(value, np.ndarray):
-        raise DataError(f"{name} must be a NumPy array")
-    if value.shape != shape:
-        raise DataError(f"{name} must have shape {shape}, got {value.shape}")
-    if not np.issubdtype(value.dtype, np.integer):
-        raise DataError(f"{name} must have an integer dtype, got {value.dtype}")
-
-
-def _require_float32_array(value: np.ndarray, name: str, shape: tuple[int, ...]) -> None:
-    if not isinstance(value, np.ndarray):
-        raise DataError(f"{name} must be a NumPy array")
-    if value.shape != shape:
-        raise DataError(f"{name} must have shape {shape}, got {value.shape}")
-    if value.dtype != np.float32:
-        raise DataError(f"{name} must be float32, got {value.dtype}")
-
-
 def _read_only(array: np.ndarray) -> np.ndarray:
     array.setflags(write=False)
     return array
 
 
 class DecisionDataset(Dataset[DecisionSample], ABC):
-    """Common interface for single-shard and multi-shard packed splits."""
+    """Common interface for single-shard and multi-shard packed splits.
 
-    identity: DatasetIdentity
+    ``identity`` is the split identity when the dataset represents a complete
+    split. A standalone shard may have no split identity. Implementations must
+    state whether their arrays are memory maps so worker spawning can reject
+    them instead of copying whole maps.
+    """
+
+    identity: DatasetIdentity | None
+
+    @property
+    @abstractmethod
+    def is_memory_mapped(self) -> bool:
+        """Whether any array owned by this dataset is a ``np.memmap``."""
 
     @abstractmethod
     def eligible_indices(self) -> np.ndarray:
@@ -156,12 +149,16 @@ class DecisionDataset(Dataset[DecisionSample], ABC):
 
 
 class PackedDecisionDataset(DecisionDataset):
-    """Packed, optionally memory-mapped decision arrays for one split.
+    """Packed, optionally memory-mapped decision arrays for one split or shard.
 
     ``candidate_features`` is packed across decisions. ``offsets`` delimits
     each decision's nonempty candidate range; ``targets`` are local candidate
-    indices. The constructor validates the complete layout and identity counts.
+    indices. The constructor validates the complete packed layout. ``identity``
+    is ``None`` when this object is only a shard of a split; a complete split
+    carries the :class:`DatasetIdentity` whose counts the arrays must match.
     """
+
+    identity: DatasetIdentity | None
 
     def __init__(
         self,
@@ -179,77 +176,38 @@ class PackedDecisionDataset(DecisionDataset):
     ) -> None:
         if identity is not None and not isinstance(identity, DatasetIdentity):
             raise DataError("identity must be a DatasetIdentity or None")
-        if not isinstance(candidate_features, np.ndarray):
-            raise DataError("candidate_features must be a NumPy array")
-        if candidate_features.ndim != 2:
-            raise DataError("candidate_features must be a two-dimensional array")
-        decisions = int(states.shape[0]) if isinstance(states, np.ndarray) and states.ndim else -1
-        if decisions < 0:
-            raise DataError("states must be a two-dimensional NumPy array")
-        _require_float32_array(states, "states", (decisions, STATE_WIDTH))
-        _require_float32_array(
-            candidate_features,
-            "candidate_features",
-            (int(candidate_features.shape[0]), CANDIDATE_WIDTH),
-        )
-        _require_integer_array(offsets, "offsets", (decisions + 1,))
-        _require_integer_array(targets, "targets", (decisions,))
-        _require_integer_array(stages, "stages", (decisions,))
-
-        candidate_count = int(candidate_features.shape[0])
-        offset_values = offsets
-        if int(offset_values[0]) != 0:
-            raise DataError("offsets must start at zero")
-        if int(offset_values[-1]) != candidate_count:
-            raise DataError(
-                f"offsets must end at the candidate count {candidate_count}, "
-                f"got {int(offset_values[-1])}"
+        try:
+            layout = validate_packed_arrays(
+                states=states,
+                candidate_features=candidate_features,
+                candidate_offsets=offsets,
+                targets=targets,
+                stages=stages,
+                actor_seats=actor_seats,
+                decision_indices=decision_indices,
+                target_kinds=target_kinds,
             )
-        bounds = np.diff(offset_values.astype(np.int64, copy=False))
-        if np.any(bounds <= 0):
-            raise DataError("every decision must have at least one candidate")
-        local_targets = targets.astype(np.int64, copy=False)
-        if np.any(local_targets < 0) or np.any(local_targets >= bounds):
-            raise DataError("every target must index its own candidate range")
-
-        stage_values = stages.astype(np.int64, copy=False)
-        if np.any(stage_values < 0) or np.any(stage_values >= STAGE_COUNT):
-            raise DataError(f"stages must be in [0, {STAGE_COUNT})")
-
-        if actor_seats is not None:
-            _require_integer_array(actor_seats, "actor_seats", (decisions,))
-            seats = actor_seats.astype(np.int64, copy=False)
-            if np.any(seats < 0) or np.any(seats > 3):
-                raise DataError("actor_seats must be in [0, 4)")
-        if decision_indices is not None:
-            _require_integer_array(decision_indices, "decision_indices", (decisions,))
-            if np.any(decision_indices.astype(np.int64, copy=False) < 0):
-                raise DataError("decision_indices must be non-negative")
-        if episode_ids is not None and len(episode_ids) != decisions:
+        except ArrayContractViolation as exc:
+            raise DataError(str(exc)) from None
+        if episode_ids is not None and len(episode_ids) != layout.decisions:
             raise DataError(
-                f"episode_ids must contain {decisions} entries, got {len(episode_ids)}"
+                f"episode_ids must contain {layout.decisions} entries, "
+                f"got {len(episode_ids)}"
             )
-        if target_kinds is not None:
-            _require_integer_array(target_kinds, "target_kinds", (decisions,))
-            kinds = target_kinds.astype(np.int64, copy=False)
-            if np.any(kinds < 0) or np.any(kinds >= ACTION_KIND_COUNT):
-                raise DataError(f"target_kinds must be in [0, {ACTION_KIND_COUNT})")
-
-        eligible_count = int(np.count_nonzero(bounds > FORCED_CANDIDATE_COUNT))
         if identity is not None:
-            if identity.decisions != decisions:
+            if identity.decisions != layout.decisions:
                 raise DataError(
                     f"dataset identity declares {identity.decisions} decisions, "
-                    f"arrays contain {decisions}"
+                    f"arrays contain {layout.decisions}"
                 )
-            if identity.eligible_decisions != eligible_count:
+            if identity.eligible_decisions != layout.eligible_count:
                 raise DataError(
                     f"dataset identity declares {identity.eligible_decisions} eligible "
-                    f"decisions, arrays contain {eligible_count}"
+                    f"decisions, arrays contain {layout.eligible_count}"
                 )
 
         self._closed = False
-        self._decision_count = decisions
+        self._decision_count = layout.decisions
         self.states = states
         self.candidate_features = candidate_features
         self.offsets = offsets
@@ -260,11 +218,9 @@ class PackedDecisionDataset(DecisionDataset):
         self.decision_indices = decision_indices
         self.episode_ids = episode_ids
         self.target_kinds = target_kinds
-        self._candidate_counts = _read_only(bounds)
-        self._eligible_indices = _read_only(
-            np.flatnonzero(bounds > FORCED_CANDIDATE_COUNT)
-        )
-        self._eligible_mask = _read_only(bounds > FORCED_CANDIDATE_COUNT)
+        self._candidate_counts = layout.candidate_counts
+        self._eligible_indices = layout.eligible_indices
+        self._eligible_mask = layout.eligible_mask
 
     def __len__(self) -> int:
         return self._decision_count
@@ -280,6 +236,23 @@ class PackedDecisionDataset(DecisionDataset):
     @property
     def forced_count(self) -> int:
         return len(self) - self.eligible_count
+
+    @property
+    def is_memory_mapped(self) -> bool:
+        return any(
+            isinstance(array, np.memmap)
+            for array in (
+                self.states,
+                self.candidate_features,
+                self.offsets,
+                self.targets,
+                self.stages,
+                self.actor_seats,
+                self.decision_indices,
+                self.episode_ids,
+                self.target_kinds,
+            )
+        )
 
     def candidate_counts(self) -> np.ndarray:
         return self._candidate_counts
@@ -351,11 +324,15 @@ class PackedDecisionDataset(DecisionDataset):
 
 
 class ShardedDecisionDataset(DecisionDataset):
-    """A split backed by multiple independently memory-mapped shards.
+    """A complete split backed by multiple independently memory-mapped shards.
 
     Global indices follow manifest shard order. Each shard is itself a
-    :class:`PackedDecisionDataset`; no array concatenation is performed.
+    :class:`PackedDecisionDataset` whose identity may be absent; this wrapper
+    owns the one non-optional split :class:`DatasetIdentity`. No array
+    concatenation is performed.
     """
+
+    identity: DatasetIdentity
 
     def __init__(
         self,
@@ -419,6 +396,10 @@ class ShardedDecisionDataset(DecisionDataset):
     @property
     def forced_count(self) -> int:
         return len(self) - self.eligible_count
+
+    @property
+    def is_memory_mapped(self) -> bool:
+        return any(shard.is_memory_mapped for shard in self.shards)
 
     def candidate_counts(self) -> np.ndarray:
         return self._candidate_counts
@@ -536,36 +517,19 @@ def collate_decisions(samples: Sequence[DecisionSample]) -> DecisionBatch:
     )
 
 
-def _iter_dataset_arrays(dataset: DecisionDataset) -> Iterator[np.ndarray]:
-    if isinstance(dataset, PackedDecisionDataset):
-        arrays = (
-            dataset.states,
-            dataset.candidate_features,
-            dataset.offsets,
-            dataset.targets,
-            dataset.stages,
-            dataset.actor_seats,
-            dataset.decision_indices,
-            dataset.episode_ids,
-            dataset.target_kinds,
-        )
-    elif isinstance(dataset, ShardedDecisionDataset):
-        arrays = tuple(
-            array
-            for shard in dataset.shards
-            for array in _iter_dataset_arrays(shard)
-        )
-    else:
-        arrays = ()
-    for array in arrays:
-        if isinstance(array, np.ndarray):
-            yield array
-
-
 def contains_memory_mapped_arrays(dataset: DecisionDataset) -> bool:
-    """Whether any dataset array is a memory map that worker processes would copy."""
+    """Whether the dataset owns a memory map that worker processes would copy.
 
-    return any(isinstance(array, np.memmap) for array in _iter_dataset_arrays(dataset))
+    This delegates to the dataset's ``is_memory_mapped`` contract. Unknown
+    implementations are rejected rather than assumed to be map-free.
+    """
+
+    if not isinstance(dataset, DecisionDataset):
+        raise DataError(
+            "dataset must be a DecisionDataset implementation with an "
+            "is_memory_mapped contract"
+        )
+    return dataset.is_memory_mapped
 
 
 class _IndexSubset(Dataset[DecisionSample]):

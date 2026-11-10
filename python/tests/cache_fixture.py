@@ -1,9 +1,17 @@
-"""Synthetic prepared-cache writer conforming to the approved dataset.json contract."""
+"""Synthetic prepared-cache writer conforming to the approved dataset.json contract.
+
+The fixture starts from an explicit contiguous captured seed interval. Its
+episodes are assigned to train/validation/test by the fixture's frozen copy of
+the Rust seed-split algorithm, so each split contains the seeds that the real
+algorithm assigns to it. It never searches for a seed interval matching a
+desired per-split composition.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -21,6 +29,13 @@ from mahjong_bc.constants import (
 from mahjong_bc.data import PackedDecisionDataset
 
 from .helpers import make_dataset
+
+#: The default captured interval is the 148..157 probe: train 5, validation 3,
+#: test 2 episodes. It is fixed test data, not a searched composition.
+DEFAULT_SEED_START = 148
+DEFAULT_GAMES = 10
+_U64_LIMIT = 1 << 64
+_CANDIDATE_PATTERN = (2, 3, 1)
 
 
 def _sha256(path: Path) -> str:
@@ -73,11 +88,10 @@ def _array_descriptor(root: Path, relative: str, array: np.ndarray) -> dict[str,
 
 
 _SPLIT_ORDER = {name: index for index, name in enumerate(SPLIT_NAMES)}
-_SEED_WINDOW_CACHE: dict[tuple[int, int, int], int] = {}
 
 
 def _seed_split(seed: int) -> str:
-    """Frozen Rust split algorithm, mirrored to choose fixture episode seeds."""
+    """Frozen Rust split algorithm, mirrored to assign fixture episode seeds."""
 
     digest = hashlib.sha256(b"bc-split-v1\0" + seed.to_bytes(8, "big")).digest()
     bucket = int.from_bytes(digest[:8], "big") % 100
@@ -88,108 +102,111 @@ def _seed_split(seed: int) -> str:
     return "test"
 
 
-def _find_seed_start(required: tuple[int, int, int]) -> int:
-    """Find the first small contiguous seed window with the required splits."""
+def _split_seeds(seed_start: int, games: int) -> dict[str, tuple[int, ...]]:
+    assigned: dict[str, list[int]] = {name: [] for name in SPLIT_NAMES}
+    for seed in range(seed_start, seed_start + games):
+        assigned[_seed_split(seed)].append(seed)
+    return {name: tuple(seeds) for name, seeds in assigned.items()}
 
-    cached = _SEED_WINDOW_CACHE.get(required)
-    if cached is not None:
-        return cached
-    total = sum(required)
-    if total == 0:
-        _SEED_WINDOW_CACHE[required] = 0
-        return 0
-    counts = [0, 0, 0]
-    for seed in range(total):
-        counts[_SPLIT_ORDER[_seed_split(seed)]] += 1
-    start = 0
-    while tuple(counts) != required:
-        counts[_SPLIT_ORDER[_seed_split(start)]] -= 1
-        counts[_SPLIT_ORDER[_seed_split(start + total)]] += 1
-        start += 1
-        if start > 1_000_000:
-            raise AssertionError(
-                f"no contiguous seed window matches {required} within 1,000,000 seeds"
-            )
-    _SEED_WINDOW_CACHE[required] = start
-    return start
+
+def _candidate_counts(decisions: int) -> list[int]:
+    return [
+        _CANDIDATE_PATTERN[index % len(_CANDIDATE_PATTERN)]
+        for index in range(decisions)
+    ]
+
+
+@dataclass(frozen=True)
+class CacheFixture:
+    """One written synthetic cache plus its generated source data.
+
+    ``seeds[split]`` is the actual captured-seed coverage of that split and
+    ``sources[split]`` is the packed dataset whose arrays were written. Empty
+    splits have no source dataset and zero counts.
+    """
+
+    root: Path
+    seed_start: int
+    games: int
+    seeds: Mapping[str, tuple[int, ...]]
+    sources: Mapping[str, PackedDecisionDataset | None]
+    counts: Mapping[str, CacheCounts]
+    manifest: Mapping[str, Any]
 
 
 def write_cache(
     root: Path | str,
     *,
-    train: PackedDecisionDataset | None = None,
-    validation: PackedDecisionDataset | None = None,
-    test: PackedDecisionDataset | None = None,
+    seed_start: int = DEFAULT_SEED_START,
+    games: int = DEFAULT_GAMES,
     cache_id: str = "synthetic-cache-id",
     source_revision: str = "synthetic-revision",
     decisions_per_episode: int = 2,
     episodes_per_shard: int = 2,
-) -> Path:
-    """Write a complete synthetic cache and return its root path.
+) -> CacheFixture:
+    """Write a complete synthetic cache from one contiguous captured interval.
 
-    Episode seeds are selected from one small contiguous captured seed range and
-    assigned to their real Rust ``seed_split`` split. Corpus shards follow the
-    captured contiguous range and always end on episode boundaries.
+    ``seed_start`` and ``games`` define the captured corpus: every seed in
+    ``range(seed_start, seed_start + games)`` is one episode. Episodes are
+    assigned to splits by the real seed-split algorithm; shard boundaries stay
+    on episode boundaries and follow captured seed order.
     """
 
     if decisions_per_episode < 1 or episodes_per_shard < 1:
         raise ValueError("episode and shard sizes must be positive")
+    if seed_start < 0 or seed_start >= _U64_LIMIT:
+        raise ValueError("seed_start must be a u64")
+    if games < 0 or seed_start + games > _U64_LIMIT:
+        raise ValueError("captured seed range must fit in u64")
+
     root_path = Path(root)
     root_path.mkdir(parents=True, exist_ok=True)
-    supplied = {"train": train, "validation": validation, "test": test}
-    planned: dict[str, list[tuple[int, int]] | None] = {}
-    required = [0, 0, 0]
-    for split_name in SPLIT_NAMES:
-        dataset = supplied[split_name]
-        if dataset is None:
-            planned[split_name] = None
-            continue
-        decisions = len(dataset)
-        ranges = [
-            (start, min(start + decisions_per_episode, decisions))
-            for start in range(0, decisions, decisions_per_episode)
-        ]
-        planned[split_name] = ranges
-        required[_SPLIT_ORDER[split_name]] = len(ranges)
-    required_counts = tuple(required)
-    seed_start = _find_seed_start(required_counts)
-    total_games = sum(required_counts)
-    captured_seeds = list(range(seed_start, seed_start + total_games))
-    assigned = {
-        split_name: [
-            seed for seed in captured_seeds if _seed_split(seed) == split_name
-        ]
-        for split_name in SPLIT_NAMES
-    }
-    if tuple(len(assigned[name]) for name in SPLIT_NAMES) != required_counts:
-        raise AssertionError("fixture seed window does not match split sizes")
+    seed_coverage = _split_seeds(seed_start, games)
+    captured_seeds = [
+        seed for split_seeds in seed_coverage.values() for seed in split_seeds
+    ]
+    captured_seeds.sort()
 
-    episode_decisions: dict[int, int] = {}
+    sources: dict[str, PackedDecisionDataset | None] = {}
+    split_counts: dict[str, CacheCounts] = {}
     split_manifests: dict[str, Any] = {}
-    split_counts: list[CacheCounts] = []
+    episode_decisions: dict[int, int] = {}
     for split_name in SPLIT_NAMES:
-        dataset = supplied[split_name]
-        if dataset is None:
+        seeds = seed_coverage[split_name]
+        if not seeds:
+            source = None
             counts = CacheCounts(0, 0, 0, 0, 0, 0, 0)
             split_manifests[split_name] = {
                 "split": split_name,
                 "counts": counts.to_dict(),
                 "shards": [],
             }
-            split_counts.append(counts)
+            sources[split_name] = source
+            split_counts[split_name] = counts
             continue
 
-        ranges = planned[split_name]
-        if ranges is None:
-            raise AssertionError("fixture split plan is missing")
-        decisions = len(dataset)
-        seeds = np.empty(decisions, dtype=np.uint64)
+        decisions = len(seeds) * decisions_per_episode
+        source = make_dataset(
+            split=split_name,
+            decisions=decisions,
+            counts=_candidate_counts(decisions),
+            seed=seed_start + _SPLIT_ORDER[split_name],
+            cache_id=cache_id,
+            source_revision=source_revision,
+            signal=True,
+        )
+        sources[split_name] = source
+        ranges = [
+            (start, start + decisions_per_episode)
+            for start in range(0, decisions, decisions_per_episode)
+        ]
+        episode_seeds = np.empty(decisions, dtype=np.uint64)
         decision_indices = np.empty(decisions, dtype=np.uint64)
         for episode_index, (start, end) in enumerate(ranges):
-            seed = assigned[split_name][episode_index]
-            seeds[start:end] = seed
-            episode_decisions[seed] = end - start
+            seed = seeds[episode_index]
+            episode_seeds[start:end] = seed
             decision_indices[start:end] = np.arange(end - start, dtype=np.uint64)
+            episode_decisions[seed] = end - start
 
         arrays_dir = root_path / "arrays" / split_name
         arrays_dir.mkdir(parents=True, exist_ok=True)
@@ -202,33 +219,31 @@ def write_cache(
             start = chosen[0][0]
             end = chosen[-1][1]
             local_offsets = (
-                dataset.offsets[start : end + 1].astype(np.int64)
-                - int(dataset.offsets[start])
+                source.offsets[start : end + 1].astype(np.int64)
+                - int(source.offsets[start])
             )
-            candidate_start = int(dataset.offsets[start])
-            candidate_end = int(dataset.offsets[end])
-            if dataset.target_kinds is None:
+            candidate_start = int(source.offsets[start])
+            candidate_end = int(source.offsets[end])
+            if source.target_kinds is None:
                 raise ValueError("synthetic cache requires target_kinds metadata")
             shard_arrays = {
-                "states": np.asarray(dataset.states[start:end], dtype=np.float32),
+                "states": np.asarray(source.states[start:end], dtype=np.float32),
                 "candidate_features": np.asarray(
-                    dataset.candidate_features[candidate_start:candidate_end],
+                    source.candidate_features[candidate_start:candidate_end],
                     dtype=np.float32,
                 ),
                 "candidate_offsets": local_offsets,
-                "targets": np.asarray(
-                    dataset.targets[start:end], dtype=np.int64
-                ),
-                "episode_seeds": seeds[start:end],
+                "targets": np.asarray(source.targets[start:end], dtype=np.int64),
+                "episode_seeds": episode_seeds[start:end],
                 "decision_indices": decision_indices[start:end],
                 "actor_seats": (
                     (np.arange(start, end, dtype=np.int64) % 4).astype(np.uint8)
-                    if dataset.actor_seats is None
-                    else np.asarray(dataset.actor_seats[start:end], dtype=np.uint8)
+                    if source.actor_seats is None
+                    else np.asarray(source.actor_seats[start:end], dtype=np.uint8)
                 ),
-                "stages": np.asarray(dataset.stages[start:end], dtype=np.uint8),
+                "stages": np.asarray(source.stages[start:end], dtype=np.uint8),
                 "target_kinds": np.asarray(
-                    dataset.target_kinds[start:end], dtype=np.uint8
+                    source.target_kinds[start:end], dtype=np.uint8
                 ),
             }
             descriptors: dict[str, Any] = {}
@@ -247,23 +262,26 @@ def write_cache(
                 }
             )
         counts = _aggregate(shard_counts)
-        expected_eligible = dataset.identity.eligible_decisions
-        if counts.eligible_decisions != expected_eligible:
+        if counts.episodes != len(seeds):
+            raise AssertionError("synthetic cache split episode count mismatch")
+        if counts.decisions != len(source):
+            raise AssertionError("synthetic cache split decision count mismatch")
+        if counts.eligible_decisions != source.identity.eligible_decisions:
             raise AssertionError("synthetic cache eligible count mismatch")
-        split_counts.append(counts)
+        split_counts[split_name] = counts
         split_manifests[split_name] = {
             "split": split_name,
             "counts": counts.to_dict(),
             "shards": shards,
         }
 
-    totals = _aggregate(split_counts)
-    if totals.episodes != total_games:
+    totals = _aggregate([split_counts[name] for name in SPLIT_NAMES])
+    if totals.episodes != games:
         raise AssertionError("synthetic cache episode total mismatch")
     if totals.decisions != sum(episode_decisions.values()):
         raise AssertionError("synthetic cache decision total mismatch")
     corpus_shards = []
-    for first in range(0, total_games, episodes_per_shard):
+    for first in range(0, games, episodes_per_shard):
         chosen = captured_seeds[first : first + episodes_per_shard]
         corpus_shards.append(
             {
@@ -351,7 +369,15 @@ def write_cache(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    return root_path
+    return CacheFixture(
+        root=root_path,
+        seed_start=seed_start,
+        games=games,
+        seeds=seed_coverage,
+        sources=sources,
+        counts=split_counts,
+        manifest=manifest,
+    )
 
 
 def read_manifest(root: Path | str) -> dict[str, Any]:
@@ -368,84 +394,10 @@ def write_manifest(root: Path | str, manifest: Mapping[str, Any]) -> None:
 def synthetic_cache(
     root: Path | str,
     *,
-    train_decisions: int = 9,
-    validation_decisions: int = 5,
-    test_decisions: int = 3,
+    seed_start: int = DEFAULT_SEED_START,
+    games: int = DEFAULT_GAMES,
     **kwargs: Any,
-) -> Path:
-    train = make_dataset(
-        split="train",
-        decisions=train_decisions,
-        counts=[2, 3, 1] * ((train_decisions + 2) // 3),
-        seed=21,
-        signal=True,
-    )
-    train = _trim(train, train_decisions)
-    validation = _trim(
-        make_dataset(
-            split="validation",
-            decisions=validation_decisions,
-            counts=[2, 1, 2] * ((validation_decisions + 2) // 3),
-            seed=22,
-            signal=True,
-        ),
-        validation_decisions,
-    )
-    test = _trim(
-        make_dataset(
-            split="test",
-            decisions=test_decisions,
-            counts=[2, 2, 1] * ((test_decisions + 2) // 3),
-            seed=23,
-            signal=True,
-        ),
-        test_decisions,
-    )
-    return write_cache(
-        root,
-        train=train,
-        validation=validation,
-        test=test,
-        **kwargs,
-    )
+) -> CacheFixture:
+    """Write the default fixed interval, or a caller-supplied fixed interval."""
 
-
-def _trim(dataset: PackedDecisionDataset, decisions: int) -> PackedDecisionDataset:
-    if len(dataset) < decisions:
-        extra = make_dataset(
-            split=dataset.identity.split,
-            decisions=decisions,
-            counts=[2] * decisions,
-            seed=99,
-            cache_id=dataset.identity.cache_id,
-            signal=True,
-        )
-        return extra
-    if len(dataset) == decisions:
-        return dataset
-    counts = dataset.candidate_counts()[:decisions]
-    from .helpers import identity
-
-    eligible = int(np.count_nonzero(counts > 1))
-    return PackedDecisionDataset(
-        states=np.asarray(dataset.states[:decisions]),
-        candidate_features=np.asarray(
-            dataset.candidate_features[: int(dataset.offsets[decisions])]
-        ),
-        offsets=np.asarray(dataset.offsets[: decisions + 1]),
-        targets=np.asarray(dataset.targets[:decisions]),
-        stages=np.asarray(dataset.stages[:decisions]),
-        identity=identity(
-            split=dataset.identity.split,
-            decisions=decisions,
-            eligible=eligible,
-            cache_id=dataset.identity.cache_id,
-        ),
-        actor_seats=None,
-        decision_indices=None,
-        target_kinds=(
-            None
-            if dataset.target_kinds is None
-            else np.asarray(dataset.target_kinds[:decisions])
-        ),
-    )
+    return write_cache(root, seed_start=seed_start, games=games, **kwargs)

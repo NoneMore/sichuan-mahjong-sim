@@ -83,7 +83,9 @@ The separate [`mahjong-bc` package](../../python/README.md) consumes prepared
 caches without Rust bindings or the original corpus. `cache.py` validates the
 inventory, checksums, arrays and metadata against the captured corpus and
 collection provenance. Rust owns the opaque `cache_id`; Python preserves it
-in dataset identities.
+in dataset identities. `_array_contract.py` supplies the shared packed-array
+invariants for cache validation and direct Dataset construction; protocol and
+provenance checks remain in `cache.py`.
 
 `data.py` exposes read-only packed/sharded datasets with forced and eligible
 decision queries. Collation preserves candidate order and local targets while
