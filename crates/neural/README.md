@@ -102,10 +102,66 @@ Pilot outcomes include throughput, rules/teacher/encoding/I/O/commit timings,
 storage bytes, build/environment facts, seed range, and cache settings. Retain
 the command and outcome when interpreting measurements.
 
-Library users enter through `collection::Corpus` and the `read_*`,
-`verify_corpus`, and `report_corpus` functions.
+Library users enter through `collection::Corpus`, `CorpusSnapshot`, and the
+`read_*`, `verify_corpus`, and `report_corpus` functions.
 `SourceRevision::from_compiled_source()` enforces build provenance; parsing a
 revision directly checks text form only and leaves source attestation to the caller.
+
+## Dataset preparation
+
+`bc-prepare` captures one committed manifest and streams only its listed shards
+through the collection validator. Later appends do not change this snapshot.
+The resulting split-specific NumPy cache is usable without the source corpus.
+
+```text
+cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- prepare \
+  --corpus ../bc-data --out ../bc-cache
+
+cargo run --locked -p sichuan-mahjong-neural --bin bc-prepare -- verify --cache ../bc-cache
+```
+
+`--out` must not exist. Staging-directory publication is atomic after all input
+shards and the manifest validate. `--report` must be a new path outside the cache.
+`--shard-decisions` / `--shard-candidates` default to 20,000 / 500,000. Each split
+keeps one output buffer bounded by these limits or one oversized episode, plus
+one input episode being parsed; the corpus decision limit bounds episode size.
+Shards rotate only at episode boundaries.
+
+```text
+<cache>/dataset.json
+<cache>/arrays/<split>/<00000>.<array>.npy
+```
+
+Each shard contains, with `D` decisions and `C` packed candidates, all
+little-endian C-order arrays:
+
+| Array | Dtype | Shape | Content |
+| --- | --- | --- | --- |
+| `states` | float32 | `D x 1013` | v1 state features |
+| `candidate_features` | float32 | `C x 39` | packed canonical candidates |
+| `candidate_offsets` | int64 | `D + 1` | nonempty local candidate ranges |
+| `targets` | int64 | `D` | local teacher target index |
+| `episode_seeds` | uint64 | `D` | seed per decision |
+| `decision_indices` | uint64 | `D` | decision index within episode |
+| `actor_seats` | uint8 | `D` | acting seat |
+| `stages` | uint8 | `D` | v1 stage ID |
+| `target_kinds` | uint8 | `D` | teacher target action kind ID |
+
+`source_revision` plus `episode_seeds` identifies an episode. Forced decisions
+are retained; `eligible_decisions` counts decisions with more than one
+candidate. Empty splits list `shards: []` and all-zero counts.
+
+`dataset.json` records supported format/preparation/encoding versions, the captured
+manifest and checksum, layout, inventory and counts. Verification checks array
+checksums, packed ranges, metadata, seed membership and derived counts.
+`cache_id` binds snapshot identity and output inventory, excluding paths and
+build/environment facts; [module rustdoc](src/prepare/mod.rs) and
+`prepare::compute_cache_id` define the format and exact hash sequence.
+
+Collection provenance comes from the corpus manifest. Preparation records its
+own build/environment, allowing dirty builds without claiming clean collection
+attestation. For training, metrics and recovery, see the
+[Python guide](../../python/README.md).
 
 ## Development
 

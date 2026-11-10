@@ -49,8 +49,32 @@ Strict readers validate listed shards one episode at a time; only `read_corpus`
 materializes the entire corpus.
 
 The [crate guide](../../crates/neural/README.md) covers commands and reporting;
-module rustdoc defines the encoding and storage contracts. Network and training
-integrations belong on this side of the boundary, not in the simulator core.
+module rustdoc defines the encoding and storage contracts.
+
+## Offline behavior cloning
+
+Rust [preparation](../../crates/neural/src/prepare/) reuses strict corpus
+validation; the [Python package](../../python/README.md) owns batching,
+optimization, metrics and recovery without environment bindings.
+
+```text
+captured manifest + immutable corpus shards
+    -> Rust validation / packed NumPy cache
+    -> Python mmap Dataset / padded batches
+    -> shared PyTorch scorer / metrics / checkpoints
+```
+
+The snapshot fixes membership during collection appends. Bounded preparation
+buffers and staging-directory publication produce a self-contained cache with
+versioned layout, checksums and separate collection/preparation provenance.
+Python does not parse teacher JSONL or reimplement encoding.
+
+A pointwise state/candidate scorer keeps candidate permutation semantics and
+shares its logits interface with future online consumers. Validation NLL selects
+the best model; epoch-boundary checkpoints retain optimizer, RNG and best-model
+state for recovery, including migration to another output directory. The core
+simulator has no training dependency. Operational contracts belong in the
+[crate guide](../../crates/neural/README.md#dataset-preparation) and Python guide.
 
 ## Verification
 

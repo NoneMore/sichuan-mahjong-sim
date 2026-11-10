@@ -14,7 +14,7 @@ intended Mahjong semantics.
 | Rule foundation | [Foundation](foundation.md) | Tile/hand model and pure shape, legality and settlement facts |
 | Authoritative game | [Game](game.md) | Sole mutable hand state, decisions, progression and payments |
 | Policies | [Policy](policy.md) | Player-visible action selection, exact analysis and optional memoization |
-| Neural adapters | [Neural](neural.md) | Separate consumer crate for versioned decision encoding and teacher data collection |
+| Neural adapters | [Neural](neural.md) | Versioned decision encoding, teacher collection, NumPy preparation and offline Python policy training |
 | Execution | [Runner and CLI](execution.md) | Drives games and policies without interpreting rules |
 | Research tools | [Experiments](experiments.md) | Repeatable policy comparisons, timings and evidence records |
 

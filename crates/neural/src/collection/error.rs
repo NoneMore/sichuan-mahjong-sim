@@ -97,6 +97,13 @@ pub enum CollectionError {
     },
     /// An append request contained zero games.
     EmptyCollection,
+    /// A captured snapshot shard index is outside the listed shard range.
+    SnapshotShardOutOfRange {
+        /// Requested index.
+        index: usize,
+        /// Number of listed shards in the snapshot.
+        shards: usize,
+    },
     /// Every `u64` seed is already committed.
     SeedSpaceExhausted {
         /// Corpus first seed.
@@ -290,6 +297,10 @@ impl fmt::Display for CollectionError {
                 "corpus fixes source revision {manifest}, but the append requested {requested}"
             ),
             CollectionError::EmptyCollection => f.write_str("a collection requires at least one game"),
+            CollectionError::SnapshotShardOutOfRange { index, shards } => write!(
+                f,
+                "snapshot shard index {index} is outside {shards} listed shards"
+            ),
             CollectionError::SeedSpaceExhausted {
                 seed_start,
                 committed,

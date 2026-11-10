@@ -13,7 +13,9 @@ formatting, warning-denied Clippy, Debug and Release tests across all workspace
 targets (including executable examples and their tests), doctests, and
 warning-denied rustdoc. The separate MSRV job checks all workspace targets with
 Rust 1.75.0, the minimum declared by both packages. Builds and tests use the
-committed root lockfile.
+committed root lockfile. The separate [Python BC workflow](../.github/workflows/python-ci.yml)
+runs the offline policy, metric, cache and recovery tests on CPU; CUDA smoke
+validation is a separate local check.
 
 Run the relevant checks locally before submitting changes. A successful CI run
 verifies that specific source revision; it does not establish a performance
@@ -79,6 +81,14 @@ trajectories. See the [collection guide](../crates/neural/README.md#teacher-data
 for clean-build requirements, commands, storage/recovery, and measurement reports.
 Collector contract and subprocess-lock tests run with the standard all-target
 checks.
+
+### Offline behavior cloning
+
+Use the [neural crate guide](../crates/neural/README.md#dataset-preparation) to
+prepare a fixed-snapshot NumPy cache, then the [Python guide](../python/README.md)
+for installation, CPU/single-GPU training, checkpoint resume, frozen evaluation
+and tests. This path requires no PyO3 and leaves teacher behavior and encoding v1
+unchanged.
 
 ### Policy A/B comparison example
 

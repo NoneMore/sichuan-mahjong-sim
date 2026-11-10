@@ -1,0 +1,143 @@
+"""Synthetic packed-dataset helpers shared by the CPU test suite."""
+
+from __future__ import annotations
+
+from typing import Sequence
+
+import numpy as np
+
+from mahjong_bc.config import DatasetIdentity, ModelConfig
+from mahjong_bc.constants import (
+    ACTION_KIND_WIDTH,
+    CANDIDATE_WIDTH,
+    STATE_WIDTH,
+)
+from mahjong_bc.data import PackedDecisionDataset
+
+
+def identity(
+    *,
+    split: str,
+    decisions: int,
+    eligible: int,
+    cache_id: str = "cache-fixture",
+    preparation_format_version: int = 1,
+    source_revision: str = "fixture-revision",
+) -> DatasetIdentity:
+    return DatasetIdentity(
+        cache_id=cache_id,
+        split=split,
+        encoding_version=1,
+        preparation_format_version=preparation_format_version,
+        source_revision=source_revision,
+        decisions=decisions,
+        eligible_decisions=eligible,
+    )
+
+
+def make_dataset(
+    *,
+    split: str = "train",
+    decisions: int = 8,
+    counts: Sequence[int] | None = None,
+    seed: int = 0,
+    cache_id: str = "cache-fixture",
+    source_revision: str = "fixture-revision",
+    preparation_format_version: int = 1,
+    stages: Sequence[int] | None = None,
+    target_kinds: Sequence[int] | None = None,
+    signal: bool = False,
+) -> PackedDecisionDataset:
+    """Build a valid packed split with optional learnable candidate signal."""
+
+    rng = np.random.default_rng(seed)
+    if counts is None:
+        counts = [int(value) for value in rng.integers(1, 4, size=decisions)]
+        counts = [max(1, int(value)) for value in counts]
+    else:
+        counts = [int(value) for value in counts]
+        decisions = len(counts)
+    if decisions == 0:
+        raise ValueError("fixture must contain at least one decision")
+    if any(count < 1 for count in counts):
+        raise ValueError("fixture candidate counts must be positive")
+
+    offsets = np.concatenate(
+        [np.zeros(1, dtype=np.int64), np.cumsum(counts, dtype=np.int64)]
+    ).astype(np.int64)
+    candidate_count = int(offsets[-1])
+    states = rng.normal(size=(decisions, STATE_WIDTH)).astype(np.float32)
+    candidate_features = np.zeros(
+        (candidate_count, CANDIDATE_WIDTH), dtype=np.float32
+    )
+    targets = np.empty(decisions, dtype=np.int64)
+    stage_values = np.empty(decisions, dtype=np.int64)
+    kind_values = np.empty(decisions, dtype=np.int64)
+
+    for decision in range(decisions):
+        start = int(offsets[decision])
+        count = counts[decision]
+        targets[decision] = int(rng.integers(0, count))
+        stage_values[decision] = (
+            int(stages[decision]) if stages is not None else int(rng.integers(0, 5))
+        )
+        chosen_kind = (
+            int(target_kinds[decision])
+            if target_kinds is not None
+            else int(rng.integers(0, ACTION_KIND_WIDTH))
+        )
+        kind_values[decision] = chosen_kind
+        for local in range(count):
+            row = candidate_features[start + local]
+            row[chosen_kind if local == targets[decision] else 2] = 1.0
+            if signal:
+                row[ACTION_KIND_WIDTH] = 1.0 if local == targets[decision] else 0.0
+                row[ACTION_KIND_WIDTH + 1] = float(local)
+
+    eligible = int(np.count_nonzero(np.asarray(counts) > 1))
+    return PackedDecisionDataset(
+        states=states,
+        candidate_features=candidate_features,
+        offsets=offsets,
+        targets=targets,
+        stages=stage_values,
+        identity=identity(
+            split=split,
+            decisions=decisions,
+            eligible=eligible,
+            cache_id=cache_id,
+            preparation_format_version=preparation_format_version,
+            source_revision=source_revision,
+        ),
+        target_kinds=kind_values,
+    )
+
+
+def learnable_pair(
+    *,
+    train_decisions: int = 12,
+    validation_decisions: int = 6,
+    cache_id: str = "learnable-fixture",
+) -> tuple[PackedDecisionDataset, PackedDecisionDataset]:
+    """Two-candidate decisions where one feature identifies the target."""
+
+    train = make_dataset(
+        split="train",
+        decisions=train_decisions,
+        counts=[2] * train_decisions,
+        seed=11,
+        cache_id=cache_id,
+        signal=True,
+    )
+    validation = make_dataset(
+        split="validation",
+        decisions=validation_decisions,
+        counts=[2] * validation_decisions,
+        seed=12,
+        cache_id=cache_id,
+        signal=True,
+    )
+    return train, validation
+
+
+SMALL_MODEL = ModelConfig(state_hidden=(16,), scorer_hidden=(16,))
