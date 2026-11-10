@@ -19,6 +19,7 @@ from typing import Any, Mapping
 
 import torch
 
+from ._device import resolve_device
 from .config import ModelConfig
 from .constants import (
     CHECKPOINT_FORMAT_VERSION,
@@ -289,37 +290,13 @@ def load_policy_checkpoint(
         model_config = ModelConfig.from_dict(payload["model_config"])
     except ConfigurationError as exc:
         raise CheckpointError(f"invalid model configuration: {exc}") from exc
-    if payload["encoding_version"] != model_config.encoding_version:
-        raise CheckpointError(
-            "checkpoint encoding version does not match its model configuration"
-        )
     raw_model_state = payload["model_state"]
-    if not isinstance(raw_model_state, Mapping):
-        raise CheckpointError("model_state must be a mapping")
     model = CandidatePolicy(model_config)
     try:
         model.load_state_dict(raw_model_state, strict=True)
     except Exception as exc:
         raise CheckpointError(f"incompatible model_state: {exc}") from exc
-    try:
-        target_device = torch.device(device)
-    except (RuntimeError, TypeError) as exc:
-        raise ConfigurationError(f"invalid device {device!r}: {exc}") from exc
-    if target_device.type not in ("cpu", "cuda"):
-        raise ConfigurationError(
-            f"unsupported device type {target_device.type!r}; use 'cpu' or 'cuda'"
-        )
-    if target_device.type == "cuda":
-        if not torch.cuda.is_available():
-            raise ConfigurationError("CUDA was requested but is not available")
-        if (
-            target_device.index is not None
-            and target_device.index >= torch.cuda.device_count()
-        ):
-            raise ConfigurationError(
-                f"CUDA device index {target_device.index} is unavailable "
-                f"({torch.cuda.device_count()} device(s) present)"
-            )
+    target_device = resolve_device(device)
     model.to(target_device).float().eval()
     metrics = payload["metrics"]
     return LoadedCheckpoint(

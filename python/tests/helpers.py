@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 import numpy as np
+import pytest
 
-from mahjong_bc.config import DatasetIdentity, ModelConfig
+from mahjong_bc.config import DatasetIdentity
 from mahjong_bc.constants import (
     ACTION_KIND_WIDTH,
     CANDIDATE_WIDTH,
     STATE_WIDTH,
 )
-from mahjong_bc.data import PackedDecisionDataset
+from mahjong_bc.data import DecisionDataset, PackedDecisionDataset
+from mahjong_bc.metrics import MetricsReport
 
 
 def identity(
@@ -140,4 +142,75 @@ def learnable_pair(
     return train, validation
 
 
-SMALL_MODEL = ModelConfig(state_hidden=(16,), scorer_hidden=(16,))
+class DelegatingDataset(DecisionDataset):
+    """Third-party-style wrapper used to exercise public dataset boundaries."""
+
+    def __init__(
+        self,
+        inner: DecisionDataset,
+        identity: object | None = None,
+    ) -> None:
+        self.inner = inner
+        self.identity = inner.identity if identity is None else identity
+
+    @property
+    def is_memory_mapped(self) -> bool:
+        return self.inner.is_memory_mapped
+
+    def __len__(self) -> int:
+        return len(self.inner)
+
+    def __getitem__(self, index: int):
+        return self.inner[index]
+
+    def eligible_indices(self) -> np.ndarray:
+        return self.inner.eligible_indices()
+
+    def forced_by_stage(self) -> tuple[int, ...]:
+        return self.inner.forced_by_stage()
+
+    def candidate_counts(self) -> np.ndarray:
+        return self.inner.candidate_counts()
+
+
+def support_by_stage(report: MetricsReport) -> tuple[int, ...]:
+    return tuple(metric.support for metric in report.stages)
+
+
+def assert_reports_equal(
+    left: MetricsReport,
+    right: MetricsReport,
+    *,
+    tolerance: float = 0.0,
+) -> None:
+    """Compare serialized reports so newly added fields are not skipped."""
+
+    _assert_metric_value(left.to_dict(), right.to_dict(), tolerance=tolerance)
+
+
+def _assert_metric_value(
+    actual: Any,
+    expected: Any,
+    *,
+    tolerance: float,
+) -> None:
+    if isinstance(expected, dict):
+        assert isinstance(actual, dict)
+        assert set(actual) == set(expected)
+        for key, expected_value in expected.items():
+            _assert_metric_value(
+                actual[key], expected_value, tolerance=tolerance
+            )
+    elif isinstance(expected, list):
+        assert isinstance(actual, list)
+        assert len(actual) == len(expected)
+        for actual_item, expected_item in zip(actual, expected):
+            _assert_metric_value(
+                actual_item, expected_item, tolerance=tolerance
+            )
+    elif expected is None:
+        assert actual is None
+    elif isinstance(expected, float):
+        assert actual == pytest.approx(expected, abs=tolerance)
+    else:
+        assert actual == expected

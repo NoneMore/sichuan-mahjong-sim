@@ -15,7 +15,9 @@ from .constants import (
 )
 from .errors import ConfigurationError
 
-_ACTIVATIONS = ("relu", "gelu", "tanh")
+#: Activation names accepted by :class:`ModelConfig`; the policy factory maps
+#: each name to its ``nn.Module`` implementation.
+ACTIVATION_NAMES = ("relu", "gelu", "tanh")
 
 
 def _require_mapping(value: Any, name: str) -> Mapping[str, Any]:
@@ -116,9 +118,9 @@ class ModelConfig:
             "scorer_hidden",
             _normalize_widths(self.scorer_hidden, "scorer_hidden"),
         )
-        if self.activation not in _ACTIVATIONS:
+        if self.activation not in ACTIVATION_NAMES:
             raise ConfigurationError(
-                f"activation must be one of {list(_ACTIVATIONS)}, "
+                f"activation must be one of {list(ACTIVATION_NAMES)}, "
                 f"got {self.activation!r}"
             )
 
@@ -327,13 +329,3 @@ def collect_dependency_versions() -> DependencyVersions:
         numpy=str(numpy.__version__),
         cuda_build=cuda_build,
     )
-
-
-def require_dataset_encoding(identity: DatasetIdentity) -> None:
-    """Reject a dataset whose declared encoding is not this model's encoding."""
-
-    if identity.encoding_version != ENCODING_VERSION:
-        raise ConfigurationError(
-            f"dataset {identity.split!r} declares encoding version "
-            f"{identity.encoding_version}; supported version is {ENCODING_VERSION}"
-        )

@@ -3,24 +3,33 @@ from __future__ import annotations
 import dataclasses
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pytest
 import torch
 
+import mahjong_bc
 import mahjong_bc.train as train_module
-from mahjong_bc.checkpoint import load_policy_checkpoint
+from mahjong_bc.checkpoint import load_policy_checkpoint, save_checkpoint
 from mahjong_bc.config import (
     DependencyVersions,
     ModelConfig,
     TrainingConfig,
 )
+from mahjong_bc.constants import ROLE_BEST
 from mahjong_bc.data import PackedDecisionDataset
 from mahjong_bc.errors import ConfigurationError, DataError
-from mahjong_bc.train import Trainer, evaluate_checkpoint, resolve_device
+from mahjong_bc.policy import build_policy
+from mahjong_bc.train import (
+    TRAIN_OUTPUT_NAMES,
+    Trainer,
+    evaluate_checkpoint,
+    resolve_device,
+)
 
-from .helpers import learnable_pair, make_dataset
+from .helpers import DelegatingDataset, learnable_pair, make_dataset
 
 
 class RecordingDataset(PackedDecisionDataset):
@@ -210,7 +219,7 @@ def test_validation_only_best_selection_and_frozen_test_evaluation(
     assert not (tmp_path / "selection" / "last.pt").exists()
 
 
-@pytest.mark.parametrize("protected_name", ["best.pt", "last.pt", "run.json"])
+@pytest.mark.parametrize("protected_name", TRAIN_OUTPUT_NAMES)
 def test_from_scratch_refuses_existing_run_artifacts_without_deleting(
     tmp_path, protected_name
 ):
@@ -408,6 +417,25 @@ def test_run_record_contains_configuration_identity_provenance_and_history(tmp_p
     )
     assert record["dataset"]["provenance"] == provenance
     assert record["best_checkpoint"] == "best.pt"
+    assert set(record) == {
+        "source",
+        "package_version",
+        "model_config",
+        "training_config",
+        "dependencies",
+        "device_type",
+        "seed",
+        "dataset",
+        "best_checkpoint",
+        "run_record",
+        "summary",
+    }
+    assert set(record["dataset"]) == {
+        "train_dataset_identity",
+        "validation_dataset_identity",
+        "provenance",
+    }
+    assert record == trainer.run_payload(summary)
     assert record["summary"]["history"][0]["validation"]["nll"] == pytest.approx(
         summary.best_validation_nll
     )
@@ -449,15 +477,77 @@ def test_evaluate_checkpoint_rejects_training_and_anonymous_datasets(tmp_path):
             batch_size=2,
             device="cpu",
         )
+    duck = DelegatingDataset(
+        validation, identity=SimpleNamespace(**validation.identity.to_dict())
+    )
+    with pytest.raises(DataError, match="DatasetIdentity"):
+        evaluate_checkpoint(
+            tmp_path / "eval-guard" / "best.pt",
+            duck,
+            batch_size=2,
+            device="cpu",
+        )
 
 
-def test_resolve_device_rejects_unsupported_or_unavailable_devices():
+def test_trainer_requires_constructed_dataset_identity(tmp_path):
+    train, validation = learnable_pair(cache_id="identity-guard")
+    with pytest.raises(ConfigurationError, match="must be a DecisionDataset"):
+        Trainer(
+            train_dataset=object(),
+            validation_dataset=validation,
+            model_config=_small_model(),
+            training_config=_config(epochs=1, batch_size=2, learning_rate=0.01),
+            output_dir=tmp_path / "not-a-dataset",
+            device="cpu",
+        )
+    duck_train = DelegatingDataset(
+        train, identity=SimpleNamespace(**train.identity.to_dict())
+    )
+    with pytest.raises(DataError, match="DatasetIdentity"):
+        Trainer(
+            train_dataset=duck_train,
+            validation_dataset=validation,
+            model_config=_small_model(),
+            training_config=_config(epochs=1, batch_size=2, learning_rate=0.01),
+            output_dir=tmp_path / "duck-train",
+            device="cpu",
+        )
+    duck_validation = DelegatingDataset(
+        validation, identity=SimpleNamespace(**validation.identity.to_dict())
+    )
+    with pytest.raises(DataError, match="DatasetIdentity"):
+        Trainer(
+            train_dataset=train,
+            validation_dataset=duck_validation,
+            model_config=_small_model(),
+            training_config=_config(epochs=1, batch_size=2, learning_rate=0.01),
+            output_dir=tmp_path / "duck-validation",
+            device="cpu",
+        )
+
+
+def test_device_resolution_is_shared_by_training_and_checkpoint_loading(tmp_path):
+    path = tmp_path / "device.pt"
+    save_checkpoint(path, build_policy(_small_model(), seed=1), role=ROLE_BEST)
+    assert mahjong_bc.resolve_device is train_module.resolve_device is resolve_device
     assert resolve_device("cpu") == torch.device("cpu")
-    with pytest.raises(ConfigurationError, match="unsupported device"):
-        resolve_device("mps")
+    loaded = load_policy_checkpoint(path, device="cpu")
+    assert next(loaded.model.parameters()).device.type == "cpu"
+
+    cases = [
+        ("not-a-device", "invalid device"),
+        ("mps", "unsupported device"),
+    ]
     if not torch.cuda.is_available():
-        with pytest.raises(ConfigurationError, match="not available"):
-            resolve_device("cuda")
+        cases.append(("cuda", "not available"))
+    elif torch.cuda.device_count() > 0:
+        cases.append((f"cuda:{torch.cuda.device_count()}", "unavailable"))
+    for value, match in cases:
+        with pytest.raises(ConfigurationError, match=match):
+            resolve_device(value)
+        with pytest.raises(ConfigurationError, match=match):
+            load_policy_checkpoint(path, device=value)
+
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")

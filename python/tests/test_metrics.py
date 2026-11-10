@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -8,15 +9,15 @@ import torch
 from mahjong_bc.config import ModelConfig
 from mahjong_bc.data import collate_decisions
 from mahjong_bc.errors import DataError
-from mahjong_bc.metrics import (
-    MetricAccumulator,
-    evaluate_dataset,
-    reports_equal,
-    support_by_stage,
-)
+from mahjong_bc.metrics import MetricAccumulator, evaluate_dataset
 from mahjong_bc.policy import build_policy
 
-from .helpers import make_dataset
+from .helpers import (
+    DelegatingDataset,
+    assert_reports_equal,
+    make_dataset,
+    support_by_stage,
+)
 
 
 def _manual_accumulator() -> MetricAccumulator:
@@ -148,7 +149,7 @@ def test_evaluate_dataset_is_complete_and_batch_size_independent():
         kind.support for kind in reports[0].action_kinds
     )
     for other in reports[1:]:
-        assert reports_equal(reports[0], other, tolerance=1e-12)
+        assert_reports_equal(reports[0], other, tolerance=1e-12)
     model.eval()
     evaluate_dataset(model, dataset, batch_size=2, device="cpu")
     assert model.training is False
@@ -168,9 +169,23 @@ def test_evaluate_dataset_uses_padded_batches_without_affecting_metrics():
         batch.stages,
         batch.target_kinds,
     )
-    assert reports_equal(single, accumulator.report(), tolerance=1e-12)
+    assert_reports_equal(single, accumulator.report(), tolerance=1e-12)
     assert single.forced == 1
     assert single.eligible == 2
+
+
+def test_evaluate_dataset_accepts_third_party_subclass_identity_boundary():
+    dataset = make_dataset(split="validation", counts=[2, 1, 2], seed=44)
+    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=8)
+    wrapped = DelegatingDataset(dataset)
+    report = evaluate_dataset(model, wrapped, batch_size=2, device="cpu")
+    assert report.decisions == len(dataset)
+
+    duck = DelegatingDataset(
+        dataset, identity=SimpleNamespace(**dataset.identity.to_dict())
+    )
+    with pytest.raises(DataError, match="DatasetIdentity"):
+        evaluate_dataset(model, duck, batch_size=2, device="cpu")
 
 
 def test_zero_support_groups_are_undefined():

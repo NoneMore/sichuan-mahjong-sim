@@ -27,7 +27,7 @@ from .constants import (
     STAGE_COUNT,
     STATE_WIDTH,
 )
-from .errors import DataError
+from .errors import DataError, MahjongBCError
 
 
 def derive_target_kind(candidate_features: np.ndarray, target: int) -> int:
@@ -146,6 +146,36 @@ class DecisionDataset(Dataset[DecisionSample], ABC):
     @abstractmethod
     def candidate_counts(self) -> np.ndarray:
         """Candidate count of every decision in split order."""
+
+
+def require_dataset_identity(
+    dataset: DecisionDataset,
+    role: str,
+    *,
+    dataset_error: type[MahjongBCError] = DataError,
+) -> DatasetIdentity:
+    """Validate a public dataset boundary and return its constructed identity.
+
+    Third-party ``DecisionDataset`` subclasses are supported inputs, but an
+    anonymous shard or a duck-typed ``identity`` that bypassed
+    :class:`DatasetIdentity` construction is rejected. ``dataset_error``
+    lets an established public entry point keep its own configuration error
+    category for a non-dataset input.
+    """
+
+    if not isinstance(dataset, DecisionDataset):
+        raise dataset_error(f"{role} must be a DecisionDataset")
+    identity = dataset.identity
+    if identity is None:
+        raise DataError(
+            f"{role} must expose a split identity; anonymous shards cannot be used"
+        )
+    if not isinstance(identity, DatasetIdentity):
+        raise DataError(
+            f"{role} identity must be a DatasetIdentity, "
+            f"got {type(identity).__name__}"
+        )
+    return identity
 
 
 class PackedDecisionDataset(DecisionDataset):

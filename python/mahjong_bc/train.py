@@ -15,30 +15,35 @@ from typing import Any, Mapping
 
 import torch
 
+from ._device import resolve_device
 from ._source import collect_training_source
-from .checkpoint import atomic_write_json, save_checkpoint
+from .checkpoint import atomic_write_json, load_policy_checkpoint, save_checkpoint
 from .config import (
     DatasetIdentity,
     DependencyVersions,
     ModelConfig,
     TrainingConfig,
     collect_dependency_versions,
-    require_dataset_encoding,
 )
 from .constants import PACKAGE_VERSION, ROLE_BEST
-from .data import DecisionDataset, contains_memory_mapped_arrays, iter_batches
+from .data import (
+    DecisionDataset,
+    contains_memory_mapped_arrays,
+    iter_batches,
+    require_dataset_identity,
+)
 from .errors import ConfigurationError, DataError
 from .metrics import MetricsReport, evaluate_dataset
 from .policy import CandidatePolicy, build_policy, masked_cross_entropy
 
 _ORDER_SEED_MASK = 0x9E3779B97F4A7C15
-_BEST_CHECKPOINT_NAME = "best.pt"
-_RESERVED_LAST_CHECKPOINT_NAME = "last.pt"
-_RUN_RECORD_NAME = "run.json"
-_PROTECTED_OUTPUT_NAMES = (
-    _BEST_CHECKPOINT_NAME,
-    _RESERVED_LAST_CHECKPOINT_NAME,
-    _RUN_RECORD_NAME,
+BEST_CHECKPOINT_NAME = "best.pt"
+RESERVED_LAST_CHECKPOINT_NAME = "last.pt"
+RUN_RECORD_NAME = "run.json"
+TRAIN_OUTPUT_NAMES = (
+    BEST_CHECKPOINT_NAME,
+    RESERVED_LAST_CHECKPOINT_NAME,
+    RUN_RECORD_NAME,
 )
 
 
@@ -64,28 +69,6 @@ class TrainingSummary:
         }
 
 
-def resolve_device(value: str | torch.device) -> torch.device:
-    """Resolve a supported training device or raise a configuration error."""
-
-    try:
-        device = torch.device(value)
-    except (RuntimeError, TypeError) as exc:
-        raise ConfigurationError(f"invalid device {value!r}: {exc}") from exc
-    if device.type not in ("cpu", "cuda"):
-        raise ConfigurationError(
-            f"unsupported device type {device.type!r}; use 'cpu' or 'cuda'"
-        )
-    if device.type == "cuda":
-        if not torch.cuda.is_available():
-            raise ConfigurationError("CUDA was requested but is not available")
-        if device.index is not None and device.index >= torch.cuda.device_count():
-            raise ConfigurationError(
-                f"CUDA device index {device.index} is unavailable "
-                f"({torch.cuda.device_count()} device(s) present)"
-            )
-    return device
-
-
 def _order_seed(seed: int) -> int:
     return (int(seed) ^ _ORDER_SEED_MASK) & (2**64 - 1)
 
@@ -104,7 +87,6 @@ def _require_same_capture(
         )
     for field in (
         "cache_id",
-        "encoding_version",
         "preparation_format_version",
         "preparation_version",
         "source_revision",
@@ -130,24 +112,16 @@ class Trainer:
         dependencies: DependencyVersions | None = None,
         dataset_provenance: Mapping[str, Any] | None = None,
     ) -> None:
-        if not isinstance(train_dataset, DecisionDataset):
-            raise ConfigurationError("train_dataset must be a DecisionDataset")
-        if not isinstance(validation_dataset, DecisionDataset):
-            raise ConfigurationError(
-                "validation_dataset must be a DecisionDataset"
-            )
+        train_identity = require_dataset_identity(
+            train_dataset, "train_dataset", dataset_error=ConfigurationError
+        )
+        validation_identity = require_dataset_identity(
+            validation_dataset,
+            "validation_dataset",
+            dataset_error=ConfigurationError,
+        )
         if not isinstance(training_config, TrainingConfig):
             raise ConfigurationError("training_config must be a TrainingConfig")
-        if train_dataset.identity is None:
-            raise DataError(
-                "train_dataset must expose a split identity; anonymous shards "
-                "cannot be used for training"
-            )
-        if validation_dataset.identity is None:
-            raise DataError(
-                "validation_dataset must expose a split identity; anonymous "
-                "shards cannot be used for training"
-            )
         if training_config.num_workers > 0 and (
             contains_memory_mapped_arrays(train_dataset)
             or contains_memory_mapped_arrays(validation_dataset)
@@ -161,9 +135,7 @@ class Trainer:
         ):
             raise ConfigurationError("dataset_provenance must be a mapping or None")
         self.model_config = model_config if model_config is not None else ModelConfig()
-        _require_same_capture(train_dataset.identity, validation_dataset.identity)
-        require_dataset_encoding(train_dataset.identity)
-        require_dataset_encoding(validation_dataset.identity)
+        _require_same_capture(train_identity, validation_identity)
         if train_dataset.eligible_count == 0:
             raise ConfigurationError(
                 "training split has no decisions with more than one candidate"
@@ -175,6 +147,8 @@ class Trainer:
             )
         self.train_dataset = train_dataset
         self.validation_dataset = validation_dataset
+        self.train_identity = train_identity
+        self.validation_identity = validation_identity
         self.training_config = training_config
         self.output_dir = Path(output_dir)
         self.device = resolve_device(device)
@@ -186,8 +160,8 @@ class Trainer:
         self.dataset_provenance = (
             None if dataset_provenance is None else dict(dataset_provenance)
         )
-        self.best_path = self.output_dir / _BEST_CHECKPOINT_NAME
-        self.run_record_path = self.output_dir / _RUN_RECORD_NAME
+        self.best_path = self.output_dir / BEST_CHECKPOINT_NAME
+        self.run_record_path = self.output_dir / RUN_RECORD_NAME
         self.model: CandidatePolicy | None = None
         self.optimizer: torch.optim.Optimizer | None = None
         self.order_generator = torch.Generator(device="cpu")
@@ -224,7 +198,7 @@ class Trainer:
     def _require_fresh_output(self) -> None:
         existing = [
             name
-            for name in _PROTECTED_OUTPUT_NAMES
+            for name in TRAIN_OUTPUT_NAMES
             if (self.output_dir / name).exists()
         ]
         if existing:
@@ -340,30 +314,29 @@ class Trainer:
         assert summary is not None
         return summary
 
-    def _write_run_record(self, summary: TrainingSummary) -> None:
-        train_identity = self.train_dataset.identity
-        validation_identity = self.validation_dataset.identity
-        assert train_identity is not None and validation_identity is not None
-        atomic_write_json(
-            self.run_record_path,
-            {
-                "source": self.source,
-                "package_version": PACKAGE_VERSION,
-                "model_config": self.model_config.to_dict(),
-                "training_config": self.training_config.to_dict(),
-                "dependencies": self.dependencies.to_dict(),
-                "device_type": self.device.type,
-                "seed": self.training_config.seed,
-                "dataset": {
-                    "train_dataset_identity": train_identity.to_dict(),
-                    "validation_dataset_identity": validation_identity.to_dict(),
-                    "provenance": self.dataset_provenance,
-                },
-                "best_checkpoint": self.best_path.name,
-                "run_record": self.run_record_path.name,
-                "summary": summary.to_dict(),
+    def run_payload(self, summary: TrainingSummary) -> dict[str, Any]:
+        """Build the reproducibility payload shared by ``run.json`` and the CLI."""
+
+        return {
+            "source": self.source,
+            "package_version": PACKAGE_VERSION,
+            "model_config": self.model_config.to_dict(),
+            "training_config": self.training_config.to_dict(),
+            "dependencies": self.dependencies.to_dict(),
+            "device_type": self.device.type,
+            "seed": self.training_config.seed,
+            "dataset": {
+                "train_dataset_identity": self.train_identity.to_dict(),
+                "validation_dataset_identity": self.validation_identity.to_dict(),
+                "provenance": self.dataset_provenance,
             },
-        )
+            "best_checkpoint": self.best_path.name,
+            "run_record": self.run_record_path.name,
+            "summary": summary.to_dict(),
+        }
+
+    def _write_run_record(self, summary: TrainingSummary) -> None:
+        atomic_write_json(self.run_record_path, self.run_payload(summary))
 
 
 def evaluate_checkpoint(
@@ -376,24 +349,14 @@ def evaluate_checkpoint(
 ) -> MetricsReport:
     """Evaluate a frozen policy checkpoint on a complete validation/test split."""
 
-    from .checkpoint import load_policy_checkpoint
-
-    if dataset.identity is None:
-        raise DataError(
-            "evaluation dataset must expose a split identity; anonymous shards "
-            "cannot be evaluated"
-        )
-    if dataset.identity.split not in ("validation", "test"):
+    identity = require_dataset_identity(dataset, "evaluation dataset")
+    if identity.split not in ("validation", "test"):
         raise ConfigurationError(
             "frozen evaluation requires a validation or test split, "
-            f"got {dataset.identity.split!r}"
+            f"got {identity.split!r}"
         )
     resolved = resolve_device(device)
     loaded = load_policy_checkpoint(checkpoint_path, device=resolved)
-    if loaded.encoding_version != dataset.identity.encoding_version:
-        raise ConfigurationError(
-            "checkpoint encoding version does not match the dataset"
-        )
     return evaluate_dataset(
         loaded.model,
         dataset,

@@ -6,7 +6,8 @@ import pytest
 import torch
 from torch import nn
 
-from mahjong_bc.config import ModelConfig
+import mahjong_bc.policy as policy_module
+from mahjong_bc.config import ACTIVATION_NAMES, ModelConfig
 from mahjong_bc.errors import ConfigurationError, DataError
 from mahjong_bc.policy import (
     CandidatePolicy,
@@ -14,6 +15,7 @@ from mahjong_bc.policy import (
     decision_nll,
     greedy_indices,
     masked_cross_entropy,
+    masked_log_probs,
     sample_indices,
 )
 
@@ -260,3 +262,67 @@ def test_invalid_shapes_targets_masks_and_dtypes_raise():
         )
     with pytest.raises(DataError):
         greedy_indices(torch.tensor([[float("nan"), 0.0]]), torch.ones(1, 2, dtype=torch.bool))
+
+
+def test_public_selection_entries_keep_their_own_validation():
+    logits = torch.zeros(2, 3)
+    mask = torch.ones(2, 3, dtype=torch.bool)
+    targets = torch.tensor([0, 1])
+    with pytest.raises(DataError):
+        masked_log_probs(logits.double(), mask)
+    with pytest.raises(DataError):
+        masked_log_probs(logits, torch.zeros(2, 3, dtype=torch.bool))
+    with pytest.raises(DataError):
+        decision_nll(
+            logits,
+            torch.tensor([[True, False, False], [False, True, True]]),
+            torch.tensor([1, 0]),
+            check_finite=False,
+        )
+    with pytest.raises(DataError):
+        masked_cross_entropy(
+            logits,
+            mask,
+            targets,
+            eligible=torch.tensor([1, 0]),
+            check_finite=False,
+        )
+    with pytest.raises(DataError):
+        sample_indices(
+            logits, mask, generator=torch.Generator(device="cuda")
+        )
+
+
+def test_masked_cross_entropy_gradient_ignores_padding():
+    logits = torch.tensor(
+        [[0.2, -0.4, 50.0], [1.5, 0.1, -2.0]], requires_grad=True
+    )
+    mask = torch.tensor([[True, True, False], [True, True, False]])
+    loss = masked_cross_entropy(logits, mask, torch.tensor([1, 0]))
+    loss.backward()
+    gradient = logits.grad
+    assert gradient is not None
+    assert torch.isfinite(gradient).all()
+    assert torch.count_nonzero(gradient[~mask]) == 0
+    assert torch.allclose(
+        gradient[mask].view(2, 2).sum(dim=1),
+        torch.zeros(2),
+        atol=1e-6,
+        rtol=0,
+    )
+
+
+def test_activation_names_match_factory_and_build_policies():
+    assert set(policy_module._ACTIVATION_FACTORIES) == set(ACTIVATION_NAMES)
+    expected = {"relu": nn.ReLU, "gelu": nn.GELU, "tanh": nn.Tanh}
+    for name in ACTIVATION_NAMES:
+        model = build_policy(
+            ModelConfig(
+                state_hidden=(4,), scorer_hidden=(4,), activation=name
+            ),
+            seed=1,
+        )
+        assert isinstance(model.state_encoder[-1], expected[name])
+        assert isinstance(model.candidate_scorer[-1], nn.Linear)
+    with pytest.raises(ConfigurationError):
+        ModelConfig(activation="unknown")

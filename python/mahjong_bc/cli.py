@@ -11,12 +11,15 @@ from typing import Any, Sequence
 
 from .cache import load_prepared_cache
 from .checkpoint import atomic_write_json, load_policy_checkpoint
-from .config import ModelConfig, TrainingConfig, collect_dependency_versions
+from .config import (
+    ACTIVATION_NAMES,
+    ModelConfig,
+    TrainingConfig,
+    collect_dependency_versions,
+)
 from .constants import PACKAGE_VERSION, SPLIT_NAMES
 from .errors import ConfigurationError, MahjongBCError
-from .train import Trainer, evaluate_checkpoint
-
-_TRAIN_OUTPUT_NAMES = ("best.pt", "last.pt", "run.json")
+from .train import TRAIN_OUTPUT_NAMES, Trainer, evaluate_checkpoint
 
 
 def _parse_widths(text: str) -> tuple[int, ...]:
@@ -59,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--state-hidden", type=_parse_widths, help="e.g. 256,128")
     train.add_argument("--scorer-hidden", type=_parse_widths, help="e.g. 128")
     train.add_argument(
-        "--activation", choices=("relu", "gelu", "tanh"), help="model activation"
+        "--activation", choices=ACTIVATION_NAMES, help="model activation"
     )
     train.add_argument(
         "--log-file", help="optional JSON summary destination"
@@ -114,22 +117,22 @@ def _new_run_config(args: argparse.Namespace) -> tuple[ModelConfig, TrainingConf
         raise MahjongBCError(
             f"a fresh training run requires {', '.join(missing)}"
         )
-    training = TrainingConfig(
-        seed=args.seed,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
-        weight_decay=0.0 if args.weight_decay is None else args.weight_decay,
-        beta1=0.9 if args.beta1 is None else args.beta1,
-        beta2=0.999 if args.beta2 is None else args.beta2,
-        num_workers=0 if args.num_workers is None else args.num_workers,
-    )
-    model = ModelConfig(
-        state_hidden=(256,) if args.state_hidden is None else args.state_hidden,
-        scorer_hidden=(128,) if args.scorer_hidden is None else args.scorer_hidden,
-        activation="relu" if args.activation is None else args.activation,
-    )
-    return model, training
+    training_values: dict[str, Any] = {
+        "seed": args.seed,
+        "epochs": args.epochs,
+        "batch_size": args.batch_size,
+        "learning_rate": args.learning_rate,
+    }
+    for name in ("weight_decay", "beta1", "beta2", "num_workers"):
+        value = getattr(args, name)
+        if value is not None:
+            training_values[name] = value
+    model_values: dict[str, Any] = {}
+    for name in ("state_hidden", "scorer_hidden", "activation"):
+        value = getattr(args, name)
+        if value is not None:
+            model_values[name] = value
+    return ModelConfig(**model_values), TrainingConfig(**training_values)
 
 
 def _cache_metadata(cache: Any) -> dict[str, Any]:
@@ -218,11 +221,11 @@ def _validate_train_paths(
             f"{cache_root}; report files may not modify cache inventory"
         )
     protected = [Path(output_dir)]
-    protected.extend(Path(output_dir) / name for name in _TRAIN_OUTPUT_NAMES)
+    protected.extend(Path(output_dir) / name for name in TRAIN_OUTPUT_NAMES)
     if any(_same_path(log_file, path) for path in protected):
         raise ConfigurationError(
             f"--log-file destination {log_file} aliases the training output "
-            "directory or one of best.pt, last.pt, run.json"
+            f"directory or one of {', '.join(TRAIN_OUTPUT_NAMES)}"
         )
     _require_report_destination_absent(log_file, "--log-file")
 
@@ -264,18 +267,21 @@ def _cmd_train(args: argparse.Namespace) -> int:
         dataset_provenance=dataset_metadata,
     )
     summary = trainer.train()
+    payload = trainer.run_payload(summary)
     result = {
         "command": "train",
-        "package_version": PACKAGE_VERSION,
-        "source": trainer.source,
+        "package_version": payload["package_version"],
+        "source": payload["source"],
         "dataset": dataset_metadata,
-        "model_config": model_config.to_dict(),
-        "training_config": training_config.to_dict(),
-        "dependencies": trainer.dependencies.to_dict(),
-        "device_type": trainer.device.type,
-        "train_dataset_identity": train_dataset.identity.to_dict(),
-        "validation_dataset_identity": validation_dataset.identity.to_dict(),
-        "summary": summary.to_dict(),
+        "model_config": payload["model_config"],
+        "training_config": payload["training_config"],
+        "dependencies": payload["dependencies"],
+        "device_type": payload["device_type"],
+        "train_dataset_identity": payload["dataset"]["train_dataset_identity"],
+        "validation_dataset_identity": payload["dataset"][
+            "validation_dataset_identity"
+        ],
+        "summary": payload["summary"],
         "checkpoints": {"best": str(trainer.best_path)},
         "run_record": str(trainer.run_record_path),
     }

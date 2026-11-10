@@ -11,10 +11,11 @@ import pytest
 
 import mahjong_bc
 from mahjong_bc.checkpoint import load_policy_checkpoint, save_checkpoint
-from mahjong_bc.cli import main
-from mahjong_bc.config import ModelConfig
+from mahjong_bc.cli import build_parser, main
+from mahjong_bc.config import ACTIVATION_NAMES, ModelConfig, TrainingConfig
 from mahjong_bc.constants import PACKAGE_VERSION, ROLE_BEST
 from mahjong_bc.policy import build_policy
+from mahjong_bc.train import TRAIN_OUTPUT_NAMES
 
 from .cache_fixture import synthetic_cache
 
@@ -268,8 +269,47 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
     assert logged["summary"]["completed_epochs"] == 2
     record = json.loads((output / "run.json").read_text(encoding="utf-8"))
     assert record["source"] == result["source"]
+    assert record["package_version"] == result["package_version"]
+    assert record["model_config"] == result["model_config"]
+    assert record["training_config"] == result["training_config"]
+    assert record["dependencies"] == result["dependencies"]
+    assert record["device_type"] == result["device_type"]
+    assert (
+        record["dataset"]["train_dataset_identity"]
+        == result["train_dataset_identity"]
+    )
+    assert (
+        record["dataset"]["validation_dataset_identity"]
+        == result["validation_dataset_identity"]
+    )
+    assert record["summary"] == result["summary"]
     assert record["dataset"]["provenance"]["cache_id"] == manifest["cache_id"]
     assert record["training_config"]["seed"] == 1
+    assert set(result) == {
+        "command",
+        "package_version",
+        "source",
+        "dataset",
+        "model_config",
+        "training_config",
+        "dependencies",
+        "device_type",
+        "train_dataset_identity",
+        "validation_dataset_identity",
+        "summary",
+        "checkpoints",
+        "run_record",
+    }
+    assert set(result["dataset"]) == {
+        "cache_id",
+        "encoding_version",
+        "preparation_format_version",
+        "preparation_version",
+        "source_revision",
+        "corpus_manifest_sha256",
+        "split_algorithm",
+        "provenance",
+    }
     loaded = load_policy_checkpoint(output / "best.pt")
     assert loaded.role == "best"
 
@@ -364,6 +404,63 @@ def test_cli_fresh_run_protects_existing_outputs_and_requires_config(
     assert not missing.exists()
 
 
+def test_cli_train_omitted_options_use_config_defaults(tmp_path, capsys):
+    fixture = synthetic_cache(tmp_path / "cache")
+    output = tmp_path / "defaults"
+    assert main(
+        [
+            "train",
+            "--dataset",
+            str(fixture.root),
+            "--output",
+            str(output),
+            "--seed",
+            "3",
+            "--epochs",
+            "1",
+            "--batch-size",
+            "2",
+            "--learning-rate",
+            "0.02",
+        ]
+    ) == 0
+    result = _parse(capsys)
+    expected_training = TrainingConfig(
+        seed=3, epochs=1, batch_size=2, learning_rate=0.02
+    )
+    assert result["model_config"] == ModelConfig().to_dict()
+    assert result["training_config"] == expected_training.to_dict()
+
+
+def test_cli_activation_choices_match_config_names():
+    parser = build_parser()
+    for name in ACTIVATION_NAMES:
+        args = parser.parse_args(
+            [
+                "train",
+                "--dataset",
+                "cache",
+                "--output",
+                "output",
+                "--activation",
+                name,
+            ]
+        )
+        assert args.activation == name
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "train",
+                "--dataset",
+                "cache",
+                "--output",
+                "output",
+                "--activation",
+                "unknown",
+            ]
+        )
+
+
 def test_cli_has_no_resume_option_and_rejects_training_split_evaluation(
     tmp_path, capsys
 ):
@@ -422,7 +519,7 @@ def test_cli_train_output_must_be_outside_cache_root(
 
 @pytest.mark.parametrize(
     "log_path",
-    ["best.pt", "last.pt", "run.json", None],
+    [*TRAIN_OUTPUT_NAMES, None],
 )
 def test_cli_train_log_file_cannot_alias_training_outputs(
     tmp_path, capsys, log_path
@@ -435,6 +532,7 @@ def test_cli_train_log_file_cannot_alias_training_outputs(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "aliases the training output" in captured.err
+    assert all(name in captured.err for name in TRAIN_OUTPUT_NAMES)
     assert not output.exists()
     assert _cache_snapshot(fixture.root) == before
 

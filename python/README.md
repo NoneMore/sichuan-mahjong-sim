@@ -78,6 +78,8 @@ follow manifest shard order without concatenating feature arrays; empty splits
 have no shards. A packed shard may have `identity=None`; a loaded split always
 has its complete `DatasetIdentity`. Custom `DecisionDataset` implementations
 must implement `is_memory_mapped` so worker restrictions also apply to wrappers.
+Training and evaluation entry points require a constructed `DatasetIdentity`;
+an anonymous shard or duck-typed identity is rejected.
 `close()` releases dataset-owned arrays and rejects further sample reads.
 Outstanding sample/array views keep their maps alive until released.
 

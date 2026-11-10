@@ -140,6 +140,20 @@ def test_loader_rejects_unknown_keys_missing_state_and_corruption(tmp_path):
     with pytest.raises(CheckpointError, match="metrics"):
         load_policy_checkpoint(path)
 
+    payload = build_payload(model, role=ROLE_POLICY, metrics=None)
+    payload["model_state"] = []
+    path = tmp_path / "bad-state.pt"
+    atomic_torch_save(payload, path)
+    with pytest.raises(CheckpointError, match="model_state must be a mapping"):
+        load_policy_checkpoint(path)
+
+    payload = build_payload(model, role=ROLE_POLICY, metrics=None)
+    payload["model_config"]["encoding_version"] = 2
+    path = tmp_path / "bad-encoding.pt"
+    atomic_torch_save(payload, path)
+    with pytest.raises(CheckpointError, match="invalid model configuration"):
+        load_policy_checkpoint(path)
+
     corrupt = tmp_path / "corrupt.pt"
     corrupt.write_bytes(b"not a torch checkpoint")
     with pytest.raises(CheckpointError, match="failed to read"):

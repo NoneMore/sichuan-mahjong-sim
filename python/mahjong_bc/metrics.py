@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import torch
@@ -12,11 +12,10 @@ from torch import Tensor
 from .constants import (
     ACTION_KIND_COUNT,
     ACTION_KIND_NAMES,
-    ENCODING_VERSION,
     STAGE_COUNT,
     STAGE_NAMES,
 )
-from .data import DecisionDataset, iter_batches
+from .data import DecisionDataset, iter_batches, require_dataset_identity
 from .errors import DataError
 from .policy import CandidatePolicy, decision_nll, greedy_indices
 
@@ -248,13 +247,7 @@ def evaluate_dataset(
     modified and its previous train/eval mode is restored.
     """
 
-    if dataset.identity is None:
-        raise DataError("evaluation dataset must expose a split identity")
-    if dataset.identity.encoding_version != ENCODING_VERSION:
-        raise DataError(
-            f"dataset encoding version {dataset.identity.encoding_version} "
-            f"does not match {ENCODING_VERSION}"
-        )
+    require_dataset_identity(dataset, "evaluation dataset")
     if batch_size < 1:
         raise DataError("batch_size must be positive")
     target_device = torch.device(device)
@@ -282,54 +275,3 @@ def evaluate_dataset(
     finally:
         model.train(was_training)
     return accumulator.report()
-
-
-def reports_equal(
-    left: MetricsReport,
-    right: MetricsReport,
-    *,
-    tolerance: float = 0.0,
-) -> bool:
-    """Compare complete-split metric reports, optionally with NLL tolerance."""
-
-    if left == right:
-        return True
-    if (
-        left.decisions != right.decisions
-        or left.eligible != right.eligible
-        or left.forced != right.forced
-        or len(left.stages) != len(right.stages)
-        or len(left.action_kinds) != len(right.action_kinds)
-    ):
-        return False
-
-    def close(first: float | None, second: float | None) -> bool:
-        if first is None or second is None:
-            return first is None and second is None
-        return abs(first - second) <= tolerance
-
-    if not close(left.nll, right.nll) or not close(left.top1, right.top1):
-        return False
-    for first_stage, second_stage in zip(left.stages, right.stages):
-        if (
-            first_stage.stage_id != second_stage.stage_id
-            or first_stage.support != second_stage.support
-            or first_stage.forced != second_stage.forced
-            or not close(first_stage.nll, second_stage.nll)
-            or not close(first_stage.top1, second_stage.top1)
-        ):
-            return False
-    for first_kind, second_kind in zip(left.action_kinds, right.action_kinds):
-        if (
-            first_kind.kind_id != second_kind.kind_id
-            or first_kind.support != second_kind.support
-            or not close(first_kind.top1, second_kind.top1)
-        ):
-            return False
-    return True
-
-
-def support_by_stage(report: MetricsReport) -> Sequence[int]:
-    """Convenience accessor for stage supports in encoding order."""
-
-    return tuple(metric.support for metric in report.stages)

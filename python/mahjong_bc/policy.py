@@ -226,6 +226,12 @@ def _validate_targets(logits: Tensor, mask: Tensor, targets: Tensor) -> None:
         raise DataError("target index does not reference a valid candidate")
 
 
+def _masked_log_softmax(logits: Tensor, mask: Tensor) -> Tensor:
+    """Log-softmax over already validated logits and mask."""
+
+    return torch.log_softmax(logits.masked_fill(~mask, float("-inf")), dim=-1)
+
+
 def masked_log_probs(
     logits: Tensor,
     mask: Tensor,
@@ -237,8 +243,7 @@ def masked_log_probs(
     _validate_logits_mask(logits, mask)
     if check_finite:
         _require_finite_valid(logits, mask)
-    masked = logits.masked_fill(~mask, float("-inf"))
-    return torch.log_softmax(masked, dim=-1)
+    return _masked_log_softmax(logits, mask)
 
 
 def decision_nll(
@@ -252,7 +257,9 @@ def decision_nll(
 
     _validate_logits_mask(logits, mask)
     _validate_targets(logits, mask, targets)
-    log_probs = masked_log_probs(logits, mask, check_finite=check_finite)
+    if check_finite:
+        _require_finite_valid(logits, mask)
+    log_probs = _masked_log_softmax(logits, mask)
     return -log_probs.gather(1, targets.unsqueeze(1).long()).squeeze(1)
 
 
