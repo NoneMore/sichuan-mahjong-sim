@@ -77,6 +77,20 @@ The [crate guide](../../crates/neural/README.md#dataset-preparation) covers CLI
 operations and the nine-array handoff; [module rustdoc](../../crates/neural/src/prepare/mod.rs)
 and [`compute_cache_id`](../../crates/neural/src/prepare/manifest.rs) define the protocol.
 
+## Python datasets and batches
+
+The separate [`mahjong-bc` package](../../python/README.md) consumes prepared
+caches without Rust bindings or the original corpus. `cache.py` validates the
+inventory, checksums, arrays and metadata against the captured corpus and
+collection provenance. Rust owns the opaque `cache_id`; Python preserves it
+in dataset identities.
+
+`data.py` exposes read-only packed/sharded datasets with forced and eligible
+decision queries. Collation preserves candidate order and local targets while
+padding to the batch maximum with a Boolean mask. Iteration follows supplied
+indices, includes partial batches and requires `num_workers=0` for mmap data.
+The package currently provides data loading, not model scoring or training.
+
 ## Verification
 
 [Feature fixtures](../../crates/neural/tests/encoding_features.rs) freeze v1

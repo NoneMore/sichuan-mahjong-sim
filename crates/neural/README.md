@@ -168,6 +168,8 @@ counts, and each array's relative path, dtype, shape, byte length, and checksum.
 `verify_dataset` checks this inventory, packed ranges/targets, metadata,
 derived counts, and episode seed membership, uniqueness, and coverage.
 Unsupported format/preparation/encoding versions or split algorithms are rejected.
+The separate [Python loader](../../python/README.md) consumes this protocol
+for sharded mmap datasets and padded PyTorch batches.
 
 `cache_id` is an opaque content identity covering the snapshot and array
 inventory, excluding paths and build/environment facts. The exact hash

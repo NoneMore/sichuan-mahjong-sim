@@ -142,6 +142,64 @@ Temporary corpus, caches, reports, probe, and builds were removed after
 verification. Permanent regression coverage is in
 [`prepare_contract.rs`](../crates/neural/tests/prepare_contract.rs).
 
+## Python dataset loader smoke validation
+
+The PR 2 loader, extracted from `298bbee` onto `176f08d`, was checked on
+Windows 10 x86-64 with Rust/Cargo 1.98.0, Python 3.12.10, NumPy 2.5.4 and
+PyTorch 2.14.1+cu126, using CPU operations. Collection and preparation used a
+clean Release build of `176f08d499f7186425eba27397dd30a5c56b040b`:
+
+```text
+git worktree add --detach ../bc-phase2-source 176f08d
+cargo build --release --locked --manifest-path ../bc-phase2-source/Cargo.toml \
+  -p sichuan-mahjong-neural --bins --target-dir ../bc-phase2-build
+../bc-phase2-build/release/bc-collect.exe collect \
+  --root ../bc-phase2-corpus --games 4 --seed-start 0 --shard-games 2 \
+  --cache-bytes 0 --report ../bc-phase2-collection.json
+../bc-phase2-build/release/bc-prepare.exe prepare \
+  --corpus ../bc-phase2-corpus --out ../bc-phase2-cache \
+  --shard-decisions 60 --shard-candidates 400
+../bc-phase2-build/release/bc-prepare.exe verify --cache ../bc-phase2-cache
+```
+
+From the loader checkout, with dependencies installed in the root `.venv/`:
+
+```text
+.venv/Scripts/python.exe -m pip wheel --no-deps --no-build-isolation ./python \
+  --wheel-dir ../bc-phase2-wheels
+.venv/Scripts/python.exe -m pip install --no-deps --force-reinstall \
+  ../bc-phase2-wheels/mahjong_bc-0.1.0-py3-none-any.whl
+.venv/Scripts/python.exe -m pytest python/tests -q
+.venv/Scripts/python.exe python/tools/verify_rust_handoff.py \
+  --corpus ../bc-phase2-corpus --cache ../bc-phase2-cache
+```
+
+The installed wheel imported from `.venv/Lib/site-packages`. All **88 Python
+tests** passed, including manifest rejection, Rust seed-split oracles and
+live-view safety after dataset close. Formatting, warning-denied Clippy and
+**386 Debug all-target Rust tests** passed. The probe matched every
+state/candidate float32 bit, candidate order, local target and episode/actor/
+stage/kind metadata against the captured JSONL records:
+
+| Split | Shards | Decisions | Candidates | Forced | Eligible |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| train | 3 | 179 | 1,047 | 42 | 137 |
+| validation | 1 | 53 | 327 | 14 | 39 |
+| test | 0 | 0 | 0 | 0 | 0 |
+
+Reversed-index batches of size 17 preserved alignment and padding/masks across
+shards, with final partial batches of 9 and 2; the empty test split yielded no
+batches. Rust verify and Python `cache-info` passed with the corpus moved away.
+
+- Captured manifest SHA-256:
+  `a8fc07e3a7e530bb01ed1ae67b94aebe1db4180e1a1c5433f4510b4a52487492`.
+- Opaque cache ID:
+  `7d1d327313a71ea8ad85413a10583facf63922bad50586f31c67196b5f945802`.
+
+Generated corpus, cache, reports, wheels and isolated builds were removed after
+verification. The loader tests and [`verify_rust_handoff.py`](../python/tools/verify_rust_handoff.py)
+preserve regression and reproduction coverage.
+
 ## Recovery and new measurements
 
 The studies ran primarily on Windows 10 / Ryzen 7 3700X with Rust 1.98.

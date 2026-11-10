@@ -96,6 +96,15 @@ NumPy cache; `verify` works without the original corpus. See the
 publication/retry behavior, buffer limits, provenance, and the array protocol.
 Contract and CLI tests run with the standard all-target checks.
 
+### Python dataset loader
+
+See the [package guide](../python/README.md) for `.venv` installation, cache
+loading and CLI commands. After installation, run `python -m pytest python/tests`
+from the repository root. The [Python CPU workflow](../.github/workflows/python-ci.yml)
+installs the package and runs loader, batching and CLI tests independently of Rust.
+The [handoff validation](validation.md#python-dataset-loader-smoke-validation)
+records a real Rust prepare → Python load/batch check.
+
 ### Policy A/B comparison example
 
 `examples/policy_ab.rs` runs a balanced 2A2B comparison. By default A is
