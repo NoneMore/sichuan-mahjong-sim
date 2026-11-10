@@ -72,6 +72,14 @@ Measurements are single-threaded and include game construction in the batch
 wall time. When comparing builds, record the command, seed, policy, and observed
 rates.
 
+### Python environment
+
+Use the Git-ignored `.venv/` at the repository root for Python tooling. Reuse it
+when present; otherwise create an isolated environment with `python -m venv .venv`.
+In Git Bash on Windows, activate it with `source .venv/Scripts/activate`, or invoke
+`.venv/Scripts/python.exe` directly. Install dependencies into this environment,
+not the global Python or user site-packages.
+
 ### Behavior-cloning collection
 
 The neural crate provides `bc-collect` for complete heuristic teacher

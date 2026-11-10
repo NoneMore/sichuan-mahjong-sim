@@ -1,4 +1,5 @@
 /target/
+/.venv/
 
 # Local agent configuration and runtime state are never published.
 /.pi/
