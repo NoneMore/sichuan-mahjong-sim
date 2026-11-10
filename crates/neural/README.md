@@ -122,14 +122,14 @@ cargo run --locked -p sichuan-mahjong-neural --bin bc-prepare -- verify --cache 
 ```
 
 Preparation prints `dataset.json`; verification prints an `ok:` summary and
-never opens the source corpus. Library entry points are
+never opens the source corpus. To keep a separate manifest copy, copy
+`<cache>/dataset.json` or redirect stdout. Library entry points are
 `prepare::{prepare, PrepareOptions, verify_dataset, read_dataset_manifest}`.
 
 `--out` must not exist. A staging directory is renamed into place only after
 all input shards and the manifest validate. Failures publish no cache;
 interrupted preparation reruns from scratch and never reuses abandoned
-`.bc-prepare-*.tmp` directories. `--report PATH` must be a new path outside the
-cache; report failures after publication leave the completed cache intact.
+`.bc-prepare-*.tmp` directories.
 
 `--shard-decisions` and `--shard-candidates` (defaults 20,000 and 500,000)
 bound output buffering. Each split keeps at most one active output buffer,

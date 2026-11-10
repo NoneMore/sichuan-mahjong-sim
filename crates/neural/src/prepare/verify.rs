@@ -7,8 +7,7 @@ use crate::collection::{seed_split, Seed, Split};
 
 use super::error::{invalid_array, invalid_manifest, PrepareError, Result};
 use super::manifest::{
-    compute_cache_id, expected_array, read_dataset_manifest, ArrayEntry, Counts, DatasetManifest,
-    ShardManifest,
+    expected_array, read_dataset_manifest, ArrayEntry, Counts, DatasetManifest, ShardManifest,
 };
 use super::npy::{self, NpyDtype};
 
@@ -23,13 +22,6 @@ use super::npy::{self, NpyDtype};
 pub fn verify_dataset(root: impl AsRef<Path>) -> Result<DatasetManifest> {
     let root = root.as_ref();
     let manifest = read_dataset_manifest(root)?;
-    let computed = compute_cache_id(&manifest);
-    if computed != manifest.cache_id {
-        return Err(PrepareError::CacheIdMismatch {
-            expected: manifest.cache_id.clone(),
-            found: computed,
-        });
-    }
     let seed_start = u128::from(manifest.corpus_manifest.seed_start.as_u64());
     let seed_end = seed_start + manifest.corpus_manifest.total_games();
     let mut seen_seeds = BTreeSet::new();

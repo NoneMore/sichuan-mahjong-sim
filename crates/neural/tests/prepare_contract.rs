@@ -504,6 +504,20 @@ fn preparation_preserves_features_targets_order_metadata_splits_forced_and_check
     fs::write(&dataset_path, &dataset_bytes).unwrap();
     verify_dataset(&cache).unwrap();
 
+    // Manifest loading owns cache identity validation, including for verify.
+    let mut changed: Value = serde_json::from_slice(&dataset_bytes).unwrap();
+    changed["cache_id"] = Value::from("0".repeat(64));
+    fs::write(&dataset_path, serde_json::to_vec_pretty(&changed).unwrap()).unwrap();
+    assert!(matches!(
+        read_dataset_manifest(&cache),
+        Err(sichuan_mahjong_neural::prepare::PrepareError::CacheIdMismatch { .. })
+    ));
+    assert!(matches!(
+        verify_dataset(&cache),
+        Err(sichuan_mahjong_neural::prepare::PrepareError::CacheIdMismatch { .. })
+    ));
+    fs::write(&dataset_path, &dataset_bytes).unwrap();
+
     // Any listed array byte change fails verification.
     let first_shard = &manifest.splits.train.shards[0];
     let state_path = array_path(&cache, first_shard, "states");
@@ -772,6 +786,9 @@ fn cli_prepare_and_verify_are_strict() {
     assert_eq!(json["format"], DATASET_FORMAT);
     assert_eq!(json["counts"]["episodes"], 2);
     assert!(json["cache_id"].as_str().unwrap().len() == 64);
+    let persisted: Value =
+        serde_json::from_slice(&fs::read(cache.join(DATASET_FILE)).unwrap()).unwrap();
+    assert_eq!(json, persisted);
 
     let verify_output = Command::new(EXE)
         .args(["verify", "--cache"])
@@ -803,6 +820,26 @@ fn cli_prepare_and_verify_are_strict() {
     assert!(help.contains("bc-prepare verify"));
     assert!(help.contains("20000"));
     assert!(help.contains("500000"));
+    assert!(!help.contains("--report"));
+
+    // The manifest file and stdout replace the redundant report output.
+    let rejected_cache = cache_root(temp.path(), "removed-report-option");
+    let report = temp.path().join("report.json");
+    let rejected = Command::new(EXE)
+        .args(["prepare", "--corpus"])
+        .arg(&corpus_root)
+        .args(["--out"])
+        .arg(&rejected_cache)
+        .args(["--report"])
+        .arg(&report)
+        .output()
+        .unwrap();
+    assert_eq!(rejected.status.code(), Some(2));
+    assert!(String::from_utf8(rejected.stderr)
+        .unwrap()
+        .contains("unknown option --report"));
+    assert!(!rejected_cache.exists());
+    assert!(!report.exists());
 
     let usage = Command::new(EXE)
         .args(["prepare", "--corpus"])
@@ -1002,121 +1039,32 @@ fn verify_rejects_duplicate_and_out_of_range_episode_seeds() {
 }
 
 #[test]
-fn cli_report_path_must_be_outside_cache_and_is_checked_before_prepare() {
+fn snapshot_defers_missing_shard_errors_until_consumption() {
     let temp = root();
     let corpus_root = temp.path().join("corpus");
     let source = revision(REV_A);
-    collect(&corpus_root, &source, 0, 1, 1, 10_000);
+    let outcome = collect(&corpus_root, &source, 0, 1, 1, 10_000);
+    let shard = shard_path(&corpus_root, outcome.manifest.shards[0].first_seed);
+    let saved = temp.path().join("saved-shard.jsonl");
+    fs::rename(&shard, &saved).unwrap();
 
-    let out = cache_root(temp.path(), "out-inside");
-    let report = out.join(DATASET_FILE);
-    let output = Command::new(EXE)
-        .args(["prepare", "--corpus"])
-        .arg(&corpus_root)
-        .args(["--out"])
-        .arg(&out)
-        .args(["--report"])
-        .arg(&report)
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(!out.exists());
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("outside the cache root"));
+    // Capturing fixes manifest membership, not the availability of its files.
+    let snapshot = CorpusSnapshot::capture(&corpus_root).unwrap();
+    let mut delivered = 0;
+    assert!(snapshot
+        .visit_shard(0, |_| {
+            delivered += 1;
+            Ok(())
+        })
+        .is_err());
+    assert_eq!(delivered, 0);
+    let cache = cache_root(temp.path(), "cache");
+    assert!(prepare(&snapshot, &cache, &options()).is_err());
+    assert!(!cache.exists());
+    assert_eq!(staging_count(temp.path()), 0);
 
-    let out = cache_root(temp.path(), "out-dotted");
-    let dotted = out
-        .join("..")
-        .join(out.file_name().unwrap())
-        .join("report.json");
-    let output = Command::new(EXE)
-        .args(["prepare", "--corpus"])
-        .arg(&corpus_root)
-        .args(["--out"])
-        .arg(&out)
-        .args(["--report"])
-        .arg(&dotted)
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(!out.exists());
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("outside the cache root"));
-
-    let existing = temp.path().join("report-exists.json");
-    fs::write(&existing, "{}").unwrap();
-    let out = cache_root(temp.path(), "out-existing-report");
-    let output = Command::new(EXE)
-        .args(["prepare", "--corpus"])
-        .arg(&corpus_root)
-        .args(["--out"])
-        .arg(&out)
-        .args(["--report"])
-        .arg(&existing)
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(!out.exists());
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("already exists"));
-
-    let directory = temp.path().join("report-directory");
-    fs::create_dir(&directory).unwrap();
-    let out = cache_root(temp.path(), "out-directory-report");
-    let output = Command::new(EXE)
-        .args(["prepare", "--corpus"])
-        .arg(&corpus_root)
-        .args(["--out"])
-        .arg(&out)
-        .args(["--report"])
-        .arg(&directory)
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(!out.exists());
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("is a directory"));
-
-    let missing = temp.path().join("missing").join("report.json");
-    let out = cache_root(temp.path(), "out-missing-parent");
-    let output = Command::new(EXE)
-        .args(["prepare", "--corpus"])
-        .arg(&corpus_root)
-        .args(["--out"])
-        .arg(&out)
-        .args(["--report"])
-        .arg(&missing)
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(!out.exists());
-    assert!(String::from_utf8(output.stderr)
-        .unwrap()
-        .contains("does not exist"));
-
-    let out = cache_root(temp.path(), "out-success");
-    let report = temp.path().join("report-success.json");
-    let output = Command::new(EXE)
-        .args(["prepare", "--corpus"])
-        .arg(&corpus_root)
-        .args(["--out"])
-        .arg(&out)
-        .args(["--report"])
-        .arg(&report)
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "{output:?}");
-    assert!(out.join(DATASET_FILE).is_file());
-    assert!(report.is_file());
-    let report_json: Value = serde_json::from_slice(&fs::read(&report).unwrap()).unwrap();
-    assert_eq!(report_json["format"], DATASET_FORMAT);
-    assert_eq!(
-        report_json["cache_id"],
-        read_dataset_manifest(&out).unwrap().cache_id
-    );
-    assert!(!out.join("report.json").exists());
+    fs::rename(&saved, &shard).unwrap();
+    let prepared = prepare(&snapshot, &cache, &options()).unwrap();
+    assert_eq!(prepared.corpus_manifest, outcome.manifest);
+    verify_dataset(&cache).unwrap();
 }

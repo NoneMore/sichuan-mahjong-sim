@@ -12,9 +12,7 @@
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::io::Write as _;
-use std::path::{Component, Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use sichuan_mahjong_neural::collection::{CollectionError, CorpusSnapshot};
@@ -31,9 +29,6 @@ prepare options:
   --shard-decisions N   Max buffered decisions per output shard (default 20000).
   --shard-candidates N  Max buffered packed candidates per output shard
                         (default 500000).
-  --report PATH         Write the prepared dataset manifest JSON to a new file.
-                        PATH must be outside the cache root, with relative \"..\"
-                        components resolved, and must not already exist.
   --out must not exist. Preparation publishes only after all captured shards
   and the complete manifest validate. A dirty preparation build is allowed and
   recorded; collection provenance comes only from the captured corpus manifest.
@@ -113,29 +108,10 @@ fn prepare_command(args: &[String]) -> Result<(), CliError> {
     let flags = parse_flags(args)?;
     ensure_keys(
         &flags,
-        &[
-            "corpus",
-            "out",
-            "shard-decisions",
-            "shard-candidates",
-            "report",
-        ],
+        &["corpus", "out", "shard-decisions", "shard-candidates"],
     )?;
     let corpus = PathBuf::from(required(&flags, "corpus")?);
     let out = PathBuf::from(required(&flags, "out")?);
-    let report = flags.get("report").map(PathBuf::from);
-    let out_normalized = normalized_absolute(&out)?;
-    if let Some(path) = &report {
-        let report_normalized = normalized_absolute(path)?;
-        if report_normalized.starts_with(&out_normalized) {
-            return Err(CliError::usage(format!(
-                "--report {} must be outside the cache root {}",
-                path.display(),
-                out.display()
-            )));
-        }
-        validate_report_target(&report_normalized)?;
-    }
     let options = PrepareOptions {
         max_decisions_per_shard: match flags.get("shard-decisions") {
             Some(value) => positive_usize(value, "shard-decisions")?,
@@ -150,17 +126,6 @@ fn prepare_command(args: &[String]) -> Result<(), CliError> {
     let manifest = prepare(&snapshot, &out, &options)?;
     let json = serde_json::to_string_pretty(&manifest)
         .map_err(|error| CliError::runtime(format!("could not encode dataset JSON: {error}")))?;
-    if let Some(path) = &report {
-        if let Err(error) = write_report(path, &json) {
-            return Err(CliError::runtime(format!(
-                "cache {} was published successfully (cache_id {}), but writing --report {} failed: {}",
-                out.display(),
-                manifest.cache_id,
-                path.display(),
-                error.message
-            )));
-        }
-    }
     println!("{json}");
     Ok(())
 }
@@ -179,82 +144,6 @@ fn verify(args: &[String]) -> Result<(), CliError> {
         cache.join(DATASET_FILE).display()
     );
     Ok(())
-}
-
-fn write_report(path: &Path, json: &str) -> Result<(), CliError> {
-    fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .and_then(|mut file| writeln!(file, "{json}"))
-        .map_err(|error| CliError::runtime(format!("could not write {}: {error}", path.display())))
-}
-
-fn normalized_absolute(path: &Path) -> Result<PathBuf, CliError> {
-    let absolute = if path.is_absolute() {
-        path.to_owned()
-    } else {
-        std::env::current_dir()
-            .map_err(|error| {
-                CliError::runtime(format!("could not resolve current directory: {error}"))
-            })?
-            .join(path)
-    };
-    let mut normalized = PathBuf::new();
-    for component in absolute.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                normalized.pop();
-            }
-            _ => normalized.push(component.as_os_str()),
-        }
-    }
-    Ok(normalized)
-}
-
-fn validate_report_target(path: &Path) -> Result<(), CliError> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) => {
-            if metadata.is_dir() {
-                return Err(CliError::usage(format!(
-                    "--report {} is a directory",
-                    path.display()
-                )));
-            }
-            return Err(CliError::usage(format!(
-                "--report {} already exists; refusing to overwrite",
-                path.display()
-            )));
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => {
-            return Err(CliError::runtime(format!(
-                "could not inspect --report {}: {error}",
-                path.display()
-            )))
-        }
-    }
-    let parent = path.parent().ok_or_else(|| {
-        CliError::usage(format!(
-            "--report {} has no parent directory",
-            path.display()
-        ))
-    })?;
-    match fs::metadata(parent) {
-        Ok(metadata) if metadata.is_dir() => Ok(()),
-        Ok(_) => Err(CliError::usage(format!(
-            "--report parent {} is not a directory",
-            parent.display()
-        ))),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Err(CliError::usage(
-            format!("--report parent {} does not exist", parent.display()),
-        )),
-        Err(error) => Err(CliError::runtime(format!(
-            "could not inspect --report parent {}: {error}",
-            parent.display()
-        ))),
-    }
 }
 
 fn parse_flags(args: &[String]) -> Result<BTreeMap<String, String>, CliError> {
@@ -336,14 +225,5 @@ mod tests {
         assert!(positive_usize("0", "n").is_err());
         assert!(parse_flags(&["positional".to_owned()]).is_err());
         assert!(ensure_keys(&flags, &["corpus"]).is_err());
-    }
-
-    #[test]
-    fn report_never_overwrites() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("report.json");
-        write_report(&path, "{}").unwrap();
-        assert!(write_report(&path, "{}").is_err());
-        assert_eq!(fs::read(&path).unwrap(), b"{}\n");
     }
 }

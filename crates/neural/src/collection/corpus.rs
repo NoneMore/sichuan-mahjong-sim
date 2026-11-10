@@ -269,24 +269,14 @@ impl CorpusSnapshot {
     /// Captures and validates the current committed manifest without taking
     /// the writer lock.
     ///
-    /// Listed shard files must currently exist. Their decision records are not
-    /// read until [`visit_shard`](Self::visit_shard).
+    /// Shard availability and contents are checked only when consumed by
+    /// [`visit_shard`](Self::visit_shard).
     pub fn capture(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref();
         let path = manifest_path(root);
         let bytes = read_manifest_bytes_at(&path, root)?;
         let manifest = parse_manifest(&path, &bytes)?;
         let manifest_sha256 = lower_hex(&Sha256::digest(&bytes));
-        for shard in &manifest.shards {
-            let shard_path = manifest.shard_path(root, shard);
-            let metadata = fs::metadata(&shard_path).map_err(|error| io(&shard_path, error))?;
-            if !metadata.is_file() {
-                return Err(CollectionError::InvalidManifest {
-                    path,
-                    message: format!("listed shard {} is not a file", shard_path.display()),
-                });
-            }
-        }
         Ok(Self {
             root: root.to_owned(),
             manifest,

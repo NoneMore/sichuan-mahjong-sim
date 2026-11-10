@@ -103,8 +103,8 @@ A PR 1 working tree based on `2b49dd4`, extracting Rust preparation from
 `298bbee`, passed acceptance on Windows x86-64 with Rust/Cargo 1.98.0,
 Python 3.12.10 and NumPy 2.5.4. Collection used a clean build at
 `2b49dd4e812bcc56e5844068b7594adbf8db6425`; preparation recorded its dirty
-build separately. Commands from the respective checkouts, with fresh outputs
-outside the source trees:
+build separately. Reproduce the dataset from the respective checkouts with
+fresh outputs outside the source trees:
 
 ```text
 cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
@@ -112,7 +112,7 @@ cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- colle
   --cache-bytes 0 --report ../phase1-collection.json
 cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- prepare \
   --corpus ../phase1-corpus --out ../phase1-cache \
-  --shard-decisions 60 --shard-candidates 400 --report ../phase1-preparation.json
+  --shard-decisions 60 --shard-candidates 400
 # Move phase1-corpus away before verifying the self-contained cache.
 cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- verify \
   --cache ../phase1-cache

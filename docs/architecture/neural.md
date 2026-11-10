@@ -88,6 +88,6 @@ failures. [Preparation contract tests](../../crates/neural/tests/prepare_contrac
 cover round-trip arrays, splits, forced decisions, snapshot append isolation,
 corpus-independent verification, bounded/oversized episode shards, failed-run
 retry, refused output, empty splits, version and checksum rejection,
-derived-count/seed tampering, and CLI/report strictness.
+derived-count/seed tampering, and CLI strictness.
 Sampled collision checks are evidence over their fixtures, not a proof
 for every reachable position.
