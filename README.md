@@ -40,10 +40,12 @@ define intended game semantics.
 ### Neural modules
 
 [`sichuan-mahjong-neural`](crates/neural/README.md) is a separate workspace
-crate for neural-policy representations and behavior-cloning teacher data
-collection. It depends on the simulator’s public decision interface; the core
-has no neural dependency. See its
-[architecture guide](docs/architecture/neural.md) for the boundary.
+crate for neural-policy representations, behavior-cloning teacher data
+collection, and offline NumPy cache preparation. It depends on the simulator’s
+public decision interface; the core has no neural dependency. See its
+[architecture guide](docs/architecture/neural.md) for the boundary and the
+[crate guide](crates/neural/README.md#dataset-preparation) for the prepared-cache
+commands and layout.
 
 ### Policies
 

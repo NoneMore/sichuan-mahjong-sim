@@ -49,8 +49,33 @@ Strict readers validate listed shards one episode at a time; only `read_corpus`
 materializes the entire corpus.
 
 The [crate guide](../../crates/neural/README.md) covers commands and reporting;
-module rustdoc defines the encoding and storage contracts. Network and training
-integrations belong on this side of the boundary, not in the simulator core.
+module rustdoc defines the encoding and storage contracts.
+
+## Cache preparation
+
+[`prepare`](../../crates/neural/src/prepare/) consumes a
+[`CorpusSnapshot`](../../crates/neural/src/collection/corpus.rs): exact committed
+manifest bytes and immutable shard membership, unchanged by later appends.
+Its fallible episode visitor reuses strict collection validation, keeping
+output provisional until the complete shard checksum validates.
+
+| Module | Responsibility |
+| --- | --- |
+| `writer.rs` | Snapshot streaming, bounded split buffers and staging publication |
+| `manifest.rs` | Versioned dataset manifest, layout, provenance and `cache_id` |
+| `npy.rs` | Strict little-endian C-order `.npy` writer/reader |
+| `verify.rs` | Corpus-independent cache validation |
+| `error.rs` | Preparation and verification error types |
+
+Each split retains one bounded output buffer (or one oversized episode), plus
+one input episode in the reader. Shards rotate at episode boundaries; a staging
+directory is published only after validation. `dataset.json` binds the array
+inventory, versions, checksums, counts, and separate collection/preparation
+provenance. `verify_dataset` validates the cache without its source corpus.
+
+The [crate guide](../../crates/neural/README.md#dataset-preparation) covers CLI
+operations and the nine-array handoff; [module rustdoc](../../crates/neural/src/prepare/mod.rs)
+and [`compute_cache_id`](../../crates/neural/src/prepare/manifest.rs) define the protocol.
 
 ## Verification
 
@@ -59,5 +84,10 @@ layout and ownership semantics. [Encoding contract tests](../../crates/neural/te
 check candidate legality, information isolation, replay and teacher projection.
 Collector tests cover strict round trips, source/split/seed boundaries,
 publication recovery, manifest-scale resume, subprocess locks, and record-sink
-failures. Sampled collision checks are evidence over their fixtures, not a proof
+failures. [Preparation contract tests](../../crates/neural/tests/prepare_contract.rs)
+cover round-trip arrays, splits, forced decisions, snapshot append isolation,
+corpus-independent verification, bounded/oversized episode shards, failed-run
+retry, refused output, empty splits, version and checksum rejection,
+derived-count/seed tampering, and CLI/report strictness.
+Sampled collision checks are evidence over their fixtures, not a proof
 for every reachable position.

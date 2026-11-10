@@ -241,7 +241,8 @@ pub(super) struct ShardExpectations<'a> {
 
 /// Reads and strictly validates one shard, delivering one complete episode at
 /// a time. The callback must not publish results until this function succeeds:
-/// the checksum and shard totals can only be verified at EOF.
+/// the checksum and shard totals can only be verified at EOF. A callback error
+/// stops reading immediately and is returned unchanged.
 ///
 /// `sha256` is `None` only for a just-written temporary shard that has not been
 /// committed yet; the computed checksum is still returned. Memory retained by
@@ -249,7 +250,7 @@ pub(super) struct ShardExpectations<'a> {
 pub(super) fn read_shard_file(
     path: &Path,
     expected: ShardExpectations<'_>,
-    mut on_episode: impl FnMut(Episode),
+    mut on_episode: impl FnMut(Episode) -> Result<()>,
 ) -> Result<ParsedShard> {
     let ShardExpectations {
         source_revision,
@@ -468,7 +469,7 @@ pub(super) fn read_shard_file(
                     split: episode.split,
                     decisions: episode.decisions,
                     result,
-                });
+                })?;
             }
         }
     }

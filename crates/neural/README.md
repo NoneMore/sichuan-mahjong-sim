@@ -1,8 +1,9 @@
 # Sichuan Mahjong Neural
 
-Versioned decision encoding and behavior-cloning teacher data collection. This
-workspace crate consumes `sichuan-mahjong-sim` through its public interfaces;
-serialization, hashing, and filesystem dependencies remain on the neural side.
+Versioned decision encoding, behavior-cloning teacher data collection, and
+offline NumPy cache preparation. This workspace crate consumes
+`sichuan-mahjong-sim` through its public interfaces; serialization, hashing, and
+filesystem dependencies remain on the neural side.
 
 ## Decision encoding
 
@@ -102,10 +103,81 @@ Pilot outcomes include throughput, rules/teacher/encoding/I/O/commit timings,
 storage bytes, build/environment facts, seed range, and cache settings. Retain
 the command and outcome when interpreting measurements.
 
-Library users enter through `collection::Corpus` and the `read_*`,
-`verify_corpus`, and `report_corpus` functions.
+Library users enter through `collection::Corpus`, `CorpusSnapshot`, and the
+`read_*`, `verify_corpus`, and `report_corpus` functions.
 `SourceRevision::from_compiled_source()` enforces build provenance; parsing a
 revision directly checks text form only and leaves source attestation to the caller.
+
+## Dataset preparation
+
+`bc-prepare` streams a fixed [`CorpusSnapshot`](src/collection/corpus.rs)
+through the collection validator into a self-contained, split-specific NumPy
+cache. Later appends do not change the captured membership.
+
+```text
+cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- prepare \
+  --corpus ../bc-data --out ../bc-cache
+
+cargo run --locked -p sichuan-mahjong-neural --bin bc-prepare -- verify --cache ../bc-cache
+```
+
+Preparation prints `dataset.json`; verification prints an `ok:` summary and
+never opens the source corpus. Library entry points are
+`prepare::{prepare, PrepareOptions, verify_dataset, read_dataset_manifest}`.
+
+`--out` must not exist. A staging directory is renamed into place only after
+all input shards and the manifest validate. Failures publish no cache;
+interrupted preparation reruns from scratch and never reuses abandoned
+`.bc-prepare-*.tmp` directories. `--report PATH` must be a new path outside the
+cache; report failures after publication leave the completed cache intact.
+
+`--shard-decisions` and `--shard-candidates` (defaults 20,000 and 500,000)
+bound output buffering. Each split keeps at most one active output buffer,
+which may exceed the limits only when one episode is larger; one additional
+input episode is parsed at a time. Shards rotate only at episode boundaries,
+and the corpus decision limit bounds an episode.
+
+```text
+<cache>/dataset.json
+<cache>/arrays/<split>/<00000>.<array>.npy
+```
+
+Each output shard contains nine arrays. All are little-endian C order, and
+`D` / `C` denote decisions and packed candidates in that shard:
+
+| Array | Dtype | Shape | Content |
+| --- | --- | --- | --- |
+| `states` | float32 | `[D, 1013]` | v1 pre-action state features |
+| `candidate_features` | float32 | `[C, 39]` | packed canonical candidate features |
+| `candidate_offsets` | int64 | `[D + 1]` | local candidate ranges |
+| `targets` | int64 | `[D]` | teacher target within its local range |
+| `episode_seeds` | uint64 | `[D]` | episode seed per decision |
+| `decision_indices` | uint64 | `[D]` | decision index within the episode |
+| `actor_seats` | uint8 | `[D]` | acting seat (`0..3`) |
+| `stages` | uint8 | `[D]` | v1 stage ID (`0..4`) |
+| `target_kinds` | uint8 | `[D]` | chosen action kind ID (`0..8`) |
+
+`candidate_offsets` starts at zero, ends at `C`, and gives every decision a
+nonempty range. `targets` are local indices, not packed candidate positions.
+`source_revision` plus an episode seed identifies an episode. Forced decisions
+are retained; eligible decisions have more than one candidate. Dataset, split,
+and shard counts record both. Empty splits have zero counts and `shards: []`.
+
+`dataset.json` records the captured manifest and SHA-256, versions, layout,
+counts, and each array's relative path, dtype, shape, byte length, and checksum.
+`verify_dataset` checks this inventory, packed ranges/targets, metadata,
+derived counts, and episode seed membership, uniqueness, and coverage.
+Unsupported format/preparation/encoding versions or split algorithms are rejected.
+
+`cache_id` is an opaque content identity covering the snapshot and array
+inventory, excluding paths and build/environment facts. The exact hash
+preimage is defined by [`compute_cache_id`](src/prepare/manifest.rs); the
+[preparation module rustdoc](src/prepare/mod.rs) defines the protocol.
+
+`provenance.collection` contains facts from the corpus manifest;
+`provenance.preparation` records this run's build, environment, and buffer
+limits. Preparation permits dirty or unavailable builds without claiming clean
+collection attestation.
 
 ## Development
 

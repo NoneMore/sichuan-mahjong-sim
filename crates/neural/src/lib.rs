@@ -14,8 +14,13 @@
 //! strict versioned JSONL corpora, seeded splits, source provenance, exclusive
 //! writer locking, atomic publication/recovery, and zero-support reporting. It
 //! uses only public core and encoding interfaces.
+//!
+//! [`prepare`] turns one captured committed corpus snapshot into bounded,
+//! split-specific NumPy caches with strict streaming validation, checksums,
+//! separated collection/preparation provenance, and atomic publication.
 
 #![forbid(unsafe_code)]
 
 pub mod collection;
 pub mod encoding;
+pub mod prepare;

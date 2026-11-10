@@ -125,7 +125,7 @@ impl ActiveShard {
                 decision_limit: manifest.decision_limit,
                 sha256: None,
             },
-            |_| {},
+            |_| Ok(()),
         )?;
         let written_sha256 = lower_hex(&hasher.finalize());
         if parsed.sha256 != written_sha256 {
