@@ -14,7 +14,7 @@ intended Mahjong semantics.
 | Rule foundation | [Foundation](foundation.md) | Tile/hand model and pure shape, legality and settlement facts |
 | Authoritative game | [Game](game.md) | Sole mutable hand state, decisions, progression and payments |
 | Policies | [Policy](policy.md) | Player-visible action selection, exact analysis and optional memoization |
-| Neural adapters | [Neural](neural.md) | Rust encoding, teacher collection and NumPy preparation; Python mmap datasets and padded batches |
+| Neural adapters | [Neural](neural.md) | Rust encoding, teacher collection and NumPy preparation; Python datasets, offline training and policy checkpoints |
 | Execution | [Runner and CLI](execution.md) | Drives games and policies without interpreting rules |
 | Research tools | [Experiments](experiments.md) | Repeatable policy comparisons, timings and evidence records |
 
@@ -52,8 +52,10 @@ Game/Policy loop to record accepted decisions without changing Runner. Offline
 preparation captures that corpus and publishes a self-contained NumPy cache;
 neither collection nor preparation changes Runner or the simulator core. The
 Python loader consumes only the prepared-cache protocol, validates its arrays,
-and builds padded batches without Rust bindings. The subsystem guides explain
-ownership and cache constraints in detail.
+and builds padded batches without Rust bindings. Python trains a shared candidate
+scorer, selects checkpoints using validation NLL and evaluates frozen policies
+on held-out data. The subsystem guides explain ownership and cache constraints
+in detail.
 
 These are current **implemented outcomes**, not prospective designs.
 Use [development](../development.md) for setup, CI and operational commands,

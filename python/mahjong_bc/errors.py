@@ -15,3 +15,7 @@ class DataError(MahjongBCError, ValueError):
 
 class CacheContractError(MahjongBCError):
     """The prepared NumPy cache cannot be consumed under this contract."""
+
+
+class CheckpointError(MahjongBCError):
+    """A policy checkpoint is corrupt, incompatible, or not supported here."""

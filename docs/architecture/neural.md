@@ -91,7 +91,25 @@ provenance checks remain in `cache.py`.
 decision queries. Collation preserves candidate order and local targets while
 padding to the batch maximum with a Boolean mask. Iteration follows supplied
 indices, includes partial batches and requires `num_workers=0` for mmap data.
-The package currently provides data loading, not model scoring or training.
+
+## Offline policy training
+
+`policy.py` shares one state embedding across a decision's candidates and
+scores state/candidate pairs with a pointwise nonlinear MLP. Candidate position
+is not an input; padding is masked before loss and action selection.
+
+`train.py` owns fresh-run CPU or single-local-GPU optimization. Seeded epochs
+visit every eligible decision once with equal-weight cross-entropy, including
+partial batches. `metrics.py` aggregates complete splits by decision, stage and
+teacher action kind, reporting forced counts separately. Validation NLL alone
+selects `best.pt`; frozen test evaluation is separate from selection.
+
+`checkpoint.py` validates versioned policy payloads and publishes atomically.
+Run records bind configuration, dataset identities/provenance, dependencies and
+metrics to the imported Python source hash; `_source.py` adds Git metadata only
+for in-repository source installs. Recovery and `last.pt` are not implemented.
+See the [package guide](../../python/README.md#training-metrics-and-checkpoints)
+for policy, checkpoint-format and CLI contracts.
 
 ## Verification
 

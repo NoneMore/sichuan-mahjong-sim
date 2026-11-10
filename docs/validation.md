@@ -210,6 +210,81 @@ handoff checks, including corpus-independent loading. Its snapshot SHA-256 was
 `991af57a3eae6dda9311ff38b4e08e451072f33a9faae1e5ca687b5d822afc12`.
 Follow-up artifacts were also removed after verification.
 
+## Offline BC training smoke validation
+
+PR 3 was extracted from `298bbee` onto `bce00a7` and checked on Windows 10
+x86-64 with Rust/Cargo 1.98.0, Python 3.12.10, NumPy 2.5.4 and PyTorch
+2.14.1+cu126. Editable and wheel installs each passed **178 Python tests**,
+covering policy invariance, complete epochs, metric denominators,
+validation-only selection, frozen evaluation, version rejection, atomic-write
+failures and CLI output protection.
+
+A clean Release Rust build at `bce00a729fb2a0a90ae90d8a479fc7b7899ec2e4`
+produced all three splits. After [package installation](../python/README.md#setup-and-commands),
+reproduce from the repository root with fresh sibling paths:
+
+```text
+git worktree add --detach ../bc-phase3-source bce00a7
+cargo build --release --locked --manifest-path ../bc-phase3-source/Cargo.toml \
+  -p sichuan-mahjong-neural --bins --target-dir ../bc-phase3-build
+../bc-phase3-build/release/bc-collect.exe collect \
+  --root ../bc-phase3-corpus --games 13 --seed-start 0 --shard-games 4 \
+  --cache-bytes 0 --report ../bc-phase3-collection.json
+../bc-phase3-build/release/bc-prepare.exe prepare \
+  --corpus ../bc-phase3-corpus --out ../bc-phase3-cache \
+  --shard-decisions 60 --shard-candidates 400
+../bc-phase3-build/release/bc-prepare.exe verify --cache ../bc-phase3-cache
+.venv/Scripts/python.exe python/tools/verify_rust_handoff.py \
+  --corpus ../bc-phase3-corpus --cache ../bc-phase3-cache
+.venv/Scripts/python.exe -m mahjong_bc train \
+  --dataset ../bc-phase3-cache --output ../bc-phase3-run --seed 7 \
+  --epochs 3 --batch-size 17 --learning-rate 0.01 \
+  --state-hidden 16 --scorer-hidden 16 --device cpu \
+  --log-file ../bc-phase3-train-summary.json
+.venv/Scripts/python.exe -m mahjong_bc inspect \
+  --checkpoint ../bc-phase3-run/best.pt
+.venv/Scripts/python.exe -m mahjong_bc evaluate \
+  --dataset ../bc-phase3-cache --checkpoint ../bc-phase3-run/best.pt \
+  --split test --batch-size 17 --device cpu --output ../bc-phase3-test.json
+```
+
+On POSIX, use `.venv/bin/python` and omit executable `.exe` suffixes. The
+handoff probe matched all state/candidate bits, local targets, candidate order
+and episode/actor/stage/kind metadata. The cache contained **13 episodes,
+773 decisions, 4,604 candidates and 195 forced decisions**:
+
+| Split | Decisions | Eligible | Forced |
+| --- | ---: | ---: | ---: |
+| train | 610 | 460 | 150 |
+| validation | 125 | 91 | 34 |
+| test | 38 | 27 | 11 |
+
+Three CPU epochs consumed **84 steps / 1,380 samples**, each visiting 460
+eligible decisions in 28 batches (the last containing one decision). Validation
+NLL was **1.736139 / 1.666645 / 1.637471**, selecting zero-based epoch 2.
+Reloaded test evaluation reported NLL **1.431383**, top-1 **12/27**, and 11
+forced decisions. Repeated evaluation and a rejected `--output` alias left the
+checkpoint bytes unchanged. Module and installed console-script inspection
+both passed. These smoke results do not establish playing strength.
+
+- Captured manifest SHA-256:
+  `99f1a21d0e41e527ea94794bc8d7669f3134cefb2c1192e00be5e1ae0298457a`.
+- Cache ID:
+  `11c4ce7353ad4872165d2cb695cb4d7194f5574201cc042079c302a4f3ff4b67`.
+- Imported training-source SHA-256:
+  `80e4b311a4032ddfc9feac03ef7762c28ded3bfbc76274a80efe4cabe187d8f7`.
+  The wheel recorded null Git revision/dirty fields, not the outer repository.
+
+The CUDA fixture smoke (`test_cuda_training_and_checkpoint_reload_smoke`) passed
+on an **NVIDIA GeForce RTX 2070 / CUDA build 12.6**, covering training, CUDA
+checkpoint reload and frozen evaluation. GPU CI and real-corpus GPU training
+were not exercised. Rust formatting, warning-denied workspace Clippy and Debug
+all-target tests passed. Recovery remains PR 4 work.
+
+Temporary worktrees/builds, corpus/cache, wheel, checkpoints and reports were
+removed; tests and the handoff probe preserve regression coverage. The project
+`.venv` was restored to an editable install.
+
 ## Recovery and new measurements
 
 The studies ran primarily on Windows 10 / Ryzen 7 3700X with Rust 1.98.
