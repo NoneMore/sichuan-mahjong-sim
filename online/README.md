@@ -13,14 +13,13 @@ Use the repository `.venv` with Python 3.12 or later. Install the repository-loc
 offline package first; it supplies PyTorch and the shared checkpoint contract:
 
 ```text
-python -m pip install -e "./python[dev]"
 python -m pip install -e "./online[evaluation]"
 python -m mahjong_eval version
 
-mahjong-eval compare --checkpoint ../bc-run/best.pt --split validation \
-  --seeds 2,10 --out ../online-eval-validation \
-  --batch-size 12 --concurrent-games 12 --device cpu
 ```
+
+Run a [complete online comparison](../docs/guides/bc-pipeline.md#5-compare-frozen-policies-in-the-online-environment)
+with the BC pipeline's example, or use the options below.
 
 Formal comparison requires the offline-selected `best` checkpoint, not `last`
 or a plain policy export. Only the checkpoint is needed, not its training data

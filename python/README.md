@@ -10,18 +10,14 @@ For the complete collection-to-evaluation sequence, see the [BC pipeline guide](
 
 ## Setup and commands
 
-Use Python 3.10+ and the repository's Git-ignored `.venv/` (see the
-[development guide](../docs/development.md#python-environment)). From the
-repository root, create the environment if absent and activate it:
+Use Python 3.10+ in the repository's `.venv/` (see
+[Python environment setup](../docs/development.md#python-environment)).
+From the repository root:
 
 ```text
-python -m venv .venv
-# Windows Git Bash: source .venv/Scripts/activate
-# POSIX:            source .venv/bin/activate
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -e "./python[dev]"
 python -m mahjong_bc version
-python -m mahjong_bc cache-info --dataset ../bc-cache
 ```
 
 For CUDA, install the matching build from the [PyTorch selector](https://pytorch.org/get-started/locally/)
