@@ -5,15 +5,15 @@ use super::*;
 #[test]
 fn arguments_require_all_inputs_and_a_distinct_seed_list() {
     let parsed = parse_args(owned_args(&[
-            "--seeds",
-            "1,2",
-            "--policy-seed",
-            "3",
-            "--decision-limit",
-            "50",
-            "--out",
-            "run",
-        ]))
+        "--seeds",
+        "1,2",
+        "--policy-seed",
+        "3",
+        "--decision-limit",
+        "50",
+        "--out",
+        "run",
+    ]))
     .unwrap();
     match parsed {
         Command::Run(options) => {
@@ -45,8 +45,7 @@ fn arguments_require_all_inputs_and_a_distinct_seed_list() {
 
 #[test]
 fn help_short_circuits_later_arguments() {
-    let parsed = parse_args(owned_args(&["-h", "--seeds", "not-a-seed"]))
-    .unwrap();
+    let parsed = parse_args(owned_args(&["-h", "--seeds", "not-a-seed"])).unwrap();
     assert!(matches!(parsed, Command::Help));
 }
 

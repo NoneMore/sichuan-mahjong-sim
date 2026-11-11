@@ -4,6 +4,10 @@
 //! module only owns path resolution, deliberate regeneration, and wire-value
 //! formatting so the checked-in golden files cannot drift between copies.
 
+// Each fixture test is a separate integration crate, so helpers used by the
+// other fixture tests are dead code in this binary.
+#![allow(dead_code)]
+
 use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;

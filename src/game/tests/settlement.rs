@@ -71,10 +71,7 @@ fn response_collection_is_isolated_and_clone_preserves_the_future() {
 
     submit_specific(&mut game, seat(1), Action::Hu);
     assert_eq!(game.scores, [0, 0, 0, 0]);
-    assert_eq!(
-        game.next_decision().expect("seat 2 response").seat,
-        seat(2)
-    );
+    assert_eq!(game.next_decision().expect("seat 2 response").seat, seat(2));
     let next_before = pending_actions(&mut game);
     let mut fork = game.clone();
 

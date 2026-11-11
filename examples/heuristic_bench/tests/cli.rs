@@ -148,7 +148,12 @@ fn lifecycle_and_budget_parse_with_explicit_defaults() {
 #[test]
 fn warm_requires_a_warmup_and_cold_allows_none() {
     let error = parse_args(owned_args(&[
-        "--games", "1", "--seed", "0", "--lifecycle", "warm",
+        "--games",
+        "1",
+        "--seed",
+        "0",
+        "--lifecycle",
+        "warm",
     ]))
     .unwrap_err();
     assert!(error.contains("requires --warmup"), "{error}");
