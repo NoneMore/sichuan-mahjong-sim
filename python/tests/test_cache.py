@@ -213,6 +213,22 @@ def test_inventory_is_complete_and_portable(tmp_path, shared_cache):
         dataset.close()
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("format", "wrong-format"),
+        ("preparation_format_version", 2),
+        ("preparation_version", 2),
+        ("encoding_version", 2),
+        ("split_algorithm", "other-split"),
+        ("cache_id", ""),
+        ("source_revision", ""),
+        ("corpus_manifest_sha256", "not-a-hash"),
+        ("layout", []),
+        ("provenance", "no"),
+        ("corpus_manifest", []),
+    ],
+)
 def test_rejects_unsupported_or_malformed_manifest_fields(fresh_cache, field, value):
     root = fresh_cache.root
     manifest = read_manifest(root)

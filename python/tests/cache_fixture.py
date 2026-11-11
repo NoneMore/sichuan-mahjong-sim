@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -391,7 +391,20 @@ def copy_cache(fixture: CacheFixture, root: Path | str) -> CacheFixture:
 
     target = Path(root)
     shutil.copytree(fixture.root, target)
-    return replace(fixture, root=target)
+    # The on-disk copy is independent, but the source fixture's manifest and
+    # container fields are still mutable Python objects. Rebuild them from the
+    # copy / new containers so a corruption case cannot leak into the session
+    # baseline through in-memory mutation. ``sources`` values are immutable
+    # expected datasets shared for assertions only: never close or rewrite them.
+    return CacheFixture(
+        root=target,
+        seed_start=fixture.seed_start,
+        games=fixture.games,
+        seeds=dict(fixture.seeds),
+        sources=dict(fixture.sources),
+        counts=dict(fixture.counts),
+        manifest=read_manifest(target),
+    )
 
 
 def episode_seeds(dataset) -> tuple[int, ...]:

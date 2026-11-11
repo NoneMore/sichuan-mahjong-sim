@@ -5,7 +5,13 @@ import numpy as np
 from mahjong_bc.cache import load_prepared_cache
 from mahjong_bc.constants import SPLIT_NAMES
 
-from .cache_fixture import episode_seeds, read_manifest, write_cache
+from .cache_fixture import (
+    copy_cache,
+    episode_seeds,
+    read_manifest,
+    write_cache,
+    write_manifest,
+)
 
 
 def test_default_interval_uses_actual_frozen_split_coverage(shared_cache):
@@ -34,6 +40,25 @@ def test_default_interval_uses_actual_frozen_split_coverage(shared_cache):
         assert manifest["splits"][split]["counts"] == fixture.counts[split].to_dict()
         assert source.identity.split == split
         assert len(source) == fixture.counts[split].decisions
+
+
+def test_private_copy_has_independent_manifest_and_container_fields(
+    tmp_path, shared_cache
+):
+    copied = copy_cache(shared_cache, tmp_path / "private")
+
+    assert copied.manifest == shared_cache.manifest
+    assert copied.manifest is not shared_cache.manifest
+    assert copied.seeds is not shared_cache.seeds
+    assert copied.sources is not shared_cache.sources
+    assert copied.counts is not shared_cache.counts
+    copied.manifest["cache_id"] = "mutated-copy"
+    copied.seeds["train"] = ()
+    write_manifest(copied.root, copied.manifest)
+
+    assert read_manifest(copied.root)["cache_id"] == "mutated-copy"
+    assert shared_cache.manifest["cache_id"] == "synthetic-cache-id"
+    assert shared_cache.seeds["train"] == (148, 149, 151, 152, 155)
 
 
 def test_large_fixed_interval_generates_without_composition_search(tmp_path):

@@ -563,9 +563,10 @@ def test_cli_resume_reads_last_checkpoint_once(
 
 
 def test_cli_resume_output_and_log_paths_remain_protected(
-    completed_resume_run, tmp_path, capsys
+    completed_resume_run, fresh_cache, tmp_path, capsys
 ):
-    fixture, old = completed_resume_run
+    _, old = completed_resume_run
+    fixture = fresh_cache
     before = _cache_snapshot(fixture.root)
 
     inside = fixture.root / "resumed"
@@ -601,7 +602,7 @@ def test_cli_resume_output_and_log_paths_remain_protected(
     assert not output.exists()
 
 
-def test_cli_rejects_training_split_evaluation(shared_cache):
+def test_cli_rejects_training_split_evaluation(shared_cache, tmp_path):
     fixture = shared_cache
     with pytest.raises(SystemExit):
         main(
@@ -619,9 +620,9 @@ def test_cli_rejects_training_split_evaluation(shared_cache):
 
 @pytest.mark.parametrize("relative", [None, "nested-output"])
 def test_cli_train_output_must_be_outside_cache_root(
-    shared_cache, tmp_path, capsys, relative
+    fresh_cache, tmp_path, capsys, relative
 ):
-    fixture = shared_cache
+    fixture = fresh_cache
     output = fixture.root if relative is None else fixture.root / relative
     before = _cache_snapshot(fixture.root)
     assert main(_train_args(fixture.root, output)) == 2
@@ -654,9 +655,9 @@ def test_cli_train_log_file_cannot_alias_training_outputs(
 
 
 def test_cli_train_log_file_must_be_outside_cache_and_not_preexisting(
-    shared_cache, tmp_path, capsys
+    fresh_cache, tmp_path, capsys
 ):
-    fixture = shared_cache
+    fixture = fresh_cache
     before = _cache_snapshot(fixture.root)
     output = tmp_path / "train"
 
@@ -679,9 +680,9 @@ def test_cli_train_log_file_must_be_outside_cache_and_not_preexisting(
 
 
 def test_cli_evaluate_report_paths_cannot_alias_checkpoint_or_touch_cache(
-    shared_cache, tmp_path, capsys
+    fresh_cache, tmp_path, capsys
 ):
-    fixture = shared_cache
+    fixture = fresh_cache
     checkpoint = _write_checkpoint(tmp_path / "policy.pt")
     checkpoint_before = checkpoint.read_bytes()
     cache_before = _cache_snapshot(fixture.root)
@@ -730,8 +731,8 @@ def test_cli_evaluate_report_outputs_do_not_overwrite_existing_files(
     assert _cache_snapshot(fixture.root) == cache_before
 
 
-def test_cli_cache_info_output_cannot_be_inside_cache_root(shared_cache, capsys):
-    fixture = shared_cache
+def test_cli_cache_info_output_cannot_be_inside_cache_root(fresh_cache, capsys):
+    fixture = fresh_cache
     manifest = fixture.root / "dataset.json"
     before_bytes = manifest.read_bytes()
     before = _cache_snapshot(fixture.root)

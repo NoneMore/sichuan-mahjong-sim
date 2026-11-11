@@ -4,7 +4,7 @@ import dataclasses
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pytest
@@ -394,153 +394,219 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
     )
 
 
-def test_resume_rejects_model_configuration_identity_dependency_and_role(
-    tmp_path,
-):
-    base_train, base_validation = learnable_pair(
+@dataclasses.dataclass(frozen=True)
+class _ResumeBaseline:
+    train: PackedDecisionDataset
+    validation: PackedDecisionDataset
+    model_config: ModelConfig
+    training_config: TrainingConfig
+    last: Path
+    best: Path
+    policy: Path
+
+
+@dataclasses.dataclass(frozen=True)
+class _ResumeRejectionCase:
+    name: str
+    expected: type[Exception]
+    match: str | None = None
+    source: str = "last"
+    loaded: bool = False
+    model_config: Callable[[ModelConfig], ModelConfig] | None = None
+    training_config: Callable[[TrainingConfig], TrainingConfig] | None = None
+    train_dataset: (
+        Callable[[PackedDecisionDataset], PackedDecisionDataset] | None
+    ) = None
+    validation_dataset: (
+        Callable[[PackedDecisionDataset], PackedDecisionDataset] | None
+    ) = None
+    dependencies: DependencyVersions | None = None
+    preparation_version: int | None = None
+
+
+def _other_capture_train(_: PackedDecisionDataset) -> PackedDecisionDataset:
+    return make_dataset(
+        split="train", counts=[2] * 8, seed=61, cache_id="other-dataset"
+    )
+
+
+def _other_capture_validation(_: PackedDecisionDataset) -> PackedDecisionDataset:
+    return make_dataset(
+        split="validation", counts=[2] * 4, seed=62, cache_id="other-dataset"
+    )
+
+
+def _other_validation_only(_: PackedDecisionDataset) -> PackedDecisionDataset:
+    return make_dataset(
+        split="validation", counts=[2, 2, 2], seed=63, cache_id="strict-resume"
+    )
+
+
+_RESUME_REJECTION_CASES = [
+    _ResumeRejectionCase(
+        "model-config",
+        ResumeError,
+        model_config=lambda _: ModelConfig(
+            state_hidden=(32,), scorer_hidden=(16,)
+        ),
+    ),
+    _ResumeRejectionCase(
+        "learning-rate",
+        ResumeError,
+        training_config=lambda config: dataclasses.replace(
+            config, learning_rate=0.02
+        ),
+    ),
+    _ResumeRejectionCase(
+        "epoch-count",
+        ResumeError,
+        training_config=lambda config: dataclasses.replace(config, epochs=2),
+    ),
+    _ResumeRejectionCase(
+        "dataset-capture",
+        ResumeError,
+        train_dataset=_other_capture_train,
+        validation_dataset=_other_capture_validation,
+    ),
+    _ResumeRejectionCase(
+        "validation-identity",
+        ResumeError,
+        validation_dataset=_other_validation_only,
+    ),
+    _ResumeRejectionCase(
+        "dependencies",
+        ResumeError,
+        dependencies=DependencyVersions(
+            python="different",
+            torch="different",
+            numpy="different",
+            cuda_build=None,
+        ),
+    ),
+    _ResumeRejectionCase(
+        "preparation-version",
+        ResumeError,
+        preparation_version=2,
+    ),
+    _ResumeRejectionCase("best-path", ResumeError, match="last", source="best"),
+    _ResumeRejectionCase(
+        "best-loaded", ResumeError, match="last", source="best", loaded=True
+    ),
+    _ResumeRejectionCase(
+        "policy-path",
+        CheckpointError,
+        match="recoverable training state",
+        source="policy",
+    ),
+    _ResumeRejectionCase(
+        "policy-loaded", ResumeError, match="last", source="policy", loaded=True
+    ),
+]
+
+
+@pytest.fixture(scope="module")
+def resume_baseline(tmp_path_factory) -> _ResumeBaseline:
+    """Train the shared rejection baseline once, without sharing a live Trainer."""
+
+    root = tmp_path_factory.mktemp("resume-rejections")
+    train, validation = learnable_pair(
         train_decisions=8, validation_decisions=4, cache_id="strict-resume"
     )
     config = _config(epochs=1, batch_size=2, learning_rate=0.01)
     model = _small_model()
-    base = Trainer(
-        train_dataset=base_train,
-        validation_dataset=base_validation,
+    trainer = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
         model_config=model,
         training_config=config,
-        output_dir=tmp_path / "base",
+        output_dir=root / "base",
         device="cpu",
     )
-    base.train()
-    last = tmp_path / "base" / "last.pt"
-    best = tmp_path / "base" / "best.pt"
-
-    cases = [
-        Trainer(
-            train_dataset=base_train,
-            validation_dataset=base_validation,
-            model_config=ModelConfig(
-                state_hidden=(32,), scorer_hidden=(16,)
-            ),
-            training_config=config,
-            output_dir=tmp_path / "model-mismatch",
-            device="cpu",
-        ),
-        Trainer(
-            train_dataset=base_train,
-            validation_dataset=base_validation,
-            model_config=model,
-            training_config=dataclasses.replace(
-                config, learning_rate=0.02
-            ),
-            output_dir=tmp_path / "config-mismatch",
-            device="cpu",
-        ),
-        Trainer(
-            train_dataset=base_train,
-            validation_dataset=base_validation,
-            model_config=model,
-            training_config=dataclasses.replace(config, epochs=2),
-            output_dir=tmp_path / "epoch-mismatch",
-            device="cpu",
-        ),
-    ]
-    other_train = make_dataset(
-        split="train", counts=[2] * 8, seed=61, cache_id="other-dataset"
-    )
-    other_validation = make_dataset(
-        split="validation", counts=[2] * 4, seed=62, cache_id="other-dataset"
-    )
-    cases.append(
-        Trainer(
-            train_dataset=other_train,
-            validation_dataset=other_validation,
-            model_config=model,
-            training_config=config,
-            output_dir=tmp_path / "data-mismatch",
-            device="cpu",
-        )
-    )
-    other_validation_only = make_dataset(
-        split="validation", counts=[2, 2, 2], seed=63, cache_id="strict-resume"
-    )
-    cases.append(
-        Trainer(
-            train_dataset=base_train,
-            validation_dataset=other_validation_only,
-            model_config=model,
-            training_config=config,
-            output_dir=tmp_path / "validation-mismatch",
-            device="cpu",
-        )
-    )
-    cases.append(
-        Trainer(
-            train_dataset=base_train,
-            validation_dataset=base_validation,
-            model_config=model,
-            training_config=config,
-            output_dir=tmp_path / "dependency-mismatch",
-            device="cpu",
-            dependencies=DependencyVersions(
-                python="different",
-                torch="different",
-                numpy="different",
-                cuda_build=None,
-            ),
-        )
-    )
-    prep_train = _reidentify(
-        base_train,
-        dataclasses.replace(base_train.identity, preparation_version=2),
-    )
-    prep_validation = _reidentify(
-        base_validation,
-        dataclasses.replace(base_validation.identity, preparation_version=2),
-    )
-    cases.append(
-        Trainer(
-            train_dataset=prep_train,
-            validation_dataset=prep_validation,
-            model_config=model,
-            training_config=config,
-            output_dir=tmp_path / "preparation-mismatch",
-            device="cpu",
-        )
-    )
-    for trainer in cases:
-        with pytest.raises(ResumeError):
-            trainer.train(resume_from=last)
-        assert not trainer.output_dir.exists()
-
-    best_role = Trainer(
-        train_dataset=base_train,
-        validation_dataset=base_validation,
+    trainer.train()
+    policy = root / "policy.pt"
+    save_checkpoint(policy, build_policy(model, seed=1), role=ROLE_POLICY)
+    return _ResumeBaseline(
+        train=train,
+        validation=validation,
         model_config=model,
         training_config=config,
-        output_dir=tmp_path / "best-role",
-        device="cpu",
+        last=root / "base" / "last.pt",
+        best=root / "base" / "best.pt",
+        policy=policy,
     )
-    for source in (best, load_checkpoint(best)):
-        with pytest.raises(ResumeError, match="last"):
-            best_role.train(resume_from=source)
-        assert not best_role.output_dir.exists()
 
-    policy = tmp_path / "policy.pt"
-    save_checkpoint(
-        policy, build_policy(model, seed=1), role=ROLE_POLICY
+
+def _resume_case_trainer(
+    baseline: _ResumeBaseline,
+    output_dir: Path,
+    case: _ResumeRejectionCase,
+) -> Trainer:
+    train = (
+        baseline.train
+        if case.train_dataset is None
+        else case.train_dataset(baseline.train)
     )
-    with pytest.raises(CheckpointError, match="recoverable training state"):
-        Trainer(
-            train_dataset=base_train,
-            validation_dataset=base_validation,
-            model_config=model,
-            training_config=config,
-            output_dir=tmp_path / "policy-role",
-            device="cpu",
-        ).train(resume_from=policy)
-    with pytest.raises(ResumeError, match="last"):
-        best_role.train(resume_from=load_policy_checkpoint(policy))
-    assert not best_role.output_dir.exists()
+    validation = (
+        baseline.validation
+        if case.validation_dataset is None
+        else case.validation_dataset(baseline.validation)
+    )
+    if case.preparation_version is not None:
+        train = _reidentify(
+            train,
+            dataclasses.replace(
+                train.identity, preparation_version=case.preparation_version
+            ),
+        )
+        validation = _reidentify(
+            validation,
+            dataclasses.replace(
+                validation.identity,
+                preparation_version=case.preparation_version,
+            ),
+        )
+    return Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=(
+            baseline.model_config
+            if case.model_config is None
+            else case.model_config(baseline.model_config)
+        ),
+        training_config=(
+            baseline.training_config
+            if case.training_config is None
+            else case.training_config(baseline.training_config)
+        ),
+        output_dir=output_dir,
+        device="cpu",
+        dependencies=case.dependencies,
+    )
+
+
+def _resume_case_source(
+    baseline: _ResumeBaseline, case: _ResumeRejectionCase
+):
+    path = getattr(baseline, case.source)
+    if not case.loaded:
+        return path
+    if case.source == "policy":
+        return load_policy_checkpoint(path)
+    return load_checkpoint(path)
+
+
+@pytest.mark.parametrize(
+    "case", _RESUME_REJECTION_CASES, ids=lambda case: case.name
+)
+def test_resume_rejects_named_incompatibility(
+    resume_baseline, tmp_path, case
+):
+    trainer = _resume_case_trainer(
+        resume_baseline, tmp_path / case.name, case
+    )
+    with pytest.raises(case.expected, match=case.match):
+        trainer.train(resume_from=_resume_case_source(resume_baseline, case))
+    assert not trainer.output_dir.exists()
 
 
 def test_resume_rejects_checkpoint_device_type_mismatch(tmp_path):

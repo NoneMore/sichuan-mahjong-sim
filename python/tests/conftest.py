@@ -24,4 +24,4 @@ def shared_cache(tmp_path_factory):
 def fresh_cache(tmp_path, shared_cache):
     from .cache_fixture import copy_cache
 
-    return copy_cache(shared_cache, tmp_path)
+    return copy_cache(shared_cache, tmp_path / "cache")
