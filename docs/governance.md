@@ -29,9 +29,12 @@ with genuinely agent-specific guidance kept separate.
 
 ## Where to look
 
+Use the [documentation map](README.md) for reader-oriented navigation.
+
 | Question | Start here |
 | --- | --- |
-| Setup, build, run, test | [README quick start](../README.md#running), then [development guide](development.md) for checks, CLI and CI |
+| Setup, build, run, test | [README quick start](../README.md#running), then [development guide](development.md) for CLI and CI |
+| Library API, policies, and checkpoint continuation | [Library guide](library.md) |
 | Fixed game semantics | [Baseline rules](baseline-rules.md) |
 | Current implementation | Relevant core `src/`, `crates/`, tests, and executable evidence |
 | Component boundaries | [Current architecture](architecture/overview.md), then code |

@@ -4,7 +4,7 @@
 [`Game`](game.md), but it does not implement Mahjong rules. The
 [`main.rs` CLI](../../src/main.rs) is a thin batch-execution entry point.
 For commands and public API examples, use [development](../development.md)
-and the [README](../../README.md).
+and the [library guide](../library.md).
 
 ## Component composition
 
@@ -25,7 +25,7 @@ One drive loop supports new games, existing checkpoints and batches.
 A batch creates fresh Games while retaining the Runner's policies, including
 their RNG positions. The decision limit applies independently to each drive;
 already accepted actions remain after a limit error. The
-[README Runner API](../../README.md#runner-api) documents the public methods
+[library Runner API](../library.md#runner-api) documents the public methods
 and limit controls.
 
 ## Reports and measurement
@@ -33,7 +33,7 @@ and limit controls.
 Single-game runs keep a replay trace; batches aggregate results without
 retaining one trace per game. Timing separates policy choice from Game work,
 but neither alone accounts for the full batch duration. Report fields and
-usage examples are in the [README](../../README.md#runner-api).
+usage examples are in the [library guide](../library.md#runner-api).
 
 The main CLI exposes first-legal and random legal self-play. Heuristic
 comparisons and benchmarks live in the distinct
@@ -46,7 +46,7 @@ Game and policy RNG state are separately seeded and owned. Cloning Game
 alone cannot restore a stateful policy run: the policies' RNG positions must
 also be preserved. Stateless policies need no separate logical checkpoint;
 heuristic caches are disposable. See the
-[README checkpoint examples](../../README.md#continuation-and-checkpoints).
+[library checkpoint examples](../library.md#continuation-and-checkpoints).
 
 ## Verification boundary
 

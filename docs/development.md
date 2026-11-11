@@ -1,27 +1,18 @@
 # Development and verification
 
-This is the practical guide to running the current simulator, comparing
-policies, and verifying changes. Start with the [README](../README.md) for
-the project and public API, the [architecture map](architecture/overview.md)
-for code navigation, and [governance](governance.md) for project conventions.
+Use this guide for the current CLI, development checks, neural tooling, and
+policy experiments. For the project overview see the [README](../README.md);
+for `Runner`, policy cache, and checkpoint APIs see the [Rust library guide](library.md).
+The [documentation map](README.md) links to task-specific module guides.
 
-## Continuous integration
+## On this page
 
-[The Rust CI workflow](../.github/workflows/rust-ci.yml) runs on pull requests
-targeting `main`, pushes to `main`, and manual dispatch. Its stable job checks
-formatting, warning-denied Clippy, Debug and Release tests across all workspace
-targets (including executable examples and their tests), doctests, and
-warning-denied rustdoc. The separate MSRV job checks all workspace targets with
-Rust 1.75.0, the minimum declared by both packages. Builds and tests use the
-committed root lockfile.
-
-Run the relevant checks locally before submitting changes. A successful CI run
-verifies that specific source revision; it does not establish a performance
-guarantee or replay equivalence to earlier revisions. For behavior-changing
-work, use focused invariant and deterministic-replay tests; for performance
-claims, use paired, controlled measurements outside shared CI runners.
-[Historical validation results](validation.md) document earlier environments
-and observations rather than the present test count.
+| Task | Section |
+| --- | --- |
+| Build the workspace or run self-play | [Running](#running) |
+| Collect or train neural-policy data | [Neural and Python workflows](#neural-and-python-workflows) |
+| Compare policies or measure heuristic throughput | [Policy experiments](#policy-experiments) |
+| Run repository verification checks | [Continuous integration](#continuous-integration) |
 
 ## Running
 
@@ -71,6 +62,8 @@ per seat, win counts, total decisions, separate rules/policy timings, and
 Measurements are single-threaded and include game construction in the batch
 wall time. When comparing builds, record the command, seed, policy, and observed
 rates.
+
+## Neural and Python workflows
 
 ### Python environment
 
@@ -134,6 +127,8 @@ independent of the binding.
 
 [Online validation](validation.md#python-online-comparison-smoke-validation)
 records checkpoint inputs, device/batching costs and verification limits.
+
+## Policy experiments
 
 ### Policy A/B comparison example
 
@@ -283,3 +278,20 @@ Historical benchmark observations, artifact-retention limitations, and the
 cache-adoption results belong in [validation](validation.md) and the
 [historical validation record](validation.md#exact-analysis-changes-and-profiling).
 
+## Continuous integration
+
+[The Rust CI workflow](../.github/workflows/rust-ci.yml) runs on pull requests
+targeting `main`, pushes to `main`, and manual dispatch. Its stable job checks
+formatting, warning-denied Clippy, Debug and Release tests across all workspace
+targets (including executable examples and their tests), doctests, and
+warning-denied rustdoc. The separate MSRV job checks all workspace targets with
+Rust 1.75.0, the minimum declared by both packages. Builds and tests use the
+committed root lockfile.
+
+Run the relevant checks locally before submitting changes. A successful CI run
+verifies that specific source revision; it does not establish a performance
+guarantee or replay equivalence to earlier revisions. For behavior-changing
+work, use focused invariant and deterministic-replay tests; for performance
+claims, use paired, controlled measurements outside shared CI runners.
+[Historical validation results](validation.md) document earlier environments
+and observations rather than the present test count.
