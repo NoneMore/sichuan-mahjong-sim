@@ -3,7 +3,9 @@
 This module is independent of the on-disk cache manifest. A cache loader can
 back :class:`PackedDecisionDataset` with memory-mapped ``.npy`` arrays; training
 and metrics consume only the packed array contract documented by the
-offline-training specification.
+offline-training specification. :func:`pad_decision_inputs` exposes the
+label-free padding/mask primitive shared with online inference, while
+:func:`collate_decisions` adds supervised targets and metadata.
 """
 
 from __future__ import annotations
@@ -69,6 +71,39 @@ class DecisionSample:
     @property
     def eligible(self) -> bool:
         return self.candidate_count > FORCED_CANDIDATE_COUNT
+
+
+@dataclass(frozen=True)
+class DecisionInputs:
+    """Label-free padded model inputs for a batch of decisions.
+
+    ``states`` is ``[B, STATE_WIDTH]``; ``candidates`` is
+    ``[B, max_candidates, CANDIDATE_WIDTH]`` with zero-valued padding; ``mask``
+    is a boolean ``[B, max_candidates]`` valid-candidate mask. Candidate order
+    is preserved. Supervision fields belong to :class:`DecisionBatch`.
+    """
+
+    states: Tensor
+    candidates: Tensor
+    mask: Tensor
+
+    @property
+    def batch_size(self) -> int:
+        return int(self.states.shape[0])
+
+    @property
+    def candidate_count(self) -> int:
+        return int(self.candidates.shape[1])
+
+    def to(
+        self, device: torch.device | str, *, non_blocking: bool = False
+    ) -> DecisionInputs:
+        target = torch.device(device)
+        return DecisionInputs(
+            states=self.states.to(target, non_blocking=non_blocking),
+            candidates=self.candidates.to(target, non_blocking=non_blocking),
+            mask=self.mask.to(target, non_blocking=non_blocking),
+        )
 
 
 @dataclass(frozen=True)
@@ -464,18 +499,82 @@ class ShardedDecisionDataset(DecisionDataset):
         return self.shards[shard_index][position - int(self._starts[shard_index])]
 
 
-def collate_decisions(samples: Sequence[DecisionSample]) -> DecisionBatch:
-    """Pad samples to the batch maximum and derive an explicit valid mask."""
+def _as_float32_tensor(value: object) -> Tensor:
+    """Convert an array-like value to float32 for padded batch construction."""
 
-    if not samples:
-        raise DataError("cannot collate an empty batch")
-    batch_size = len(samples)
-    max_candidates = max(sample.candidate_count for sample in samples)
+    if isinstance(value, Tensor):
+        return value.detach().to(dtype=torch.float32)
+    return torch.tensor(value, dtype=torch.float32)
+
+
+def _decision_arrays(decision: object) -> tuple[Tensor, Tensor]:
+    """Validate one decision's label-free arrays and return float32 tensors."""
+
+    try:
+        state = decision.state  # type: ignore[attr-defined]
+        candidate_features = decision.candidate_features  # type: ignore[attr-defined]
+    except AttributeError as exc:
+        raise DataError(
+            "a decision must expose state and candidate_features arrays"
+        ) from exc
+    try:
+        state_tensor = _as_float32_tensor(state)
+        candidates_tensor = _as_float32_tensor(candidate_features)
+    except (TypeError, ValueError, RuntimeError) as exc:
+        raise DataError(f"decision features must be numeric arrays: {exc}") from exc
+    if state_tensor.shape != (STATE_WIDTH,):
+        raise DataError(
+            f"decision state must have shape ({STATE_WIDTH},), "
+            f"got {tuple(state_tensor.shape)}"
+        )
+    if (
+        candidates_tensor.ndim != 2
+        or candidates_tensor.shape[1] != CANDIDATE_WIDTH
+    ):
+        raise DataError(
+            f"decision candidates must have shape [N, {CANDIDATE_WIDTH}], "
+            f"got {tuple(candidates_tensor.shape)}"
+        )
+    if candidates_tensor.shape[0] < 1:
+        raise DataError("a decision must have at least one candidate")
+    return state_tensor, candidates_tensor
+
+
+def pad_decision_inputs(decisions: Sequence[object]) -> DecisionInputs:
+    """Pad decision states and candidate features to the batch maximum.
+
+    Accepts any objects exposing ``state`` and ``candidate_features`` arrays,
+    such as an offline :class:`DecisionSample` or an online binding snapshot.
+    Only model inputs are produced: valid scores and canonical candidate order
+    are preserved, padding rows are zero, and no labels or metadata are
+    required.
+    """
+
+    if not decisions:
+        raise DataError("cannot pad an empty batch of decisions")
+    arrays = [_decision_arrays(decision) for decision in decisions]
+    batch_size = len(arrays)
+    max_candidates = max(int(features.shape[0]) for _, features in arrays)
     states = torch.empty((batch_size, STATE_WIDTH), dtype=torch.float32)
     candidates = torch.zeros(
         (batch_size, max_candidates, CANDIDATE_WIDTH), dtype=torch.float32
     )
     mask = torch.zeros((batch_size, max_candidates), dtype=torch.bool)
+    for row, (state, features) in enumerate(arrays):
+        count = int(features.shape[0])
+        states[row].copy_(state)
+        candidates[row, :count].copy_(features)
+        mask[row, :count] = True
+    return DecisionInputs(states=states, candidates=candidates, mask=mask)
+
+
+def collate_decisions(samples: Sequence[DecisionSample]) -> DecisionBatch:
+    """Pad samples to the batch maximum and add supervision and metadata."""
+
+    if not samples:
+        raise DataError("cannot collate an empty batch")
+    batch_size = len(samples)
+    inputs = pad_decision_inputs(samples)
     targets = torch.empty(batch_size, dtype=torch.int64)
     stages = torch.empty(batch_size, dtype=torch.int64)
     target_kinds = torch.empty(batch_size, dtype=torch.int64)
@@ -487,29 +586,9 @@ def collate_decisions(samples: Sequence[DecisionSample]) -> DecisionBatch:
     have_episode_ids = True
 
     for row, sample in enumerate(samples):
-        if sample.state.shape != (STATE_WIDTH,):
-            raise DataError(
-                f"sample state must have shape ({STATE_WIDTH},), "
-                f"got {sample.state.shape}"
-            )
-        if (
-            sample.candidate_features.ndim != 2
-            or sample.candidate_features.shape[1] != CANDIDATE_WIDTH
-        ):
-            raise DataError(
-                f"sample candidates must have shape [N, {CANDIDATE_WIDTH}], "
-                f"got {sample.candidate_features.shape}"
-            )
-        count = sample.candidate_count
-        if count < 1:
-            raise DataError("a decision must have at least one candidate")
+        count = int(inputs.mask[row].sum())
         if sample.target < 0 or sample.target >= count:
             raise DataError("sample target is outside its candidate range")
-        states[row].copy_(torch.tensor(sample.state, dtype=torch.float32))
-        candidates[row, :count].copy_(
-            torch.tensor(sample.candidate_features, dtype=torch.float32)
-        )
-        mask[row, :count] = True
         targets[row] = sample.target
         stages[row] = sample.stage
         target_kinds[row] = sample.target_kind
@@ -526,11 +605,11 @@ def collate_decisions(samples: Sequence[DecisionSample]) -> DecisionBatch:
         else:
             episode_ids.append(sample.episode_id)
 
-    eligible = mask.sum(dim=1) > FORCED_CANDIDATE_COUNT
+    eligible = inputs.mask.sum(dim=1) > FORCED_CANDIDATE_COUNT
     return DecisionBatch(
-        states=states,
-        candidates=candidates,
-        mask=mask,
+        states=inputs.states,
+        candidates=inputs.candidates,
+        mask=inputs.mask,
         targets=targets,
         stages=stages,
         target_kinds=target_kinds,

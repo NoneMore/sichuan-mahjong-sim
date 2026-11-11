@@ -15,6 +15,7 @@ from mahjong_bc.data import (
     contains_memory_mapped_arrays,
     derive_target_kind,
     iter_batches,
+    pad_decision_inputs,
 )
 from mahjong_bc.errors import DataError
 
@@ -105,6 +106,106 @@ def _memory_mapped_dataset(tmp_path) -> PackedDecisionDataset:
         episode_ids=mapped["episode_ids"],
         target_kinds=mapped["target_kinds"],
     )
+
+
+def test_pad_decision_inputs_matches_offline_collation_inputs():
+    dataset = make_dataset(split="train", counts=[1, 3, 2], seed=61)
+    samples = [dataset[index] for index in range(3)]
+    inputs = pad_decision_inputs(samples)
+    batch = collate_decisions(samples)
+    assert torch.equal(inputs.states, batch.states)
+    assert torch.equal(inputs.candidates, batch.candidates)
+    assert torch.equal(inputs.mask, batch.mask)
+    assert inputs.batch_size == batch.batch_size
+    assert inputs.candidate_count == 3
+    assert inputs.states.dtype == torch.float32
+    assert inputs.candidates.dtype == torch.float32
+    assert inputs.mask.dtype == torch.bool
+    assert inputs.mask.tolist() == [
+        [True, False, False],
+        [True, True, True],
+        [True, True, False],
+    ]
+    moved = inputs.to("cpu")
+    assert torch.equal(moved.states, inputs.states)
+    assert torch.equal(moved.candidates, inputs.candidates)
+    assert torch.equal(moved.mask, inputs.mask)
+
+
+def test_pad_decision_inputs_accepts_label_free_arrays():
+    rng = np.random.default_rng(62)
+    decisions = [
+        SimpleNamespace(
+            state=rng.normal(size=(STATE_WIDTH,)),
+            candidate_features=rng.normal(size=(count, CANDIDATE_WIDTH)),
+        )
+        for count in (2, 1, 3)
+    ]
+    inputs = pad_decision_inputs(decisions)
+    assert inputs.states.dtype == torch.float32
+    assert inputs.states.shape == (3, STATE_WIDTH)
+    assert inputs.candidates.shape == (3, 3, CANDIDATE_WIDTH)
+    assert inputs.mask.tolist() == [
+        [True, True, False],
+        [True, False, False],
+        [True, True, True],
+    ]
+    for row, decision in enumerate(decisions):
+        assert torch.equal(
+            inputs.states[row],
+            torch.tensor(decision.state, dtype=torch.float32),
+        )
+        count = decision.candidate_features.shape[0]
+        assert torch.equal(
+            inputs.candidates[row, :count],
+            torch.tensor(decision.candidate_features, dtype=torch.float32),
+        )
+        assert torch.count_nonzero(inputs.candidates[row, count:]) == 0
+
+
+def test_pad_decision_inputs_rejects_empty_or_malformed_decisions():
+    with pytest.raises(DataError):
+        pad_decision_inputs([])
+    with pytest.raises(DataError, match="state and candidate_features"):
+        pad_decision_inputs([object()])
+    with pytest.raises(DataError, match="state must have shape"):
+        pad_decision_inputs(
+            [
+                SimpleNamespace(
+                    state=np.zeros(STATE_WIDTH - 1, dtype=np.float32),
+                    candidate_features=np.zeros((2, CANDIDATE_WIDTH), dtype=np.float32),
+                )
+            ]
+        )
+    with pytest.raises(DataError, match="candidates must have shape"):
+        pad_decision_inputs(
+            [
+                SimpleNamespace(
+                    state=np.zeros(STATE_WIDTH, dtype=np.float32),
+                    candidate_features=np.zeros((2, CANDIDATE_WIDTH - 1), dtype=np.float32),
+                )
+            ]
+        )
+    with pytest.raises(DataError, match="at least one candidate"):
+        pad_decision_inputs(
+            [
+                SimpleNamespace(
+                    state=np.zeros(STATE_WIDTH, dtype=np.float32),
+                    candidate_features=np.zeros((0, CANDIDATE_WIDTH), dtype=np.float32),
+                )
+            ]
+        )
+    with pytest.raises(DataError, match="numeric arrays"):
+        pad_decision_inputs(
+            [
+                SimpleNamespace(
+                    state=np.zeros(STATE_WIDTH, dtype=np.float32),
+                    candidate_features=np.full(
+                        (1, CANDIDATE_WIDTH), "not-a-number", dtype=object
+                    ),
+                )
+            ]
+        )
 
 
 def test_packed_dataset_exposes_layout_and_metadata():
