@@ -20,7 +20,7 @@ workflows, and research decisions still relevant to future work.
 | Check teacher collection or cache format details | [Neural crate guide](../crates/neural/README.md) |
 | Load datasets and train an offline BC policy | [Python BC guide](../python/README.md) |
 | Run frozen neural-vs-teacher comparisons | [Online evaluation guide](../online/README.md) |
-| Review experiment-backed choices not incorporated into the project | [Research decisions](research-decisions.md) |
+| Review unimplemented research choices and how they were tested | [Experimental methods and decisions](research-decisions.md) |
 | Change the project or consult past decisions | [Governance](governance.md) and [archived changes](../specs/archive/) |
 
 For evidence precedence, documentation responsibilities, and how to resolve
