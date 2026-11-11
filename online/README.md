@@ -166,8 +166,9 @@ environment reset/step, teacher, and inference timings.
 Any game, inference, record, costs, or consistency failure stops the run:
 completed records and the plan remain, `state.json` stays `incomplete`, and no
 costs or summary is published. `records.finalize_run` independently refuses
-such a run. A later successful `finalize_run` on a complete run recomputes the
-same summary from disk.
+such a run. If only the final summary write fails after a clean close, the run
+stays `complete`, no summary is published, and a later `finalize_run`
+recomputes it from the same plan and records.
 
 ### Installation order
 
@@ -228,7 +229,13 @@ cargo clippy --manifest-path crates/python/Cargo.toml --all-targets --locked -- 
 cargo +1.75.0 test --manifest-path crates/python/Cargo.toml --all-targets --locked
 cargo fmt --manifest-path crates/python/Cargo.toml -- --check
 python -m pytest online/tests
+# Optional read-only probe against an external teacher corpus:
+MAHJONG_EVAL_ACCEPTANCE_CORPUS=/path/to/corpus python -m pytest online/tests
 ```
+
+`online/tests` uses the installed or editable extension; a bare `cargo build`
+output is not importable because it does not enable the `extension-module`
+feature.
 
 ## Verified build matrix
 

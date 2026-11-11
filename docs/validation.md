@@ -371,3 +371,116 @@ To remeasure, check out the specified historical source revision, rebuild it
 with the documented toolchain and workload, save new evidence and compare
 controlled baseline/candidate runs. Current CI or a new benchmark cannot
 retroactively validate the old numerical samples.
+
+## Python online comparison smoke validation
+
+This record exercises the PyO3 environment binding, synchronous multi-game
+scheduling, and the `mahjong-eval compare` pipeline on real Rust teacher data.
+It validates the pipeline and recorded provenance, **not** policy strength: the
+checkpoint is a 1-epoch 16/8 model and the samples are two validation seeds and
+one test seed.
+
+Environment: Windows 10 19045, x86-64 with 16 logical processors,
+CPython 3.12.10, NumPy 2.5.4, PyTorch 2.14.1+cu126 (CUDA 12.6 build), Rust
+1.75.0 release extension. The editable extension was built by maturin from the
+binding commit `6710013` (including the importable-exception and explicit
+`extension-module` feature fix `ddaf0fd`); the loaded extension reports
+`git_dirty=false` and `source_sha256`
+`19e1953ca2062b324a0673c3ddd2087215e2620386639938d9ea0d8b6308f7cd` over
+`crates/python`, `src`, and `crates/neural`. The executing online Python source
+hash was `191605b9346fd90dc753afa115c40e56dda320e2a7332f1d8cdaabcb34a7dd16`;
+the installed offline `mahjong-bc` source hash was
+`b2c40331c926ad7bd27c17f8eb41958aacb8f7400c1aed01ad176a3e7e90e16e`.
+
+Read-only inputs:
+
+- `/target/python-eval-acceptance/corpus/`: 24 seeds, 0 through 23.
+- `/target/python-eval-acceptance/cache/`: prepared cache
+  `a3144bbfda95c207b76c3f7232d260d16ac6e21519cd5420abd0fa582cef2872` from
+  source revision `145006344d0c5466fdffc794fdc679f4dc5e2f87`.
+- `/target/python-eval-acceptance/training/best.pt`, SHA-256
+  `8cb26765f5aed61b5f896895137605359a37fbc3c7178cd61da5775ed6ef7880`,
+  role `best`, model 1013/39 inputs with hidden widths 16 and 8, trained by
+  one epoch (batch 64, AdamW, learning rate 0.001, seed 31) over 1,228 train
+  decisions; best validation NLL 1.7826. Training provenance is recorded
+  separately from evaluation identity and the file's corpus/cache/run
+  directories were not read by the comparison.
+
+Frozen split buckets came from the Rust algorithm
+`seed-sha256-80-10-10-v1`: validation seeds 2 (bucket 85) and 10 (bucket 83),
+test seed 12 (bucket 99). Each seed played all six neural placements
+`[0,1] [0,2] [0,3] [1,2] [1,3] [2,3]` with heuristic policies elsewhere.
+
+### Device and batch choice
+
+Three fresh-process validation runs per setting, 12 games per run, 898
+decisions each (406 inference rows, 291 teacher queries). Times are the
+`costs.json` play-only totals in seconds (median with observed range); they
+exclude process start, imports, checkpoint load, and plan writing. CUDA is
+synchronized around each inference batch, so its inference time includes queued
+GPU work while the other timers exclude it.
+
+| Device | Batch | Inference batches | Total | Inference | Teacher | Env step | Env reset |
+|---|---|---|---|---|---|---|---|
+| cpu | 1 | 406 | 0.230 [0.223-0.232] | 0.195 [0.189-0.198] | 0.0141 | 0.0054 | 0.00032 |
+| cpu | 4 | 158 | 0.133 [0.123-0.168] | 0.098 [0.093-0.127] | 0.0178 | 0.0055 | 0.00033 |
+| cpu | 12 | 82 | 0.092 [0.091-0.104] | 0.060 [0.059-0.067] | 0.0163 | 0.0051 | 0.00032 |
+| cuda:0 | 1 | 406 | 0.884 [0.861-0.964] | 0.844 [0.824-0.913] | 0.0152 | 0.0058 | 0.00032 |
+| cuda:0 | 4 | 158 | 0.497 [0.481-0.523] | 0.461 [0.445-0.486] | 0.0134 | 0.0058 | 0.00035 |
+| cuda:0 | 12 | 82 | 0.401 [0.368-0.413] | 0.369 [0.333-0.377] | 0.0132 | 0.0059 | 0.00031 |
+
+Every setting produced the identical summary (neural mean -2.8333, delta
+-5.6667), so batch size and device did not change decisions. For this small
+model and workload, CPU was 3.7-4.4 times faster in total play time and CUDA's
+per-batch overhead dominated; the evidence supports CPU with one batch per wave
+here only. It does not establish a general CPU/GPU preference, throughput, or
+larger-model behavior.
+
+### Official runs
+
+Chosen settings: CPU with `--batch-size 12 --concurrent-games 12` for validation
+(one batch per wave) and `--batch-size 6 --concurrent-games 6` for the six test
+games. Both used the default 27,787,264-byte shared teacher cache and the native
+10,000-decision limit.
+
+```text
+mahjong-eval compare --checkpoint .../training/best.pt --split validation \
+  --seeds 2,10 --out validation-run --batch-size 12 --concurrent-games 12 \
+  --decision-limit 10000 --teacher-cache-bytes 27787264 --device cpu
+
+mahjong-eval compare --checkpoint .../training/best.pt --split test \
+  --seeds 12 --out test-run --batch-size 6 --concurrent-games 6 \
+  --decision-limit 10000 --teacher-cache-bytes 27787264 --device cpu
+```
+
+| Run | Games | Decisions (forced) | Inference rows/batches | Teacher queries | Cache hits/misses | Total | Reset | Step | Teacher | Inference |
+|---|---|---|---|---|---|---|---|---|---|---|
+| validation | 12 | 898 (201) | 406 / 82 | 291 | 1186 / 874 | 0.0933 | 0.0003 | 0.0054 | 0.0168 | 0.0598 |
+| test | 6 | 435 (96) | 219 / 74 | 120 | 397 / 292 | 0.0684 | 0.0003 | 0.0030 | 0.0090 | 0.0488 |
+
+Validation diagnostics: neural mean -2.8333, heuristic mean 2.8333, delta
+-5.6667, seed-block `neural_mean_se` 0.3333 and `delta_se` 0.6667; seed means
+-3.1667 (seed 2) and -2.5000 (seed 10); all 12 games ended by wall exhaustion.
+Test comparison: neural mean -2.6667, heuristic mean 2.6667, delta -5.3333,
+seed-block standard errors null with one seed, all 6 games wall-exhausted.
+These scores come from a barely trained model and are not a strength result.
+The online score was not used to select the checkpoint.
+
+Both runs ended with `state.json` `complete`, six placements per seed, and
+`summary.json` equal to an independent `records.summarize_run` recomputation
+from `plan.json` and `games.jsonl`. `costs.json` counts were cross-checked
+against the persisted records (decision totals, forced counts, inference rows,
+teacher queries, and call counts).
+
+### Failure containment
+
+The online test suite injects mid-run inference and costs-output failures while
+using real record writing: completed `games.jsonl` lines remain, `plan.json`
+remains, `state.json` stays `incomplete`, no `costs.json` or `summary.json` is
+published, and the public `records.finalize_run` refuses the run. Scheduler
+tests separately cover game-step failure, callback failure, partial batches,
+concurrent progress differences, same decision ids across handles, forced
+bypass, invalid inference indices, and recomputable counts. With
+`MAHJONG_EVAL_ACCEPTANCE_CORPUS` pointing at the read-only corpus above, the
+complete online suite passed **150 tests**, including the full-trajectory
+environment/teacher handoff and exception pickling checks.
