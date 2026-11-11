@@ -90,6 +90,36 @@ recorded values. Wheels built from a checkout or an sdist contain this compiled
 metadata; pair it with the loaded `mahjong_eval._native.__file__` when recording
 an installation.
 
+## Multi-game scheduling
+
+`mahjong_eval.scheduler.run_games(specs, neural=..., teacher_cache=...)` plays
+several games in one process. Each `GameSpec(seed, neural_seats)` assigns the
+frozen policy to two seats; the other seats use the native `HeuristicPolicy`
+through one explicit cache shared by every handle and query. Pending neural
+decisions are grouped by policy and scored in `batch_size` chunks; indices are
+routed back by chunk position, which matters because concurrent handles reuse
+decision ids. Forced single-candidate decisions are committed as index zero
+without inference or a teacher query, while still counting toward decisions.
+Up to `concurrent_games` handles are active and refilled as games finish, so
+games can sit at different stages and decision counts. A win for one seat never
+ends a game early; only the environment terminal result does.
+
+`on_terminal(game)` is called as each game finishes, before the next game is
+started; a callback or write failure stops scheduling instead of substituting
+an action. `trace=False` (the default) retains no per-decision data;
+`trace=True` retains only small scalar entries (identity, actor, stage,
+candidate count, assigned policy, forced flag, index), never state or candidate
+arrays.
+
+The result exposes completed games in plan order with per-game decision,
+forced-decision, and inference-row counts, plus totals recomputable from those
+games. Timings separate environment reset, environment step, teacher, and
+inference seconds and include call counts. CUDA is synchronized before and
+after each inference batch, so inference time covers queued GPU work while the
+other timers exclude it. Any game, teacher, inference, or terminal-callback
+failure raises `SchedulingError` carrying the seed, placement, and decision
+context of the affected pending decision.
+
 ## Layout and independent builds
 
 The PyO3 crate lives in [`crates/python`](../../crates/python/Cargo.toml) as its
@@ -97,6 +127,12 @@ own Cargo workspace and is excluded from the root workspace. Ordinary core,
 neural, collector, and offline training builds therefore neither resolve nor
 link Python. The package metadata here builds the extension as
 `mahjong_eval._native` and adds this Python package.
+
+The crate keeps PyO3's `extension-module` link mode behind its own
+`extension-module` feature, so plain `cargo check` and `cargo test` stay
+linkable without a Python host. Only the maturin build below passes
+`features = ["extension-module"]`; Python imports and the online tests therefore
+use the built wheel or editable install, not a raw `cargo build` output.
 
 Use the repository `.venv` (Python 3.12 in the verified environment):
 
