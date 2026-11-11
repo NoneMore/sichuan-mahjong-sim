@@ -104,12 +104,11 @@ and a Boolean mask, and preserves valid scores and canonical order without
 requiring targets or other supervision. `collate_decisions` adds the offline
 labels and metadata on top of it.
 
-`iter_batches` follows the supplied index order and retains the final partial
-batch. With `num_workers=0` the built-in packed datasets are gathered
-column-wise instead of one sample at a time; subclasses and packed shards
-without target-kind metadata keep the per-sample `collate_decisions` path.
-Mmap datasets require `num_workers=0`; positive worker counts raise
-`DataError`. `contains_memory_mapped_arrays(dataset)` detects mapped data.
+`iter_batches` preserves index order and the final partial batch. Built-in
+packed datasets support column-wise batch reads; custom datasets retain
+per-sample collation. Mmap datasets require `num_workers=0`; positive worker
+counts raise `DataError`. `contains_memory_mapped_arrays(dataset)` detects
+mapped data.
 For in-memory workers, use `load_split(..., mmap=False)` and guard scripts with
 `if __name__ == "__main__":` on spawn-based platforms such as Windows.
 
@@ -125,13 +124,12 @@ Each seeded epoch visits every eligible decision (more than one candidate)
 once in shuffled order, including the final partial batch. Masked cross-entropy
 weights decisions equally; forced choices are counted separately.
 
-`metrics.py` aggregates complete eligible validation/test sets by decision:
-overall NLL/top-1, per-stage support/NLL/top-1, teacher action-kind support/top-1,
-and separate forced counts. Built-in packed and sharded splits score only their
-eligible decisions and take forced counts from the same layout metadata.
-Zero-support groups report `null`. Validation mean NLL alone selects `best.pt`;
-test evaluation loads the frozen checkpoint and never influences selection or
-updates the file.
+Evaluation scores eligible decisions in built-in packed splits with unchanged
+layouts and takes forced counts from metadata. Reports cover complete
+validation/test splits: overall and per-stage support/NLL/top-1, teacher
+action-kind support/top-1, and separate forced counts. Zero-support groups
+report `null`. Validation mean NLL alone selects `best.pt`; test evaluation
+never influences selection or updates the frozen checkpoint.
 
 `run.json` records the resolved model/training configuration, training seed,
 device type, dependencies, dataset identities and provenance, checkpoint names,
