@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from collections import Counter
+from typing import Any, Callable, Sequence
 
 import numpy as np
 import pytest
+import torch
+from torch.overrides import TorchFunctionMode
 
 from mahjong_bc.config import DatasetIdentity
 from mahjong_bc.constants import (
@@ -175,6 +178,33 @@ class DelegatingDataset(DecisionDataset):
 
 def support_by_stage(report: MetricsReport) -> tuple[int, ...]:
     return tuple(metric.support for metric in report.stages)
+
+
+def count_host_reads(action: Callable[[], Any]) -> Counter[str]:
+    """Count the tensor operations that read values back to the host.
+
+    ``cpu``, ``item``, ``tolist``, ``__bool__`` and ``__int__`` each wait for
+    the device to finish, so their per-batch count exposes redundant
+    synchronization. Device-to-device torch calls are not counted.
+    """
+
+    seen: list[str] = []
+
+    class _Recorder(TorchFunctionMode):
+        def __torch_function__(self, func, types, args=(), kwargs=None):
+            seen.append(getattr(func, "__name__", str(func)))
+            return func(*args, **(kwargs or {}))
+
+    with _Recorder():
+        action()
+    return Counter(seen)
+
+
+def host_read_count(counts: Counter[str]) -> int:
+    return sum(counts[name] for name in _HOST_READ_NAMES)
+
+
+_HOST_READ_NAMES = ("cpu", "item", "tolist", "__bool__", "__int__")
 
 
 def assert_reports_equal(
