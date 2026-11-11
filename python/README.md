@@ -105,7 +105,10 @@ requiring targets or other supervision. `collate_decisions` adds the offline
 labels and metadata on top of it.
 
 `iter_batches` follows the supplied index order and retains the final partial
-batch. Mmap datasets require `num_workers=0`; positive worker counts raise
+batch. With `num_workers=0` the built-in packed datasets are gathered
+column-wise instead of one sample at a time; subclasses and packed shards
+without target-kind metadata keep the per-sample `collate_decisions` path.
+Mmap datasets require `num_workers=0`; positive worker counts raise
 `DataError`. `contains_memory_mapped_arrays(dataset)` detects mapped data.
 For in-memory workers, use `load_split(..., mmap=False)` and guard scripts with
 `if __name__ == "__main__":` on spawn-based platforms such as Windows.
