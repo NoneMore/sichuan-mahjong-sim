@@ -241,6 +241,10 @@ pub(crate) fn reference_needed_table(
     capacity: &[u8; RANKS],
     target_sets: usize,
 ) -> MaskTable {
+    debug_assert!(
+        target_sets <= 4,
+        "production tables only request 0..=4 sets"
+    );
     let mut table = empty_mask_table();
     for_each_suit_target_up_to(target_sets, capacity, &mut |target, placed| {
         let (cost, needed, _) = target_score(hand, target);
