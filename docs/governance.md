@@ -112,7 +112,10 @@ do not edit the old ADR to point forward. Older ADRs may move to
 
 - Update current rules, architecture, or public API explanations when the
   implementation affects them; update active Change materials when their
-  intent changes. Unrelated work needs no documentation sweep.
+  intent changes. For cross-language protocol changes, check the
+  [data contract boundaries](reference/data-contracts.md) and update the
+  owning producer/consumer docs and tests. Unrelated work needs no
+  documentation sweep.
 - For Game or rule changes, test affected legality, transitions, settlement,
   and applicable invariants: hidden-information isolation, tile conservation,
   zero-sum scores, seeded replay, and clone/continuation. For Policy/Runner

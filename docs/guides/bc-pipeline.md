@@ -4,6 +4,8 @@ This guide connects the existing Rust and Python tools end to end. It explains
 execution order and the artifacts passed between components, not their complete
 CLI references or file schemas. Run commands from the repository root and
 consult the linked module guides for supported flags and recovery behavior.
+For versioned handoffs and contract owners, see the
+[data contract map](../reference/data-contracts.md).
 
 ## Prerequisites and workspace
 

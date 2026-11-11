@@ -48,6 +48,12 @@ for commands, cache lifecycle, and measurement boundaries.
 
 ## Continuous integration
 
+Markdown links, anchors, and fenced-code balance are checked by the
+[docs CI workflow](../.github/workflows/docs-ci.yml) using
+`python3 scripts/check_docs.py` from the repository root. This check is
+independent of Rust/Python dependencies and does not probe external URLs.
+
+
 [The Rust CI workflow](../.github/workflows/rust-ci.yml) runs on pull requests
 targeting `main`, pushes to `main`, and manual dispatch. Its stable job checks
 formatting, warning-denied Clippy, Debug and Release tests across all workspace

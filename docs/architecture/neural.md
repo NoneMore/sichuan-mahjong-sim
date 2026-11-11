@@ -7,6 +7,8 @@ interfaces. The dependency is one-way: building the core with
 
 For the runnable collection → preparation → training → evaluation sequence,
 see the [BC pipeline guide](../guides/bc-pipeline.md).
+For Rust/Python protocol ownership and compatibility, see the
+[data contract map](../reference/data-contracts.md).
 
 ## Decision encoding
 
