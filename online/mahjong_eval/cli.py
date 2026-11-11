@@ -354,8 +354,11 @@ def _cmd_compare(args: argparse.Namespace) -> int:
                 ),
             )
         summary = records.finalize_run(writer.paths.directory)
-    except CompareError:
-        raise
+    except CompareError as exc:
+        raise CompareError(
+            f"comparison stopped; completed records are retained in "
+            f"{writer.paths.directory}: {exc}"
+        ) from exc
     except MahjongBCError as exc:
         raise CompareError(
             f"comparison stopped; completed records are retained in "
@@ -407,6 +410,15 @@ def _verify_persisted(
         raise CompareError(
             "persisted game count does not match the scheduler accounting"
         )
+    played = {
+        (game.seed, game.neural_seats): game.to_record() for game in result.games
+    }
+    for record in persisted:
+        if record != played.get((record.seed, record.neural_seats)):
+            raise CompareError(
+                f"persisted terminal result differs from the played game "
+                f"(seed {record.seed}, placement {list(record.neural_seats)})"
+            )
 
 
 def _cmd_version(_args: argparse.Namespace) -> int:

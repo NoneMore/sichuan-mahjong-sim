@@ -129,8 +129,8 @@ python -m pytest online/tests
 
 `online/pyproject.toml` builds `mahjong_eval._native` with maturin and passes
 `features = ["extension-module"]`; plain `cargo check`/`cargo test` in
-`crates/python` do not enable PyO3's extension link mode and stay linkable
-without a Python host. Build the extension from the package rather than using
+`crates/python` do not enable PyO3's extension link mode, so test executables
+link Python normally. Build the extension from the package rather than using
 raw `cargo build` output:
 
 ```text
@@ -154,8 +154,10 @@ records real inputs and observed costs without claiming policy strength.
 
 The [cumulative online CI job](../.github/workflows/python-ci.yml) checks the
 standalone extension for both stable and Rust 1.75, builds the wheel, installs
-it with the offline package, and runs every online test. Offline `python/tests`
-stay independent of the binding.
+it with the offline package, and runs every online test against a freshly
+collected teacher corpus. It also builds and imports a wheel from the source
+distribution, checking that an outer checkout is not borrowed as its Git source.
+Offline `python/tests` stay independent of the binding.
 
 ### Policy A/B comparison example
 

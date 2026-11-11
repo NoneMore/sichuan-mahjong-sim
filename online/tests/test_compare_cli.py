@@ -532,6 +532,35 @@ def test_module_entry_point_prints_version_provenance(tmp_path):
     assert document["native"]["extension"]["source_complete"] is True
 
 
+def test_persisted_score_disagreement_blocks_publication(
+    checkpoints, validation_seed, tmp_path, capsys, monkeypatch
+):
+    from dataclasses import replace
+
+    original = records.read_records
+
+    def inconsistent_read(*args, **kwargs):
+        values = original(*args, **kwargs)
+        first = values[0]
+        scores = list(first.scores)
+        scores[0] += 1
+        scores[1] -= 1
+        values[0] = replace(first, scores=tuple(scores))
+        return values
+
+    monkeypatch.setattr(records, "read_records", inconsistent_read)
+    out = tmp_path / "inconsistent-run"
+    assert _run_compare(
+        checkpoints[ROLE_BEST], out, split="validation", seeds=[validation_seed]
+    ) == 2
+    message = capsys.readouterr().err
+    assert "persisted terminal result differs" in message
+    assert "completed records are retained" in message
+    assert json.loads((out / "state.json").read_text())["status"] == "incomplete"
+    assert not (out / "summary.json").exists()
+    assert not (out / cli.COSTS_FILENAME).exists()
+
+
 def test_installed_console_script_is_available():
     scripts = Path(sysconfig.get_path("scripts"))
     candidates = [

@@ -76,3 +76,20 @@ jobs:
           MKL_NUM_THREADS: "1"
           MAHJONG_EVAL_ACCEPTANCE_CORPUS: ${{ github.workspace }}/target/online-corpus
         run: .venv/bin/python -m pytest online/tests
+      - name: Build and smoke-test a source distribution inside an outer checkout
+        run: |
+          cd online
+          ../.venv/bin/python -m maturin sdist --out ../target/online-sdist
+          cd ../target/online-sdist
+          tar -xf mahjong_eval-0.1.0.tar.gz
+          cd mahjong_eval-0.1.0
+          "$GITHUB_WORKSPACE/.venv/bin/python" -m maturin build --release --locked --out dist
+          "$GITHUB_WORKSPACE/.venv/bin/python" -m pip install --no-deps --target installed dist/*.whl
+          PYTHONPATH="$PWD/installed" "$GITHUB_WORKSPACE/.venv/bin/python" -c '
+          import mahjong_eval
+          source = mahjong_eval.compiled_source()["extension"]
+          assert source["source_complete"]
+          assert not source["git_available"]
+          assert not source["git_commit"]
+          assert mahjong_eval.Env().reset(0).candidate_count > 0
+          '
