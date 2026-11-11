@@ -61,11 +61,6 @@ pub(super) fn suit_counts(hand: &Hand, suit: Suit) -> [u8; 9] {
     local
 }
 
-/// One-bit mask for a tile kind.
-pub(super) fn bit(kind: Tile) -> u32 {
-    1u32 << kind.index()
-}
-
 /// Small deterministic LCG used by the fixed-seed sweeps.
 ///
 /// `new` preserves the historical `seed | 1` initialization. `raw` keeps a

@@ -28,10 +28,10 @@
 //! mask bit.
 
 use super::super::test_fixtures::{capacity_by_kind, capacity_by_suit, suit_counts};
-use super::super::INF;
 use super::super::test_support::targets::{
     merge_entry, merge_route, reference_needed_table as reference_suit_table,
 };
+use super::super::INF;
 use crate::action::Meld;
 use crate::hand::Hand;
 use crate::tile::{Suit, Tile, TILE_KINDS};

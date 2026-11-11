@@ -7,9 +7,9 @@
 //! caught. Capacity patterns include physically reachable own-meld shapes and
 //! deliberately non-physical `2`, `3`, and `5` capacities to stress the bounds.
 
-use super::super::{suit_table, suit_table_with_mask, INF};
 use super::super::test_support::targets::{reference_needed_table as reference_suit_table, RANKS};
 use super::super::test_support::Lcg;
+use super::super::{suit_table, suit_table_with_mask, INF};
 
 fn assert_suit_table(
     hand: &[u8; RANKS],

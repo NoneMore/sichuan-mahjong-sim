@@ -27,8 +27,8 @@ use crate::hand::Hand;
 use crate::seat::Seat;
 use crate::tile::{Suit, Tile, COPIES_PER_TILE, TILE_KINDS};
 
-pub(super) use super::test_support::{counts_from_ranks, hand_from_counts, suit_counts, tile};
 use super::test_support::Lcg;
+pub(super) use super::test_support::{counts_from_ranks, hand_from_counts, suit_counts, tile};
 
 /// One legal post-discard analysis position.
 #[derive(Clone, Debug)]
@@ -165,7 +165,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 1. Standard tenpai with three distinct waits (within-standard union).
         State::new(
             "standard-tenpai",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 9],
+            )])),
             vec![],
             tiao,
             &[],
@@ -185,7 +188,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // the standard route also waits on 3W; both routes tie at distance one.
         State::new(
             "route-tie-overlap",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 7])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 7],
+            )])),
             vec![],
             tiao,
             &[],
@@ -194,7 +200,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // standard route waits on 7W, so the combined mask is exactly both.
         State::new(
             "route-tie-disjoint",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 8, 9, 9],
+            )])),
             vec![],
             tiao,
             &[],
@@ -216,7 +225,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // the standard route is worse, so only the quadded kind is marked.
         State::new(
             "seven-pairs-triple",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 1, 1, 2, 2, 3, 3, 5, 5, 7, 7, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[1, 1, 1, 2, 2, 3, 3, 5, 5, 7, 7, 9, 9],
+            )])),
             vec![],
             tong,
             &[],
@@ -236,7 +248,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 8. Open hand: one peng leaves three concealed sets and a pair.
         State::new(
             "one-peng",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9],
+            )])),
             vec![Meld::peng(tile(tong, 6), Seat::DEALER)],
             tiao,
             &[],
@@ -245,7 +260,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // publicly owned three times, so it can never be marked or unseen.
         State::new(
             "peng-capacity",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9],
+            )])),
             vec![Meld::peng(tile(wan, 5), Seat::DEALER)],
             tiao,
             &[],
@@ -253,7 +271,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 10. Own concealed kong exhausts 3W; the structural 3W wait is gone.
         State::new(
             "concealed-kong-capacity",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 4, 5, 6, 7, 8, 9, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[1, 2, 4, 5, 6, 7, 8, 9, 9, 9],
+            )])),
             vec![Meld::concealed_kong(tile(wan, 3))],
             tiao,
             &[],
@@ -261,7 +282,10 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 11. Added kong consumes the fourth 8W copy; same capacity rule.
         State::new(
             "added-kong-capacity",
-            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 9, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(
+                wan,
+                &[1, 2, 3, 4, 5, 6, 7, 9, 9, 9],
+            )])),
             vec![Meld::added_kong(tile(wan, 8), Seat::DEALER)],
             tiao,
             &[],

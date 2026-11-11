@@ -26,8 +26,8 @@ const SET_CANDIDATES: usize = RANKS + 7;
 /// Nine triplets followed by seven sequences, in a fixed order.
 pub(crate) fn suit_set_candidates() -> [[u8; RANKS]; SET_CANDIDATES] {
     let mut sets = [[0u8; RANKS]; SET_CANDIDATES];
-    for rank in 0..RANKS {
-        sets[rank][rank] = 3;
+    for (rank, set) in sets.iter_mut().take(RANKS).enumerate() {
+        set[rank] = 3;
     }
     for start in 0..=6 {
         sets[RANKS + start][start..start + 3].fill(1);
@@ -137,6 +137,7 @@ pub(crate) fn for_each_paired_target(
     count
 }
 
+#[allow(clippy::too_many_arguments)]
 fn walk_targets(
     start: usize,
     placed: usize,
@@ -191,16 +192,7 @@ pub(crate) fn for_each_suit_target_up_to(
 ) -> usize {
     let sets = suit_set_candidates();
     let mut target = [0u8; RANKS];
-    walk_targets(
-        0,
-        0,
-        target_sets,
-        &sets,
-        capacity,
-        &mut target,
-        true,
-        visit,
-    )
+    walk_targets(0, 0, target_sets, &sets, capacity, &mut target, true, visit)
 }
 
 /// Visits every concrete multiset of exactly `target_sets` sets.
@@ -232,11 +224,11 @@ pub(crate) fn reference_cost_table(
     target_sets: usize,
 ) -> SuitTable {
     let mut table = empty_cost_table();
-    for chosen in 0..=target_sets {
+    for (chosen, row) in table.iter_mut().enumerate().take(target_sets + 1) {
         for_each_suit_target_exactly(chosen, capacity, &mut |target| {
-            merge_cost(&mut table[chosen][0], target_deficit(hand, target));
+            merge_cost(&mut row[0], target_deficit(hand, target));
             for_each_paired_target(target, capacity, &mut |paired| {
-                merge_cost(&mut table[chosen][1], target_deficit(hand, paired));
+                merge_cost(&mut row[1], target_deficit(hand, paired));
             });
         });
     }
@@ -280,4 +272,37 @@ pub(crate) fn reference_mask_tables(
         });
     });
     (needed, surplus)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The up-to walker visits exactly the rows the exact walkers visit once.
+    ///
+    /// This pins the shared enumeration contract the cost, needed, and
+    /// needed/surplus projections all rely on: one visit per legal multiset,
+    /// grouped by its set count, with no duplicate or missing row.
+    #[test]
+    fn suit_walkers_visit_each_legal_multiset_once() {
+        let capacity = [4u8; RANKS];
+        let exact: Vec<usize> = (0..=4)
+            .map(|sets| for_each_suit_target_exactly(sets, &capacity, &mut |_| {}))
+            .collect();
+        let mut up_to = vec![0usize; exact.len()];
+        let total = for_each_suit_target_up_to(4, &capacity, &mut |_, placed| {
+            up_to[placed] += 1;
+        });
+        assert_eq!(up_to, exact, "up-to and exact rows must agree");
+        assert_eq!(total, exact.iter().sum::<usize>());
+
+        // Zero capacity still visits the empty target exactly once and admits
+        // no pair, so unreachable rows stay unreachable.
+        let zero = [0u8; RANKS];
+        assert_eq!(
+            for_each_suit_target_up_to(4, &zero, &mut |_, _| {}),
+            1,
+            "zero capacity has only the empty multiset"
+        );
+    }
 }

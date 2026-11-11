@@ -13,7 +13,7 @@
 //! - [`original_suit_table`] is the exact pre-change form: every candidate
 //!   `(sequences, triplets, pair)` inside the set budget is enumerated first and
 //!   then rejected by the `pair_used` and per-rank capacity checks.
-//! - [`enumerated_suit_table`] ignores the decomposition dynamic program
+//! - [`reference_cost_table`] ignores the decomposition dynamic program
 //!   entirely and enumerates concrete per-suit targets (multisets of triplets
 //!   and sequences plus an optional pair) whose rank counts fit the capacity.
 //!
@@ -26,7 +26,6 @@ use super::*;
 
 use super::test_support::targets::{reference_cost_table, RANKS};
 use super::test_support::Lcg;
-
 
 /// Capacity patterns for one suit.
 ///

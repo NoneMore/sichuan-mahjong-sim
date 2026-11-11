@@ -21,8 +21,8 @@
 //! enumeration from `oracle.rs`, not the candidate DP.
 
 use super::super::test_fixtures::{boundary_states, hand_from_counts, sampled_states, tile};
-use super::super::{suit_table_mask_bounded, suit_table_with_mask, DistanceEvaluator, INF};
 use super::super::test_support::targets::reference_needed_table as reference_suit_table;
+use super::super::{suit_table_mask_bounded, suit_table_with_mask, DistanceEvaluator, INF};
 use super::oracle::reference_hand_mask;
 use crate::tile::{Suit, TILE_KINDS};
 
