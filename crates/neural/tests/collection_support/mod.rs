@@ -43,6 +43,10 @@ pub fn collect(
     corpus.append_with_cache(games, 0).unwrap()
 }
 
+pub fn collect_one(root: &Path, source: &SourceRevision) -> CollectionOutcome {
+    collect(root, source, 0, 1, 1, 10_000)
+}
+
 pub fn append(root: &Path, source: &SourceRevision, games: u64) -> CollectionOutcome {
     let mut corpus = Corpus::open_append(root, source).unwrap();
     corpus.append_with_cache(games, 0).unwrap()

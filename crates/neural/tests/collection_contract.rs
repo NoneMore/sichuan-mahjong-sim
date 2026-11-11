@@ -5,9 +5,9 @@ use std::fs;
 
 use serde_json::Value;
 use support::{
-    append, collect, manifest, mutate_first_decision, mutate_manifest, read_json_lines,
-    refresh_manifest_checksums, revision, root, sha256_hex, shard_files, write_json_lines,
-    write_manifest, REV_A, REV_B,
+    append, collect, collect_one, manifest, mutate_first_decision, mutate_manifest,
+    read_json_lines, refresh_manifest_checksums, revision, root, sha256_hex, shard_files,
+    write_json_lines, write_manifest, REV_A, REV_B,
 };
 
 use sichuan_mahjong_neural::collection::{
@@ -312,7 +312,7 @@ fn unlisted_orphan_shards_and_partial_temps_are_ignored_and_replayed() {
 fn manifest_publication_failure_keeps_previous_commit_and_retry_replaces_orphan() {
     let temp = root();
     let source = revision(REV_A);
-    collect(temp.path(), &source, 0, 1, 1, 10_000);
+    collect_one(temp.path(), &source);
     let mut corpus = Corpus::open_append(temp.path(), &source).unwrap();
     let path = manifest_path(temp.path());
     let backup = fs::read(&path).unwrap();
@@ -368,7 +368,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     ] {
         let temp = root();
         let source = revision(REV_A);
-        collect(temp.path(), &source, 0, 1, 1, 10_000);
+        collect_one(temp.path(), &source);
         mutate_manifest(temp.path(), mutate);
         let error = read_manifest(temp.path()).unwrap_err();
         match expected {
@@ -392,7 +392,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        let outcome = collect(temp.path(), &source, 0, 1, 1, 10_000);
+        let outcome = collect_one(temp.path(), &source);
         let path = shard_path(temp.path(), outcome.manifest.shards[0].first_seed);
         let mut bytes = fs::read(&path).unwrap();
         let newline = bytes.iter().position(|&byte| byte == b'\n').unwrap();
@@ -408,7 +408,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        collect(temp.path(), &source, 0, 1, 1, 10_000);
+        collect_one(temp.path(), &source);
         mutate_first_decision(temp.path(), |decision| {
             decision["state"].as_array_mut().unwrap().pop();
         });
@@ -422,7 +422,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        collect(temp.path(), &source, 0, 1, 1, 10_000);
+        collect_one(temp.path(), &source);
         mutate_first_decision(temp.path(), |decision| {
             decision["candidate_features"][0]
                 .as_array_mut()
@@ -439,7 +439,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        collect(temp.path(), &source, 0, 1, 1, 10_000);
+        collect_one(temp.path(), &source);
         mutate_first_decision(temp.path(), |decision| {
             decision["candidate_actions"][0][0] = Value::from(99);
         });
@@ -453,7 +453,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        collect(temp.path(), &source, 0, 1, 1, 10_000);
+        collect_one(temp.path(), &source);
         mutate_first_decision(temp.path(), |decision| {
             decision["teacher_target_index"] = Value::from(1_000_000);
         });
@@ -498,7 +498,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        collect(temp.path(), &source, 0, 1, 1, 10_000);
+        collect_one(temp.path(), &source);
         mutate_first_decision(temp.path(), |decision| {
             decision["extra"] = Value::from(1);
         });
@@ -512,7 +512,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        let outcome = collect(temp.path(), &source, 0, 1, 1, 10_000);
+        let outcome = collect_one(temp.path(), &source);
         let path = shard_path(temp.path(), outcome.manifest.shards[0].first_seed);
         let mut lines = read_json_lines(&path);
         lines.pop();
@@ -528,7 +528,7 @@ fn strict_reading_rejects_corruption_versions_and_shape_or_target_errors() {
     {
         let temp = root();
         let source = revision(REV_A);
-        collect(temp.path(), &source, 0, 1, 1, 10_000);
+        collect_one(temp.path(), &source);
         fs::write(
             shard_path(temp.path(), Seed::from_u64(9)),
             b"unlisted garbage\n",
@@ -694,7 +694,7 @@ fn million_game_metadata_resumes_without_reading_prior_decisions() {
 fn process_lock_conflict_and_release() {
     let temp = root();
     let source = revision(REV_A);
-    collect(temp.path(), &source, 0, 1, 1, 10_000);
+    collect_one(temp.path(), &source);
     let held = CorpusLock::try_acquire(temp.path()).unwrap();
     let error = match Corpus::open_append(temp.path(), &source) {
         Ok(_) => panic!("second writer unexpectedly acquired the lock"),

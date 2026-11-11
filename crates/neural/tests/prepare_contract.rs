@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde_json::Value;
-use support::{append, collect, manifest, revision, root, sha256_hex, REV_A};
+use support::{append, collect, collect_one, manifest, revision, root, sha256_hex, REV_A};
 
 use sichuan_mahjong_neural::collection::{
     action_kind_id, manifest_path, read_corpus, shard_path, CorpusSnapshot, Episode, Split,
@@ -611,7 +611,7 @@ fn existing_output_file_is_rejected_without_modification() {
     let temp = root();
     let corpus_root = temp.path().join("corpus");
     let source = revision(REV_A);
-    collect(&corpus_root, &source, 0, 1, 1, 10_000);
+    collect_one(&corpus_root, &source);
     let snapshot = CorpusSnapshot::capture(&corpus_root).unwrap();
     let out = temp.path().join("existing-output");
     fs::write(&out, b"keep me").unwrap();
@@ -630,7 +630,7 @@ fn dangling_output_symlink_is_rejected() {
     let temp = root();
     let corpus_root = temp.path().join("corpus");
     let source = revision(REV_A);
-    collect(&corpus_root, &source, 0, 1, 1, 10_000);
+    collect_one(&corpus_root, &source);
     let snapshot = CorpusSnapshot::capture(&corpus_root).unwrap();
     let missing_target = temp.path().join("missing-target");
     let out = temp.path().join("dangling-output");
@@ -752,7 +752,7 @@ fn empty_splits_are_listed_with_zero_counts_and_no_shards() {
     let temp = root();
     let corpus_root = temp.path().join("corpus");
     let source = revision(REV_A);
-    collect(&corpus_root, &source, 0, 1, 1, 10_000);
+    collect_one(&corpus_root, &source);
     let snapshot = CorpusSnapshot::capture(&corpus_root).unwrap();
     let cache = cache_root(temp.path(), "cache");
     let manifest = prepare(&snapshot, &cache, &options()).unwrap();
@@ -1043,7 +1043,7 @@ fn snapshot_defers_missing_shard_errors_until_consumption() {
     let temp = root();
     let corpus_root = temp.path().join("corpus");
     let source = revision(REV_A);
-    let outcome = collect(&corpus_root, &source, 0, 1, 1, 10_000);
+    let outcome = collect_one(&corpus_root, &source);
     let shard = shard_path(&corpus_root, outcome.manifest.shards[0].first_seed);
     let saved = temp.path().join("saved-shard.jsonl");
     fs::rename(&shard, &saved).unwrap();
