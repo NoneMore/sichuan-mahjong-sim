@@ -66,8 +66,13 @@ jobs:
         run: |
           ../.venv/bin/python -m maturin build --release --locked --out ../target/online-wheels
           ../.venv/bin/python -m pip install --no-deps ../target/online-wheels/*.whl
+      - name: Collect a small native teacher handoff fixture
+        run: |
+          cargo +stable run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
+            --root target/online-corpus --games 1 --seed-start 0 --shard-games 1 --cache-bytes 0
       - name: Run environment, inference, records and comparison tests
         env:
           OMP_NUM_THREADS: "1"
           MKL_NUM_THREADS: "1"
+          MAHJONG_EVAL_ACCEPTANCE_CORPUS: ${{ github.workspace }}/target/online-corpus
         run: .venv/bin/python -m pytest online/tests
