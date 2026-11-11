@@ -46,8 +46,8 @@ cargo run --release -- --games 1000 --seed 7 --policy first
 
 The main CLI supports `--policy first|random`; heuristic and missing-only
 policies are available through the Rust library and experiment examples.
-See [development](docs/development.md) for CLI options, verification commands,
-and comparison/benchmark workflows.
+See [self-play](docs/guides/self-play.md) for CLI flags and seed behavior,
+and [development](docs/development.md) for workspace verification.
 
 ## Documentation
 
