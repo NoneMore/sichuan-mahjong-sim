@@ -23,6 +23,11 @@ from ._array_contract import (
     expected_shapes,
     validate_packed_arrays,
 )
+from ._array_spec import (
+    ARRAY_DIMENSIONS as _ARRAY_DIMENSIONS,
+    ARRAY_DTYPES as _ARRAY_DTYPES,
+    ARRAY_NAMES,
+)
 from .config import DatasetIdentity
 from .constants import (
     ACTION_KIND_COUNT,
@@ -41,28 +46,6 @@ from .constants import (
 from .data import PackedDecisionDataset, ShardedDecisionDataset
 from .errors import CacheContractError
 
-ARRAY_NAMES = (
-    "states",
-    "candidate_features",
-    "candidate_offsets",
-    "targets",
-    "episode_seeds",
-    "decision_indices",
-    "actor_seats",
-    "stages",
-    "target_kinds",
-)
-_ARRAY_DTYPES = {
-    "states": "float32",
-    "candidate_features": "float32",
-    "candidate_offsets": "int64",
-    "targets": "int64",
-    "episode_seeds": "uint64",
-    "decision_indices": "uint64",
-    "actor_seats": "uint8",
-    "stages": "uint8",
-    "target_kinds": "uint8",
-}
 _COUNT_KEYS = {
     "episodes",
     "decisions",
@@ -104,18 +87,6 @@ _CORPUS_KEYS = {
     "shards",
 }
 _CORPUS_SHARD_KEYS = {"first_seed", "games", "decisions", "sha256"}
-
-_LAYOUT_DIMENSIONS = {
-    "states": ("decisions", "state_features"),
-    "candidate_features": ("candidates", "candidate_features"),
-    "candidate_offsets": ("decisions + 1",),
-    "targets": ("decisions",),
-    "episode_seeds": ("decisions",),
-    "decision_indices": ("decisions",),
-    "actor_seats": ("decisions",),
-    "stages": ("decisions",),
-    "target_kinds": ("decisions",),
-}
 
 
 def _require_mapping(value: Any, name: str) -> Mapping[str, Any]:
@@ -650,10 +621,10 @@ def _validate_layout(layout: Mapping[str, Any]) -> None:
                 f"layout.arrays.{name}.dtype must be {_ARRAY_DTYPES[name]!r}"
             )
         dimensions = entry["dimensions"]
-        if not isinstance(dimensions, list) or tuple(dimensions) != _LAYOUT_DIMENSIONS[name]:
+        if not isinstance(dimensions, list) or tuple(dimensions) != _ARRAY_DIMENSIONS[name]:
             raise CacheContractError(
                 f"layout.arrays.{name}.dimensions must be "
-                f"{list(_LAYOUT_DIMENSIONS[name])}"
+                f"{list(_ARRAY_DIMENSIONS[name])}"
             )
 
 
