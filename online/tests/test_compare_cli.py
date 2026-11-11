@@ -10,101 +10,31 @@ import sysconfig
 from pathlib import Path
 
 import pytest
-import torch
 
 import mahjong_eval
 import mahjong_eval.inference as inference
-from mahjong_bc.checkpoint import (
-    TrainingCheckpointState,
-    save_checkpoint,
-)
-from mahjong_bc.config import (
-    DatasetIdentity,
-    ModelConfig,
-    TrainingConfig,
-    collect_dependency_versions,
-)
-from mahjong_bc.constants import (
-    ENCODING_VERSION,
-    ROLE_BEST,
-    ROLE_LAST,
-    ROLE_POLICY,
-)
+from mahjong_bc.constants import ROLE_BEST, ROLE_LAST, ROLE_POLICY
 from mahjong_bc.errors import DataError
-from mahjong_bc.policy import build_policy
 
+from _checkpoint_fixtures import build_checkpoint, copy_checkpoint
 from mahjong_eval import cli, records, scheduler
 
-
-def _model_config() -> ModelConfig:
-    return ModelConfig(state_hidden=(4,), scorer_hidden=(4,))
-
-
-def _training_state(model) -> TrainingCheckpointState:
-    identity = DatasetIdentity(
-        cache_id="compare-fixture",
-        split="train",
-        encoding_version=ENCODING_VERSION,
-        preparation_format_version=1,
-        source_revision="fixture-revision",
-        decisions=4,
-        eligible_decisions=2,
-    )
-    validation = DatasetIdentity(
-        cache_id="compare-fixture",
-        split="validation",
-        encoding_version=ENCODING_VERSION,
-        preparation_format_version=1,
-        source_revision="fixture-revision",
-        decisions=2,
-        eligible_decisions=1,
-    )
-    return TrainingCheckpointState(
-        training_config=TrainingConfig(
-            seed=3, epochs=1, batch_size=1, learning_rate=0.01
-        ),
-        train_dataset_identity=identity,
-        validation_dataset_identity=validation,
-        dependencies=collect_dependency_versions(),
-        device_type="cpu",
-        completed_epochs=1,
-        global_step=4,
-        samples_seen=6,
-        best_validation_nll=0.25,
-        best_epoch=0,
-        history=[{"epoch": 0, "steps": 4, "samples": 6}],
-        optimizer_state={"state": {}, "param_groups": [{"lr": 0.01}]},
-        torch_rng_state=torch.get_rng_state(),
-        torch_cuda_rng_states=None,
-        order_rng_state=torch.Generator().manual_seed(7).get_state(),
-        best_model_state={
-            name: value.detach().clone()
-            for name, value in model.state_dict().items()
-        },
-        best_metrics={"nll": 0.25},
-    )
-
-
-def _write_checkpoint(path: Path, role: str) -> Path:
-    model = build_policy(_model_config(), seed=5)
-    if role == ROLE_POLICY:
-        save_checkpoint(path, model, role=role, metrics={"nll": 0.25})
-    else:
-        save_checkpoint(
-            path,
-            model,
-            role=role,
-            training=_training_state(model),
-            metrics={"nll": 0.25},
-        )
-    return path
+#: Every seed plays one game per fixed neural-seat placement.
+GAMES_PER_SEED = len(records.PLACEMENTS)
 
 
 @pytest.fixture(scope="module")
 def checkpoints(tmp_path_factory) -> dict[str, Path]:
     directory = tmp_path_factory.mktemp("compare-checkpoints")
     return {
-        role: _write_checkpoint(directory / f"{role}.pt", role)
+        role: build_checkpoint(
+            directory / f"{role}.pt",
+            role=role,
+            hidden=4,
+            model_seed=5,
+            cache_id="compare-fixture",
+            metrics={"nll": 0.25},
+        ).path
         for role in (ROLE_BEST, ROLE_LAST, ROLE_POLICY)
     }
 
@@ -145,13 +75,39 @@ def _run_compare(checkpoint, out, *, split, seeds, extra=()):
     return cli.main(_compare_args(checkpoint, out, split=split, seeds=seeds, extra=extra))
 
 
-def test_compare_publishes_reproducible_artifacts(checkpoints, validation_seed, tmp_path, capsys):
-    out = tmp_path / "run"
-    code = _run_compare(
+def _run_validation(checkpoints, validation_seed, out, *, extra=()):
+    return _run_compare(
         checkpoints[ROLE_BEST],
         out,
         split="validation",
         seeds=[validation_seed],
+        extra=extra,
+    )
+
+
+def _assert_incomplete_run(out: Path) -> records.RunPaths:
+    paths = records.run_paths(out)
+    assert paths.state.is_file()
+    state = json.loads(paths.state.read_text(encoding="utf-8"))
+    assert state["status"] == records.STATE_INCOMPLETE
+    assert paths.plan.is_file()
+    assert not paths.summary.exists()
+    assert not (out / cli.COSTS_FILENAME).exists()
+    return paths
+
+
+def _assert_publication_refused(out: Path) -> None:
+    with pytest.raises(records.RecordError):
+        records.finalize_run(out)
+    assert not records.run_paths(out).summary.exists()
+
+
+def test_compare_publishes_reproducible_artifacts(checkpoints, validation_seed, tmp_path, capsys):
+    out = tmp_path / "run"
+    code = _run_validation(
+        checkpoints,
+        validation_seed,
+        out,
         extra=[
             "--batch-size",
             "3",
@@ -210,7 +166,7 @@ def test_compare_publishes_reproducible_artifacts(checkpoints, validation_seed, 
     assert metadata["dependencies"]["evaluator"]["package"] == "mahjong-eval"
 
     persisted = records.read_records(paths.records, plan, require_complete=True)
-    assert len(persisted) == 6
+    assert len(persisted) == GAMES_PER_SEED
     assert {record.neural_seats for record in persisted} == set(records.PLACEMENTS)
     summary = json.loads(paths.summary.read_text(encoding="utf-8"))
     assert summary == records.summarize_run(out)
@@ -219,17 +175,17 @@ def test_compare_publishes_reproducible_artifacts(checkpoints, validation_seed, 
     costs = json.loads(costs_path.read_text(encoding="utf-8"))
     assert costs["format"] == cli.COSTS_FORMAT
     assert costs["format_version"] == cli.COSTS_FORMAT_VERSION
-    assert costs["games"] == 6
+    assert costs["games"] == GAMES_PER_SEED
     assert costs["seeds"] == [validation_seed]
     assert costs["checkpoint_sha256"] == metadata["checkpoint"]["sha256"]
     assert costs["counts"]["decisions"]["total"] == sum(
         record.decisions for record in persisted
     )
-    assert costs["counts"]["games"] == 6
+    assert costs["counts"]["games"] == GAMES_PER_SEED
     assert costs["counts"]["teacher"]["cache"]["budget_bytes"] == 0
-    assert len(costs["per_game"]) == 6
+    assert len(costs["per_game"]) == GAMES_PER_SEED
     timings = costs["timings"]
-    assert timings["calls"]["env_resets"] == 6
+    assert timings["calls"]["env_resets"] == GAMES_PER_SEED
     assert timings["calls"]["env_steps"] == costs["counts"]["decisions"]["total"]
     assert timings["calls"]["inference_batches"] == costs["counts"]["inference"]["batches"]
     assert timings["calls"]["teacher_queries"] == costs["counts"]["teacher"]["queries"]
@@ -255,7 +211,7 @@ def test_test_split_run_is_the_frozen_comparison(checkpoints, test_seed, tmp_pat
     persisted = records.read_records(
         records.run_paths(out).records, plan, require_complete=True
     )
-    assert len(persisted) == 6
+    assert len(persisted) == GAMES_PER_SEED
 
 
 @pytest.mark.parametrize(
@@ -321,12 +277,8 @@ def test_invalid_numeric_options_are_rejected(
     checkpoints, validation_seed, tmp_path, capsys, flag, value
 ):
     out = tmp_path / "run"
-    code = _run_compare(
-        checkpoints[ROLE_BEST],
-        out,
-        split="validation",
-        seeds=[validation_seed],
-        extra=[flag, value],
+    code = _run_validation(
+        checkpoints, validation_seed, out, extra=[flag, value]
     )
     assert code == 2
     assert "must be a" in capsys.readouterr().err
@@ -362,11 +314,10 @@ def test_plan_and_completed_records_survive_an_inference_failure(
 
     monkeypatch.setattr(records.RecordWriter, "append", append)
     monkeypatch.setattr(inference.FrozenPolicy, "select_indices", select)
-    code = _run_compare(
-        checkpoints[ROLE_BEST],
+    code = _run_validation(
+        checkpoints,
+        validation_seed,
         out,
-        split="validation",
-        seeds=[validation_seed],
         extra=["--concurrent-games", "1"],
     )
     assert code == 2
@@ -374,18 +325,11 @@ def test_plan_and_completed_records_survive_an_inference_failure(
     assert "comparison stopped" in message
     assert "synthetic inference failure" in message
 
-    paths = records.run_paths(out)
-    assert paths.state.is_file()
-    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == "incomplete"
-    assert paths.plan.is_file()
-    assert not paths.summary.exists()
-    assert not (out / cli.COSTS_FILENAME).exists()
+    paths = _assert_incomplete_run(out)
     plan = records.read_plan(paths.plan)
     persisted = records.read_records(paths.records, plan)
-    assert 1 <= len(persisted) < 6 * len(plan.seeds)
-    with pytest.raises(records.RecordError):
-        records.finalize_run(out)
-    assert not paths.summary.exists()
+    assert 1 <= len(persisted) < GAMES_PER_SEED * len(plan.seeds)
+    _assert_publication_refused(out)
 
 
 def test_game_failure_after_a_completed_game_keeps_records_and_blocks_summary(
@@ -416,11 +360,10 @@ def test_game_failure_after_a_completed_game_keeps_records_and_blocks_summary(
         return FlakyEnv(mahjong_eval.Env(decision_limit=decision_limit))
 
     monkeypatch.setattr(scheduler, "_default_env", lambda: factory)
-    code = _run_compare(
-        checkpoints[ROLE_BEST],
+    code = _run_validation(
+        checkpoints,
+        validation_seed,
         out,
-        split="validation",
-        seeds=[validation_seed],
         extra=["--concurrent-games", "1"],
     )
     assert code == 2
@@ -429,13 +372,11 @@ def test_game_failure_after_a_completed_game_keeps_records_and_blocks_summary(
     assert f"seed {validation_seed}" in message
     assert "placement [0, 2]" in message
 
-    paths = records.run_paths(out)
-    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == "incomplete"
-    assert not paths.summary.exists()
-    assert not (out / cli.COSTS_FILENAME).exists()
+    paths = _assert_incomplete_run(out)
     plan = records.read_plan(paths.plan)
     persisted = records.read_records(paths.records, plan)
-    assert 1 <= len(persisted) < 6 * len(plan.seeds)
+    assert 1 <= len(persisted) < GAMES_PER_SEED * len(plan.seeds)
+    _assert_publication_refused(out)
 
 
 def test_costs_failure_keeps_completed_records_and_blocks_summary(
@@ -447,46 +388,36 @@ def test_costs_failure_keeps_completed_records_and_blocks_summary(
         raise cli.CompareError("synthetic costs failure")
 
     monkeypatch.setattr(cli, "write_costs", failing_costs)
-    code = _run_compare(
-        checkpoints[ROLE_BEST],
+    code = _run_validation(
+        checkpoints,
+        validation_seed,
         out,
-        split="validation",
-        seeds=[validation_seed],
         extra=["--concurrent-games", "6"],
     )
     assert code == 2
     assert "synthetic costs failure" in capsys.readouterr().err
 
-    paths = records.run_paths(out)
-    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == "incomplete"
-    assert paths.plan.is_file()
-    assert not paths.summary.exists()
-    assert not (out / cli.COSTS_FILENAME).exists()
+    paths = _assert_incomplete_run(out)
     plan = records.read_plan(paths.plan)
     persisted = records.read_records(paths.records, plan, require_complete=True)
-    assert len(persisted) == 6
+    assert len(persisted) == GAMES_PER_SEED
     # The T6 public gate must keep refusing the summary after costs failed.
-    with pytest.raises(records.RecordError):
-        records.finalize_run(out)
-    assert not paths.summary.exists()
+    _assert_publication_refused(out)
 
 
 def test_existing_run_artifacts_are_refused(checkpoints, validation_seed, tmp_path, capsys):
     out = tmp_path / "run"
     assert (
-        _run_compare(
-            checkpoints[ROLE_BEST],
+        _run_validation(
+            checkpoints,
+            validation_seed,
             out,
-            split="validation",
-            seeds=[validation_seed],
             extra=["--concurrent-games", "6"],
         )
         == 0
     )
     capsys.readouterr()
-    code = _run_compare(
-        checkpoints[ROLE_BEST], out, split="validation", seeds=[validation_seed]
-    )
+    code = _run_validation(checkpoints, validation_seed, out)
     assert code == 2
     assert "already contains" in capsys.readouterr().err
 
@@ -496,8 +427,7 @@ def test_checkpoint_runs_without_corpus_cache_or_training_run(
 ):
     isolated = tmp_path / "isolated"
     isolated.mkdir()
-    copied = isolated / "best.pt"
-    copied.write_bytes(checkpoints[ROLE_BEST].read_bytes())
+    copied = copy_checkpoint(checkpoints[ROLE_BEST], isolated / "best.pt")
     workdir = tmp_path / "cwd"
     workdir.mkdir()
     monkeypatch.chdir(workdir)
@@ -622,15 +552,12 @@ def test_persisted_score_disagreement_blocks_publication(
 
     monkeypatch.setattr(records, "read_records", inconsistent_read)
     out = tmp_path / "inconsistent-run"
-    assert _run_compare(
-        checkpoints[ROLE_BEST], out, split="validation", seeds=[validation_seed]
-    ) == 2
+    assert _run_validation(checkpoints, validation_seed, out) == 2
     message = capsys.readouterr().err
     assert "persisted terminal result differs" in message
     assert "completed records are retained" in message
-    assert json.loads((out / "state.json").read_text())["status"] == "incomplete"
-    assert not (out / "summary.json").exists()
-    assert not (out / cli.COSTS_FILENAME).exists()
+    _assert_incomplete_run(out)
+    _assert_publication_refused(out)
 
 
 def test_installed_console_script_is_available():

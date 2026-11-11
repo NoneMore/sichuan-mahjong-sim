@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -7,17 +8,9 @@ import pytest
 import torch
 
 from mahjong_bc.checkpoint import (
-    TrainingCheckpointState,
     atomic_torch_save,
     build_payload,
     load_policy_checkpoint,
-    save_checkpoint,
-)
-from mahjong_bc.config import (
-    DatasetIdentity,
-    ModelConfig,
-    TrainingConfig,
-    collect_dependency_versions,
 )
 from mahjong_bc.constants import (
     CANDIDATE_WIDTH,
@@ -31,73 +24,38 @@ from mahjong_bc.constants import (
 )
 from mahjong_bc.data import pad_decision_inputs
 from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError
-from mahjong_bc.policy import build_policy, greedy_indices
+from mahjong_bc.policy import greedy_indices
 
+from _checkpoint_fixtures import build_checkpoint, build_model, copy_checkpoint
 from mahjong_eval.inference import FrozenPolicy
 
 
-def _model_config() -> ModelConfig:
-    return ModelConfig(state_hidden=(8,), scorer_hidden=(8,))
+def _assert_frozen(policy: FrozenPolicy, *, label: str = "policy") -> None:
+    assert policy._model.training is False, f"{label} model is not in eval mode"
+    assert all(
+        not parameter.requires_grad for parameter in policy._model.parameters()
+    ), f"{label} model exposes trainable parameters"
 
 
-def _training_state(model) -> TrainingCheckpointState:
-    train = DatasetIdentity(
-        cache_id="inference-fixture",
-        split="train",
-        encoding_version=ENCODING_VERSION,
-        preparation_format_version=1,
-        source_revision="fixture-revision",
-        decisions=4,
-        eligible_decisions=2,
-    )
-    validation = DatasetIdentity(
-        cache_id="inference-fixture",
-        split="validation",
-        encoding_version=ENCODING_VERSION,
-        preparation_format_version=1,
-        source_revision="fixture-revision",
-        decisions=2,
-        eligible_decisions=1,
-    )
-    return TrainingCheckpointState(
-        training_config=TrainingConfig(
-            seed=3, epochs=1, batch_size=1, learning_rate=0.01
-        ),
-        train_dataset_identity=train,
-        validation_dataset_identity=validation,
-        dependencies=collect_dependency_versions(),
-        device_type="cpu",
-        completed_epochs=1,
-        global_step=4,
-        samples_seen=6,
-        best_validation_nll=0.25,
-        best_epoch=0,
-        history=[{"epoch": 0, "steps": 4, "samples": 6}],
-        optimizer_state={"state": {}, "param_groups": [{"lr": 0.01}]},
-        torch_rng_state=torch.get_rng_state(),
-        torch_cuda_rng_states=None,
-        order_rng_state=torch.Generator().manual_seed(7).get_state(),
-        best_model_state={
-            name: value.detach().clone()
-            for name, value in model.state_dict().items()
-        },
-        best_metrics={"nll": 0.25},
-    )
-
-
-def _write_checkpoint(path, *, role: str = ROLE_BEST):
-    model = build_policy(_model_config(), seed=5)
-    if role == ROLE_POLICY:
-        save_checkpoint(path, model, role=role, metrics={"nll": 0.25})
-    else:
-        save_checkpoint(
-            path,
-            model,
+@pytest.fixture(scope="module")
+def checkpoints(tmp_path_factory) -> dict[str, Path]:
+    directory = tmp_path_factory.mktemp("inference-checkpoints")
+    return {
+        role: build_checkpoint(
+            directory / f"{role}.pt",
             role=role,
-            training=_training_state(model),
+            hidden=8,
+            model_seed=5,
+            cache_id="inference-fixture",
             metrics={"nll": 0.25},
-        )
-    return path
+        ).path
+        for role in (ROLE_BEST, ROLE_LAST, ROLE_POLICY)
+    }
+
+
+@pytest.fixture
+def best_checkpoint(checkpoints) -> Path:
+    return checkpoints[ROLE_BEST]
 
 
 def _decision(rng: np.random.Generator, candidates: int):
@@ -138,19 +96,17 @@ class _FirstFeatureScorer:
         return candidates[:, :, 0].clone()
 
 
-def test_select_indices_matches_direct_scores_and_keeps_input_order(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+def test_select_indices_matches_direct_scores_and_keeps_input_order(
+    best_checkpoint,
+):
+    policy = FrozenPolicy(best_checkpoint)
     assert policy.role == ROLE_BEST
     assert policy.encoding_version == ENCODING_VERSION
     assert policy.metrics == {"nll": 0.25}
     metadata = policy.metadata()
     assert metadata["role"] == ROLE_BEST
     assert metadata["has_training_state"] is True
-    assert policy._model.training is False
-    assert all(
-        not parameter.requires_grad
-        for parameter in policy._model.parameters()
-    )
+    _assert_frozen(policy)
 
     rng = np.random.default_rng(11)
     counts = [3, 1, 2, 4, 1, 2, 3]
@@ -171,8 +127,8 @@ def test_select_indices_matches_direct_scores_and_keeps_input_order(tmp_path):
         assert index == expected
 
 
-def test_larger_padding_does_not_change_shorter_decision(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+def test_larger_padding_does_not_change_shorter_decision(best_checkpoint):
+    policy = FrozenPolicy(best_checkpoint)
     rng = np.random.default_rng(12)
     short = _decision(rng, 2)
     long = _decision(rng, 5)
@@ -181,8 +137,10 @@ def test_larger_padding_does_not_change_shorter_decision(tmp_path):
     assert padded[0] == alone[0]
 
 
-def test_forced_decisions_bypass_inference_and_keep_alignment(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+def test_forced_decisions_bypass_inference_and_keep_alignment(
+    best_checkpoint,
+):
+    policy = FrozenPolicy(best_checkpoint)
     recording = _RecordingPolicy([[-3.0, 4.0, 1.0]])
     policy._model = recording
     rng = np.random.default_rng(13)
@@ -204,8 +162,8 @@ def test_forced_decisions_bypass_inference_and_keep_alignment(tmp_path):
     assert recording.calls == []
 
 
-def test_ties_choose_the_lowest_canonical_candidate_index(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+def test_ties_choose_the_lowest_canonical_candidate_index(best_checkpoint):
+    policy = FrozenPolicy(best_checkpoint)
     policy._model = _RecordingPolicy(
         [
             [1.0, 1.0, 0.0],
@@ -218,18 +176,24 @@ def test_ties_choose_the_lowest_canonical_candidate_index(tmp_path):
     assert policy.select_indices(decisions) == [0, 1, 0]
 
 
-def test_nonfinite_valid_logits_fail_before_selection(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+@pytest.mark.parametrize(
+    "invalid",
+    [float("nan"), float("inf"), float("-inf")],
+    ids=["nan", "positive-infinity", "negative-infinity"],
+)
+def test_nonfinite_valid_logits_fail_before_selection(best_checkpoint, invalid):
+    policy = FrozenPolicy(best_checkpoint)
     rng = np.random.default_rng(15)
     decision = _decision(rng, 3)
-    for invalid in (float("nan"), float("inf"), float("-inf")):
-        policy._model = _RecordingPolicy([[0.0, invalid, 1.0]])
-        with pytest.raises(DataError, match="finite"):
-            policy.select_indices([decision])
+    policy._model = _RecordingPolicy([[0.0, invalid, 1.0]])
+    with pytest.raises(DataError, match="finite"):
+        policy.select_indices([decision])
 
 
-def test_nonfinite_padded_logits_do_not_affect_valid_selection(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+def test_nonfinite_padded_logits_do_not_affect_valid_selection(
+    best_checkpoint,
+):
+    policy = FrozenPolicy(best_checkpoint)
     policy._model = _RecordingPolicy(
         [[1.0, 0.0, 0.0], [0.0, 2.0, float("nan")]]
     )
@@ -238,8 +202,8 @@ def test_nonfinite_padded_logits_do_not_affect_valid_selection(tmp_path):
     assert policy.select_indices(decisions) == [0, 1]
 
 
-def test_candidate_order_controls_the_selected_index(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+def test_candidate_order_controls_the_selected_index(best_checkpoint):
+    policy = FrozenPolicy(best_checkpoint)
     policy._model = _FirstFeatureScorer()
     state = np.zeros(STATE_WIDTH, dtype=np.float32)
     features = np.zeros((2, CANDIDATE_WIDTH), dtype=np.float32)
@@ -254,8 +218,8 @@ def test_candidate_order_controls_the_selected_index(tmp_path):
     assert policy.select_indices([backward]) == [0]
 
 
-def test_empty_and_invalid_decisions_are_rejected(tmp_path):
-    policy = FrozenPolicy(_write_checkpoint(tmp_path / "best.pt"))
+def test_empty_and_invalid_decisions_are_rejected(best_checkpoint):
+    policy = FrozenPolicy(best_checkpoint)
     assert policy.select_indices([]) == []
     with pytest.raises(DataError, match="iterable"):
         policy.select_indices(42)  # type: ignore[arg-type]
@@ -292,20 +256,19 @@ def test_empty_and_invalid_decisions_are_rejected(tmp_path):
         )
 
 
-def test_checkpoint_roles_are_limited_to_frozen_policies(tmp_path):
-    best = _write_checkpoint(tmp_path / "best.pt", role=ROLE_BEST)
-    loaded = FrozenPolicy(best, "cpu")
+def test_checkpoint_roles_are_limited_to_frozen_policies(checkpoints):
+    loaded = FrozenPolicy(checkpoints[ROLE_BEST], "cpu")
     assert loaded.role == ROLE_BEST
     assert loaded.device == torch.device("cpu")
-    frozen = _write_checkpoint(tmp_path / "policy.pt", role=ROLE_POLICY)
-    assert FrozenPolicy(frozen).role == ROLE_POLICY
-    last = _write_checkpoint(tmp_path / "last.pt", role=ROLE_LAST)
+    assert FrozenPolicy(checkpoints[ROLE_POLICY]).role == ROLE_POLICY
     with pytest.raises(CheckpointError, match="not 'last'"):
-        FrozenPolicy(last)
+        FrozenPolicy(checkpoints[ROLE_LAST])
 
 
-def test_from_loaded_keeps_weights_after_checkpoint_path_removed(tmp_path):
-    path = _write_checkpoint(tmp_path / "best.pt")
+def test_from_loaded_keeps_weights_after_checkpoint_path_removed(
+    tmp_path, best_checkpoint
+):
+    path = copy_checkpoint(best_checkpoint, tmp_path / "best.pt")
     loaded = load_policy_checkpoint(path)
     weights = {
         name: value.detach().clone()
@@ -333,8 +296,10 @@ def test_from_loaded_keeps_weights_after_checkpoint_path_removed(tmp_path):
     assert policy.select_indices(decisions) == expected
 
 
-def test_from_loaded_never_rereads_checkpoint_path(tmp_path, monkeypatch):
-    path = _write_checkpoint(tmp_path / "best.pt")
+def test_from_loaded_never_rereads_checkpoint_path(
+    tmp_path, monkeypatch, best_checkpoint
+):
+    path = copy_checkpoint(best_checkpoint, tmp_path / "best.pt")
     loaded = load_policy_checkpoint(path)
     rng = np.random.default_rng(22)
     decisions = [_decision(rng, count) for count in (2, 3, 1)]
@@ -353,8 +318,10 @@ def test_from_loaded_never_rereads_checkpoint_path(tmp_path, monkeypatch):
     assert policy.select_indices(decisions) == expected
 
 
-def test_from_loaded_reuses_role_validation_without_file_access(tmp_path):
-    last_path = _write_checkpoint(tmp_path / "last.pt", role=ROLE_LAST)
+def test_from_loaded_reuses_role_validation_without_file_access(
+    tmp_path, checkpoints
+):
+    last_path = copy_checkpoint(checkpoints[ROLE_LAST], tmp_path / "last.pt")
     loaded = load_policy_checkpoint(last_path)
     last_path.unlink()
     with pytest.raises(CheckpointError, match="not 'last'"):
@@ -363,22 +330,20 @@ def test_from_loaded_reuses_role_validation_without_file_access(tmp_path):
         FrozenPolicy.from_loaded(object())  # type: ignore[arg-type]
 
 
-def test_from_loaded_freezes_independent_copies_on_requested_device(tmp_path):
-    path = _write_checkpoint(tmp_path / "best.pt")
-    loaded = load_policy_checkpoint(path)
+def test_from_loaded_freezes_independent_copies_on_requested_device(
+    best_checkpoint,
+):
+    loaded = load_policy_checkpoint(best_checkpoint)
     first = FrozenPolicy.from_loaded(loaded, torch.device("cpu"))
     second = FrozenPolicy.from_loaded(loaded)
     assert first.device == torch.device("cpu")
     assert second.device == torch.device("cpu")
     assert first._model is not second._model
     assert first._model is not loaded.model
-    for policy in (first, second):
+    for index, policy in enumerate((first, second)):
+        _assert_frozen(policy, label=f"copy {index}")
         assert all(
             parameter.device == torch.device("cpu")
-            for parameter in policy._model.parameters()
-        )
-        assert all(
-            not parameter.requires_grad
             for parameter in policy._model.parameters()
         )
     assert any(
@@ -387,9 +352,8 @@ def test_from_loaded_freezes_independent_copies_on_requested_device(tmp_path):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
-def test_from_loaded_moves_independent_copy_to_cuda(tmp_path):
-    path = _write_checkpoint(tmp_path / "best.pt")
-    loaded = load_policy_checkpoint(path)
+def test_from_loaded_moves_independent_copy_to_cuda(best_checkpoint):
+    loaded = load_policy_checkpoint(best_checkpoint)
     policy = FrozenPolicy.from_loaded(loaded, "cuda")
     assert policy.device.type == "cuda"
     assert all(
@@ -403,7 +367,7 @@ def test_from_loaded_moves_independent_copy_to_cuda(tmp_path):
     rng = np.random.default_rng(23)
     assert policy.select_indices([_decision(rng, 2)])[0] in (0, 1)
 
-    loaded_cuda = load_policy_checkpoint(path, device="cuda")
+    loaded_cuda = load_policy_checkpoint(best_checkpoint, device="cuda")
     cpu_policy = FrozenPolicy.from_loaded(loaded_cuda, "cpu")
     assert cpu_policy.device == torch.device("cpu")
     assert all(
@@ -418,7 +382,7 @@ def test_from_loaded_moves_independent_copy_to_cuda(tmp_path):
 
 
 def test_legacy_format2_best_checkpoint_is_readable(tmp_path):
-    model = build_policy(_model_config(), seed=5)
+    model = build_model(hidden=8, seed=5)
     payload = build_payload(model, role=ROLE_POLICY, metrics={"nll": 0.25})
     payload["role"] = ROLE_BEST
     payload["checkpoint_format_version"] = 2
@@ -436,7 +400,7 @@ def test_legacy_format2_best_checkpoint_is_readable(tmp_path):
 
 
 def test_unsupported_checkpoint_versions_are_rejected(tmp_path):
-    model = build_policy(_model_config(), seed=5)
+    model = build_model(hidden=8, seed=5)
     payload = build_payload(model, role=ROLE_POLICY, metrics={"nll": 0.25})
 
     encoding = dict(payload)
@@ -465,11 +429,11 @@ def test_unsupported_checkpoint_versions_are_rejected(tmp_path):
 
 
 def test_inference_uses_only_the_checkpoint_not_training_artifacts(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, best_checkpoint
 ):
     artifacts = tmp_path / "artifacts"
     artifacts.mkdir()
-    checkpoint = _write_checkpoint(artifacts / "best.pt")
+    checkpoint = copy_checkpoint(best_checkpoint, artifacts / "best.pt")
     assert sorted(path.name for path in artifacts.iterdir()) == ["best.pt"]
 
     elsewhere = tmp_path / "elsewhere"
