@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::game::Game;
+
 #[test]
 fn peng_must_strictly_lower_shanten() {
     let missing = Suit::Tiao;
@@ -456,6 +458,245 @@ fn hypothetical_meld_positions_conserve_physical_ownership() {
     assert_eq!(
         physical(&after_open_kong, &kong_public),
         physical(&response_hand, &response_public)
+    );
+}
+
+fn pending_action_list<'a>(decision: &'a Decision<'_>) -> &'a [Action] {
+    match &decision.legal_actions {
+        LegalActions::Actions(actions) => actions,
+        LegalActions::Exchange { .. } => panic!("expected an action list"),
+    }
+}
+
+fn first_pending_action(game: &mut Game, wanted: impl Fn(Action) -> bool) -> Action {
+    let decision = game.next_decision().expect("pending scenario decision");
+    pending_action_list(&decision)
+        .iter()
+        .copied()
+        .find(|&action| wanted(action))
+        .expect("scenario action is legal")
+}
+
+/// Advances a seeded game with the deterministic first-legal baseline until
+/// the pending decision satisfies `stop`, leaving that decision unsubmitted.
+fn drive_first_legal_until(game: &mut Game, mut stop: impl FnMut(&Decision<'_>) -> bool) {
+    let mut policy = crate::policy::FirstLegalPolicy::new();
+    for _ in 0..512 {
+        let decision = game
+            .next_decision()
+            .expect("real-game scenario ended before the target");
+        if stop(&decision) {
+            return;
+        }
+        let seat = decision.seat;
+        let action = policy.choose(&decision);
+        game.submit(seat, action)
+            .expect("the first-legal baseline returns a legal action");
+    }
+    panic!("real-game scenario was not reached within 512 decisions");
+}
+
+/// Recovers the declaration-only hand from a post-kong observation by removing
+/// the one tile the actual replacement draw added. The test deliberately does
+/// not assume a wall position or a fixed replacement tile.
+fn assert_after_replacement_draw(expected: &Hand, actual: &Hand) {
+    assert_eq!(
+        actual.total(),
+        expected.total() + 1,
+        "the post-kong observation must contain one replacement draw"
+    );
+    let mut replacement = None;
+    for index in 0..TILE_KINDS {
+        match actual.counts()[index] as i16 - expected.counts()[index] as i16 {
+            0 => {}
+            1 if replacement.is_none() => {
+                replacement = Some(Tile::from_index(index as u8).expect("tile index"));
+            }
+            difference => panic!(
+                "unexpected hand difference {difference} at tile index {index}; \
+                 the declaration-only hand must differ by exactly one drawn tile"
+            ),
+        }
+    }
+    let replacement = replacement.expect("the kong submission must draw one tile");
+    let mut declaration_only = *actual;
+    declaration_only
+        .remove(replacement)
+        .expect("the replacement tile is in the observed hand");
+    assert_eq!(
+        &declaration_only, expected,
+        "hand after removing the actual replacement draw {replacement}"
+    );
+}
+
+/// Compares a peng or open-kong position with the same transition performed by
+/// a real Game, using only the pending decision's public observation.
+fn assert_claim_position_matches_game(game: &mut Game, action: Action) {
+    let decision = game.next_decision().expect("pending claim");
+    let seat = decision.seat;
+    assert_eq!(decision.observation.stage, DecisionStage::DiscardResponse);
+    let response = decision.observation.response.expect("response view");
+    assert!(!response.robbing_added_kong);
+    assert!(
+        pending_action_list(&decision).contains(&action),
+        "target claim must be legal"
+    );
+    let public = base_public(&decision.observation);
+    let (kind, expected_hand, expected_melds, expected_public) = super::super::claim_position(
+        action,
+        decision.observation.own_hand,
+        decision.observation.own_melds,
+        &public,
+        response.tile,
+        response.source,
+    )
+    .expect("claim position");
+    let expected_kind = match action {
+        Action::Peng => MeldKind::Peng,
+        Action::OpenKong => MeldKind::OpenKong,
+        _ => panic!("not a claim action"),
+    };
+    assert_eq!(kind, expected_kind);
+
+    game.submit(seat, action).expect("target claim is legal");
+    let after = game.next_decision().expect("post-claim decision");
+    assert_eq!(after.seat, seat);
+    assert_eq!(after.observation.stage, DecisionStage::Turn);
+    assert_eq!(
+        after.observation.own_melds,
+        expected_melds.as_slice(),
+        "melds after the claim"
+    );
+    assert_eq!(
+        base_public(&after.observation),
+        expected_public,
+        "public ownership after the claim"
+    );
+    match action {
+        Action::Peng => assert_eq!(
+            after.observation.own_hand, &expected_hand,
+            "peng changes no concealed tile beyond the two used tiles"
+        ),
+        Action::OpenKong => {
+            assert_after_replacement_draw(&expected_hand, after.observation.own_hand)
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// Compares a concealed or added-kong position with the same transition
+/// performed by a real Game, including any added-kong robbery responses. Returns
+/// the number of robbery responses that were declined.
+fn assert_turn_kong_position_matches_game(game: &mut Game, action: Action) -> usize {
+    let decision = game.next_decision().expect("pending kong");
+    let seat = decision.seat;
+    assert_eq!(decision.observation.stage, DecisionStage::Turn);
+    assert!(
+        pending_action_list(&decision).contains(&action),
+        "target kong must be legal"
+    );
+    let public = base_public(&decision.observation);
+    let (kind, expected_hand, expected_melds, expected_public) = kong_position(
+        action,
+        decision.observation.own_hand,
+        decision.observation.own_melds,
+        &public,
+    )
+    .expect("kong position");
+    let expected_kind = match action {
+        Action::ConcealedKong(_) => MeldKind::ConcealedKong,
+        Action::AddedKong(_) => MeldKind::AddedKong,
+        _ => panic!("not a turn kong action"),
+    };
+    assert_eq!(kind, expected_kind);
+
+    game.submit(seat, action).expect("target kong is legal");
+    let mut declined_robs = 0;
+    loop {
+        let after = game.next_decision().expect("post-kong decision");
+        if after.observation.stage == DecisionStage::AddedKongResponse {
+            assert!(
+                pending_action_list(&after).contains(&Action::Pass),
+                "declining a rob is always legal"
+            );
+            let responder = after.seat;
+            game.submit(responder, Action::Pass)
+                .expect("declining the rob is legal");
+            declined_robs += 1;
+            continue;
+        }
+        assert_eq!(after.seat, seat);
+        assert_eq!(after.observation.stage, DecisionStage::Turn);
+        assert_eq!(
+            after.observation.own_melds,
+            expected_melds.as_slice(),
+            "melds after the kong"
+        );
+        assert_eq!(
+            base_public(&after.observation),
+            expected_public,
+            "public ownership after the kong"
+        );
+        assert_after_replacement_draw(&expected_hand, after.observation.own_hand);
+        return declined_robs;
+    }
+}
+
+#[test]
+fn real_game_peng_matches_the_claim_position() {
+    let mut game = Game::new(0);
+    // Reach a peng while an earlier peng is already declared, so the test also
+    // checks that existing melds are preserved rather than replaced.
+    drive_first_legal_until(&mut game, |decision| {
+        decision.observation.stage == DecisionStage::DiscardResponse
+            && !decision.observation.own_melds.is_empty()
+            && pending_action_list(decision).contains(&Action::Peng)
+    });
+    assert_claim_position_matches_game(&mut game, Action::Peng);
+}
+
+#[test]
+fn real_game_open_kong_matches_the_claim_position() {
+    let mut game = Game::new(4);
+    drive_first_legal_until(&mut game, |decision| {
+        decision.observation.stage == DecisionStage::DiscardResponse
+            && pending_action_list(decision).contains(&Action::OpenKong)
+    });
+    assert_claim_position_matches_game(&mut game, Action::OpenKong);
+}
+
+#[test]
+fn real_game_concealed_kong_matches_the_kong_position() {
+    let mut game = Game::new(3);
+    drive_first_legal_until(&mut game, |decision| {
+        decision.observation.stage == DecisionStage::Turn
+            && pending_action_list(decision)
+                .iter()
+                .any(|action| matches!(action, Action::ConcealedKong(_)))
+    });
+    let action = first_pending_action(&mut game, |action| {
+        matches!(action, Action::ConcealedKong(_))
+    });
+    assert_eq!(
+        assert_turn_kong_position_matches_game(&mut game, action),
+        0,
+        "the concealed-kong scenario has no robbery opportunity"
+    );
+}
+
+#[test]
+fn real_game_added_kong_matches_the_kong_position() {
+    let mut game = Game::new(1778);
+    drive_first_legal_until(&mut game, |decision| {
+        decision.observation.stage == DecisionStage::Turn
+            && pending_action_list(decision)
+                .iter()
+                .any(|action| matches!(action, Action::AddedKong(_)))
+    });
+    let action = first_pending_action(&mut game, |action| matches!(action, Action::AddedKong(_)));
+    assert!(
+        assert_turn_kong_position_matches_game(&mut game, action) > 0,
+        "this scenario must exercise the added-kong robbery response before replacement"
     );
 }
 
