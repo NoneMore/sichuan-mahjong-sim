@@ -85,7 +85,8 @@ jobs:
           cd mahjong_eval-0.1.0
           "$GITHUB_WORKSPACE/.venv/bin/python" -m maturin build --release --locked --out dist
           "$GITHUB_WORKSPACE/.venv/bin/python" -m pip install --no-deps --target installed dist/*.whl
-          PYTHONPATH="$PWD/installed" "$GITHUB_WORKSPACE/.venv/bin/python" -c '
+          cd installed
+          "$GITHUB_WORKSPACE/.venv/bin/python" -c '
           import mahjong_eval
           source = mahjong_eval.compiled_source()["extension"]
           assert source["source_complete"]
