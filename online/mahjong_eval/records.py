@@ -1,7 +1,12 @@
 """Plan, raw terminal records, and seed-block summaries for online evaluation.
 
-One run directory holds three artifacts:
+One run directory holds four artifacts:
 
+``state.json``
+    The run's persistent completion state. :func:`create_run` publishes it as
+    ``"incomplete"`` before any other artifact. Only a clean close of the
+    record stream changes it to ``"complete"``; a failed append or close leaves
+    it incomplete even when every record already reached the disk.
 ``plan.json``
     The fixed six-placement plan and its reproducibility metadata, published
     before the first game.
@@ -9,8 +14,9 @@ One run directory holds three artifacts:
     One compact JSON object per completed game, appended and flushed as each
     game reaches a terminal result.
 ``summary.json``
-    Published only after every persisted record validates and the complete
-    summary has been recomputed from the files above.
+    Published only after every persisted record validates, the complete
+    summary has been recomputed from the files above, and the run state says
+    the record stream closed cleanly.
 
 The summary never trusts an in-memory game list: :func:`summarize_run` reads
 ``plan.json`` and ``games.jsonl`` again, and :func:`finalize_run` is the only
@@ -63,15 +69,22 @@ PLAN_FORMAT_VERSION = 1
 SUMMARY_FORMAT = "mahjong-python-eval-summary"
 SUMMARY_FORMAT_VERSION = 1
 
+STATE_FILENAME = "state.json"
 PLAN_FILENAME = "plan.json"
 RECORDS_FILENAME = "games.jsonl"
 SUMMARY_FILENAME = "summary.json"
+
+STATE_FORMAT = "mahjong-python-eval-run-state"
+STATE_FORMAT_VERSION = 1
+STATE_INCOMPLETE = "incomplete"
+STATE_COMPLETE = "complete"
 
 _U64_MAX = 2**64 - 1
 _I32_MIN = -(2**31)
 _I32_MAX = 2**31 - 1
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
+_STATE_KEYS = frozenset({"format", "format_version", "status"})
 _PLAN_KEYS = frozenset(
     {
         "format",
@@ -141,6 +154,11 @@ __all__ = [
     "RecordWriter",
     "RunPaths",
     "SEAT_COUNT",
+    "STATE_COMPLETE",
+    "STATE_FILENAME",
+    "STATE_FORMAT",
+    "STATE_FORMAT_VERSION",
+    "STATE_INCOMPLETE",
     "SUMMARY_FILENAME",
     "SUMMARY_FORMAT",
     "SUMMARY_FORMAT_VERSION",
@@ -452,6 +470,20 @@ class EvaluationPlan:
         )
 
 
+def _revalidate_plan(plan: EvaluationPlan) -> None:
+    """Re-run full plan validation before a plan is persisted.
+
+    ``EvaluationPlan`` copies its metadata only shallowly, so a caller can
+    mutate nested values after construction. Persisting such a plan would
+    publish a document that :func:`read_plan` rejects, so every writer repeats
+    validation on the current object before producing output.
+    """
+
+    if not isinstance(plan, EvaluationPlan):
+        raise RecordError("plan must be an EvaluationPlan")
+    EvaluationPlan.from_dict(plan.to_dict())
+
+
 def _validate_checkpoint_identity(value: Any) -> Mapping[str, Any]:
     checkpoint = _require_mapping(value, "metadata.checkpoint")
     missing = sorted(_CHECKPOINT_KEYS - set(checkpoint))
@@ -551,6 +583,12 @@ def _validate_metadata(value: Any) -> Mapping[str, Any]:
             "metadata.model_format_version differs from metadata.checkpoint"
         )
 
+    rust_runtime = _require_mapping(
+        metadata["rust_runtime"], "metadata.rust_runtime"
+    )
+    if not rust_runtime:
+        raise RecordError("metadata.rust_runtime must not be empty")
+
     _require_str(metadata["split_algorithm"], "metadata.split_algorithm")
     selection = _require_mapping(metadata["selection"], "metadata.selection")
     missing_selection = sorted(_SELECTION_KEYS - set(selection))
@@ -561,6 +599,18 @@ def _validate_metadata(value: Any) -> Mapping[str, Any]:
     _require_str(selection["mode"], "metadata.selection.mode")
     _require_str(selection["device"], "metadata.selection.device")
     _require_int(selection["batch_size"], "metadata.selection.batch_size", minimum=1)
+    teacher_cache = metadata["teacher_cache"]
+    if not (
+        isinstance(teacher_cache, Mapping)
+        or (
+            isinstance(teacher_cache, int)
+            and not isinstance(teacher_cache, bool)
+            and teacher_cache >= 0
+        )
+    ):
+        raise RecordError(
+            "metadata.teacher_cache must be a nonnegative integer or a JSON object"
+        )
     _require_mapping(metadata["dependencies"], "metadata.dependencies")
 
     training_provenance = metadata["training_provenance"]
@@ -586,7 +636,9 @@ def build_plan_metadata(
     ``checkpoint`` is normally the identity returned by
     :func:`load_checkpoint_with_identity`. ``training_provenance`` stays a
     separate field and is never part of checkpoint/evaluation identity.
-    ``rust_runtime`` is stored verbatim: the native layer owns its structure.
+    ``rust_runtime`` is a nonempty mapping stored verbatim: the native layer
+    owns its structure. ``teacher_cache`` is either ``0`` for no cache or a
+    JSON object describing the configured cache.
     ``extra`` may add further top-level metadata keys but cannot replace a
     required one.
     """
@@ -670,7 +722,7 @@ def checkpoint_identity_record(
         "metrics": loaded.metrics,
     }
     if path is not None:
-        record["path"] = str(path)
+        record["path"] = str(Path(path).resolve())
     _validate_checkpoint_identity(record)
     return record
 
@@ -690,7 +742,7 @@ def load_checkpoint_with_identity(
 
     from mahjong_bc.checkpoint import load_policy_checkpoint
 
-    source = Path(path)
+    source = Path(path).resolve()
     try:
         data = source.read_bytes()
     except OSError as exc:
@@ -908,7 +960,7 @@ def _atomic_write_json(path: Path | str, value: Any) -> None:
 
 
 def run_paths(directory: Path | str) -> "RunPaths":
-    """Return the three artifact paths inside one run directory."""
+    """Return the artifact paths inside one run directory."""
 
     root = Path(directory)
     return RunPaths(
@@ -926,12 +978,75 @@ class RunPaths:
     records: Path
     summary: Path
 
+    @property
+    def state(self) -> Path:
+        """The persistent run-state path; not an optional artifact."""
+
+        return self.directory / STATE_FILENAME
+
+
+def _state_document(status: str) -> dict[str, Any]:
+    return {
+        "format": STATE_FORMAT,
+        "format_version": STATE_FORMAT_VERSION,
+        "status": status,
+    }
+
+
+def _write_run_state(path: Path | str, status: str) -> None:
+    try:
+        _atomic_write_json(path, _state_document(status))
+    except (OSError, TypeError, ValueError) as exc:
+        raise RecordError(f"failed to write run state {path}: {exc}") from exc
+
+
+def _read_run_state(path: Path | str) -> str:
+    source = Path(path)
+    try:
+        text = source.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RecordError(f"cannot read run state {source}: {exc}") from exc
+    state = _require_mapping(
+        _loads_json(text, f"run state {source}"), "run state"
+    )
+    _require_exact_keys(state, _STATE_KEYS, "run state")
+    if state["format"] != STATE_FORMAT:
+        raise RecordError(
+            f"unsupported run state format {state['format']!r}; "
+            f"expected {STATE_FORMAT!r}"
+        )
+    format_version = _require_int(
+        state["format_version"], "run state format_version", minimum=1
+    )
+    if format_version != STATE_FORMAT_VERSION:
+        raise RecordError(
+            f"unsupported run state format version {format_version!r}; "
+            f"expected {STATE_FORMAT_VERSION}"
+        )
+    status = _require_str(state["status"], "run state status")
+    if status not in (STATE_INCOMPLETE, STATE_COMPLETE):
+        raise RecordError(f"unsupported run state status {status!r}")
+    return status
+
+
+def _require_complete_run_state(path: Path | str) -> None:
+    source = Path(path)
+    try:
+        status = _read_run_state(source)
+    except RecordError as exc:
+        raise RecordError(
+            f"run is incomplete: cannot verify run state {source}: {exc}"
+        ) from exc
+    if status != STATE_COMPLETE:
+        raise RecordError(
+            f"run is incomplete (state {status!r}); refusing to publish a summary"
+        )
+
 
 def write_plan(plan: EvaluationPlan, path: Path | str) -> None:
-    """Atomically publish the plan before play starts."""
+    """Atomically publish a validated plan before play starts."""
 
-    if not isinstance(plan, EvaluationPlan):
-        raise RecordError("plan must be an EvaluationPlan")
+    _revalidate_plan(plan)
     document = plan.to_dict()
     try:
         _atomic_write_json(path, document)
@@ -967,10 +1082,13 @@ def _open_records_file(path: Path) -> Any:
 class RecordWriter:
     """Stream completed games to ``games.jsonl``.
 
-    Use :func:`create_run` rather than constructing this class directly. Each
-    ``append`` validates the record, writes one line, flushes, and fsyncs before
-    returning. Any append failure marks the writer failed; completed lines
-    remain on disk and :meth:`finalize` refuses to publish a summary.
+    Use :func:`create_run` rather than constructing this class directly. The run
+    state starts as ``"incomplete"`` and changes to ``"complete"`` only after a
+    clean close with no failed append. Each ``append`` validates the record,
+    writes one line, flushes, and fsyncs before returning. Any append or close
+    failure marks the writer failed; completed lines remain on disk, the
+    persisted state stays incomplete, and :meth:`finalize` and
+    :func:`finalize_run` refuse to publish a summary.
     """
 
     def __init__(self, directory: Path, plan: EvaluationPlan, handle: Any) -> None:
@@ -980,6 +1098,7 @@ class RecordWriter:
         self._seen: set[tuple[int, tuple[int, int]]] = set()
         self._failed: str | None = None
         self._closed = False
+        self._state_complete = False
 
     @property
     def plan(self) -> EvaluationPlan:
@@ -998,7 +1117,7 @@ class RecordWriter:
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
         try:
-            self.close()
+            self._close(mark_complete=exc_type is None)
         except Exception:
             if exc_type is None:
                 raise
@@ -1036,6 +1155,11 @@ class RecordWriter:
         self._seen.add(key)
 
     def close(self) -> None:
+        """Close the record stream and mark the run complete when clean."""
+
+        self._close(mark_complete=True)
+
+    def _close(self, *, mark_complete: bool) -> None:
         if self._handle is not None:
             handle = self._handle
             self._handle = None
@@ -1048,6 +1172,19 @@ class RecordWriter:
                     f"failed to close {self._paths.records}: {exc}"
                 ) from exc
         self._closed = True
+        if self._failed is not None or self._state_complete:
+            return
+        if not mark_complete:
+            self._failed = "run exited with an exception"
+            return
+        try:
+            _write_run_state(self._paths.state, STATE_COMPLETE)
+        except RecordError as exc:
+            self._failed = f"{type(exc).__name__}: {exc}"
+            raise RecordError(
+                f"failed to mark run complete: {exc}"
+            ) from exc
+        self._state_complete = True
 
     def finalize(self) -> dict[str, Any]:
         """Recompute and publish ``summary.json`` from the persisted files."""
@@ -1069,13 +1206,14 @@ class RecordWriter:
 def create_run(directory: Path | str, plan: EvaluationPlan) -> RecordWriter:
     """Create a fresh run directory, write the plan, and open the record file.
 
-    Existing plan/record/summary artifacts are refused so a failed or completed
-    run cannot be silently mixed with a new one. The plan is published before
-    the record file is opened, so a later open failure still leaves the plan.
+    The plan is revalidated before anything is created. The run state is
+    published as ``"incomplete"`` first, then the plan, then the record file.
+    Existing state/plan/record/summary artifacts are refused so a failed or
+    completed run cannot be silently mixed with a new one. A later open failure
+    still leaves the run state and plan.
     """
 
-    if not isinstance(plan, EvaluationPlan):
-        raise RecordError("plan must be an EvaluationPlan")
+    _revalidate_plan(plan)
     paths = run_paths(directory)
     try:
         paths.directory.mkdir(parents=True, exist_ok=True)
@@ -1085,7 +1223,7 @@ def create_run(directory: Path | str, plan: EvaluationPlan) -> RecordWriter:
         ) from exc
     existing = [
         path.name
-        for path in (paths.plan, paths.records, paths.summary)
+        for path in (paths.state, paths.plan, paths.records, paths.summary)
         if path.exists()
     ]
     if existing:
@@ -1093,6 +1231,7 @@ def create_run(directory: Path | str, plan: EvaluationPlan) -> RecordWriter:
             f"run directory {paths.directory} already contains {existing}; "
             "choose a fresh directory"
         )
+    _write_run_state(paths.state, STATE_INCOMPLETE)
     write_plan(plan, paths.plan)
     try:
         handle = _open_records_file(paths.records)
@@ -1326,7 +1465,13 @@ def compute_summary(
 
 
 def summarize_run(directory: Path | str) -> dict[str, Any]:
-    """Read the persisted plan and records and recompute the summary."""
+    """Read the persisted plan and records and recompute the summary.
+
+    This is an independent, read-only recomputation. It does not publish
+    ``summary.json`` and does not consult the run's completion state;
+    :func:`finalize_run` is the publishing gate that also requires a cleanly
+    closed record stream.
+    """
 
     paths = run_paths(directory)
     plan = read_plan(paths.plan)
@@ -1345,12 +1490,17 @@ def write_summary(summary: Mapping[str, Any], path: Path | str) -> None:
 
 
 def finalize_run(directory: Path | str) -> dict[str, Any]:
-    """Validate persisted records, then publish ``summary.json``.
+    """Validate the run state and records, then publish ``summary.json``.
 
-    Any missing, duplicate, malformed, or inconsistent record raises before the
-    summary path is touched. Completed records remain available for diagnosis.
+    A missing, malformed, or incomplete run state means an append or close
+    failed (or the writer never closed cleanly), so the public finalizer refuses
+    even when every raw record is already on disk. Missing, duplicate,
+    malformed, or inconsistent records also raise before the summary path is
+    touched. Completed records remain available for diagnosis.
     """
 
+    paths = run_paths(directory)
+    _require_complete_run_state(paths.state)
     summary = summarize_run(directory)
-    write_summary(summary, run_paths(directory).summary)
+    write_summary(summary, paths.summary)
     return summary

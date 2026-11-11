@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -383,6 +385,149 @@ def test_record_write_failure_keeps_completed_records_and_blocks_summary(
     assert not paths.summary.exists()
 
 
+def test_fsync_failure_after_complete_write_keeps_records_but_blocks_public_finalize(
+    tmp_path, policy_identity, monkeypatch
+):
+    plan = _plan(policy_identity, seeds=(1,))
+    directory = tmp_path / "run"
+    writer = records.create_run(directory, plan)
+    all_records = _full_records(1)
+    for record in all_records[:-1]:
+        writer.append(record)
+
+    real_fsync = os.fsync
+
+    def failing_fsync(descriptor):
+        real_fsync(descriptor)
+        raise OSError("simulated fsync failure")
+
+    monkeypatch.setattr(records.os, "fsync", failing_fsync)
+    with pytest.raises(records.RecordError, match="failed to write"):
+        writer.append(all_records[-1])
+    assert writer.failed is True
+    monkeypatch.setattr(records.os, "fsync", real_fsync)
+
+    writer.close()
+    paths = records.run_paths(directory)
+    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == (
+        records.STATE_INCOMPLETE
+    )
+    assert len(paths.records.read_text(encoding="utf-8").splitlines()) == 6
+    assert records.read_records(
+        paths.records, plan, require_complete=True
+    ) == all_records
+    with pytest.raises(records.RecordError, match="refusing to publish"):
+        writer.finalize()
+    # The separate recompute interface remains usable for diagnosis without
+    # publishing a complete run artifact.
+    assert records.summarize_run(directory)["games"] == 6
+    with pytest.raises(records.RecordError, match="incomplete"):
+        records.finalize_run(directory)
+    assert not paths.summary.exists()
+
+
+class _CloseFailingHandle:
+    def __init__(self, handle):
+        self._handle = handle
+        self.closed = False
+
+    def __getattr__(self, name):
+        return getattr(self._handle, name)
+
+    def close(self):
+        self._handle.close()
+        self.closed = True
+        raise OSError("simulated close failure")
+
+
+def test_close_failure_after_complete_records_keeps_records_but_blocks_public_finalize(
+    tmp_path, policy_identity, monkeypatch
+):
+    plan = _plan(policy_identity, seeds=(1,))
+    directory = tmp_path / "run"
+    opened: dict[str, _CloseFailingHandle] = {}
+    original_open = records._open_records_file
+
+    def wrapping_open(path):
+        handle = _CloseFailingHandle(original_open(path))
+        opened["handle"] = handle
+        return handle
+
+    monkeypatch.setattr(records, "_open_records_file", wrapping_open)
+    writer = records.create_run(directory, plan)
+    all_records = _full_records(1)
+    for record in all_records:
+        writer.append(record)
+    assert opened["handle"].closed is False
+
+    with pytest.raises(records.RecordError, match="failed to close"):
+        writer.close()
+    assert writer.failed is True
+    assert opened["handle"].closed is True
+    with pytest.raises(records.RecordError, match="refusing to publish"):
+        writer.finalize()
+
+    paths = records.run_paths(directory)
+    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == (
+        records.STATE_INCOMPLETE
+    )
+    assert len(paths.records.read_text(encoding="utf-8").splitlines()) == 6
+    assert records.read_records(
+        paths.records, plan, require_complete=True
+    ) == all_records
+    with pytest.raises(records.RecordError, match="incomplete"):
+        records.finalize_run(directory)
+    assert not paths.summary.exists()
+
+
+def test_public_finalizer_requires_a_cleanly_closed_run(
+    tmp_path, policy_identity
+):
+    plan = _plan(policy_identity, seeds=(1,))
+    directory = tmp_path / "run"
+    writer = records.create_run(directory, plan)
+    for record in _full_records(1):
+        writer.append(record)
+    paths = records.run_paths(directory)
+    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == (
+        records.STATE_INCOMPLETE
+    )
+    with pytest.raises(records.RecordError, match="incomplete"):
+        records.finalize_run(directory)
+    assert not paths.summary.exists()
+
+    writer.close()
+    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == (
+        records.STATE_COMPLETE
+    )
+    summary = records.finalize_run(directory)
+    assert summary["games"] == 6
+    assert json.loads(paths.summary.read_text(encoding="utf-8")) == summary
+
+
+def test_context_exception_after_complete_records_keeps_run_incomplete(
+    tmp_path, policy_identity
+):
+    plan = _plan(policy_identity, seeds=(1,))
+    directory = tmp_path / "run"
+    with pytest.raises(RuntimeError, match="game failed"):
+        with records.create_run(directory, plan) as writer:
+            for record in _full_records(1):
+                writer.append(record)
+            raise RuntimeError("game failed")
+
+    paths = records.run_paths(directory)
+    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == (
+        records.STATE_INCOMPLETE
+    )
+    assert len(
+        records.read_records(paths.records, plan, require_complete=True)
+    ) == 6
+    with pytest.raises(records.RecordError, match="incomplete"):
+        records.finalize_run(directory)
+    assert not paths.summary.exists()
+
+
 def test_summary_write_failure_publishes_nothing_and_keeps_records(
     tmp_path, policy_identity, monkeypatch
 ):
@@ -566,6 +711,11 @@ def test_terminal_record_rejects_invalid_shape(changes, message):
         lambda metadata: metadata.__setitem__("training_provenance", 3),
         lambda metadata: metadata.__setitem__("dependencies", []),
         lambda metadata: metadata.__setitem__("split_algorithm", ""),
+        lambda metadata: metadata.__setitem__("rust_runtime", None),
+        lambda metadata: metadata.__setitem__("rust_runtime", {}),
+        lambda metadata: metadata.__setitem__("rust_runtime", []),
+        lambda metadata: metadata.__setitem__("teacher_cache", "shared"),
+        lambda metadata: metadata.__setitem__("teacher_cache", True),
     ],
 )
 def test_plan_metadata_rejects_inconsistent_required_fields(
@@ -586,6 +736,78 @@ def test_plan_metadata_rejects_inconsistent_required_fields(
         records.EvaluationPlan(
             seeds=(1,), metadata=metadata, decision_limit=100
         )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda metadata: metadata.__setitem__("encoding_version", 2),
+        lambda metadata: metadata["checkpoint"].__setitem__("sha256", "0" * 63),
+        lambda metadata: metadata["selection"].__setitem__("batch_size", 0),
+        lambda metadata: metadata["python_source"].pop("online_evaluator"),
+        lambda metadata: metadata.__setitem__("rust_runtime", None),
+    ],
+)
+def test_write_plan_rejects_metadata_mutated_after_construction(
+    tmp_path, policy_identity, mutate
+):
+    plan = _plan(policy_identity, seeds=(1,))
+    mutate(plan.metadata)
+    path = tmp_path / "nested" / "plan.json"
+    with pytest.raises(records.RecordError):
+        records.write_plan(plan, path)
+    assert not (tmp_path / "nested").exists()
+
+
+def test_write_plan_revalidation_does_not_replace_a_valid_plan(
+    tmp_path, policy_identity
+):
+    plan = _plan(policy_identity, seeds=(1,))
+    path = tmp_path / "plan.json"
+    records.write_plan(plan, path)
+    original = path.read_bytes()
+    original_document = json.loads(original)
+
+    plan.metadata["encoding_version"] = 2
+    with pytest.raises(records.RecordError):
+        records.write_plan(plan, path)
+    assert path.read_bytes() == original
+    assert json.loads(path.read_text(encoding="utf-8")) == original_document
+    assert records.read_plan(path).metadata["encoding_version"] == 1
+
+
+def test_create_run_rejects_mutated_plan_before_creating_output(
+    tmp_path, policy_identity
+):
+    plan = _plan(policy_identity, seeds=(1,))
+    plan.metadata["checkpoint"]["sha256"] = "0" * 63
+    directory = tmp_path / "run"
+    with pytest.raises(records.RecordError):
+        records.create_run(directory, plan)
+    assert not directory.exists()
+
+
+@pytest.mark.parametrize("teacher_cache", [0, {"scope": "shared"}])
+def test_plan_metadata_accepts_disabled_or_configured_teacher_cache(
+    tmp_path, policy_identity, teacher_cache
+):
+    metadata = records.build_plan_metadata(
+        checkpoint=policy_identity,
+        rust_runtime=_RUST_RUNTIME,
+        split_algorithm="seed-sha256-80-10-10-v1",
+        selection={"mode": "greedy", "device": "cpu", "batch_size": 4},
+        teacher_cache=teacher_cache,
+        dependencies={"python": "3.12"},
+        training_provenance=None,
+        python_source=_FAKE_PYTHON_SOURCE,
+    )
+    plan = records.EvaluationPlan(
+        seeds=(1,), metadata=metadata, decision_limit=100
+    )
+    path = tmp_path / "plan.json"
+    records.write_plan(plan, path)
+    loaded = records.read_plan(path)
+    assert loaded.metadata["teacher_cache"] == teacher_cache
 
 
 @pytest.mark.parametrize(
@@ -656,6 +878,7 @@ def test_checkpoint_identity_matches_exact_loaded_bytes(tmp_path):
     assert identity["metrics"] == {"nll": 0.5}
     assert identity["has_training_state"] is False
     assert identity["path"] == str(path)
+    assert identity["path"] == str(path.resolve())
     assert records.training_provenance(loaded) is None
 
     # The recorded identity must still describe the weights already loaded,
@@ -669,6 +892,23 @@ def test_checkpoint_identity_matches_exact_loaded_bytes(tmp_path):
     assert identity["sha256"] != hashlib.sha256(path.read_bytes()).hexdigest()
     for name, value in original_model.state_dict().items():
         assert torch.equal(loaded.model.state_dict()[name], value)
+
+
+def test_checkpoint_identity_records_resolved_path_and_content_hash(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "policy.pt"
+    model = build_policy(
+        ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=4
+    )
+    save_checkpoint(path, model, role=ROLE_POLICY, metrics={"nll": 0.25})
+
+    monkeypatch.chdir(tmp_path)
+    loaded, identity = records.load_checkpoint_with_identity("policy.pt")
+    assert loaded.role == ROLE_POLICY
+    assert identity["path"] == str(path.resolve())
+    assert Path(identity["path"]).is_absolute()
+    assert identity["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def test_training_provenance_is_separate_from_evaluation_identity(tmp_path):
@@ -776,14 +1016,23 @@ def test_python_source_records_both_packages_independent_of_cwd(
 
 
 def _git(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("git executable is not available")
     return subprocess.run(
-        ["git", "-C", str(root), *arguments],
+        [git, "-C", str(root), *arguments],
         check=True,
         capture_output=True,
         text=True,
     )
 
 
+requires_git = pytest.mark.skipif(
+    shutil.which("git") is None, reason="git executable is not available"
+)
+
+
+@requires_git
 def test_python_source_uses_package_directories_and_git_metadata(
     tmp_path, monkeypatch
 ):
@@ -844,3 +1093,41 @@ def test_python_source_uses_package_directories_and_git_metadata(
     )
     assert third["online_evaluator"]["hash"] == first["online_evaluator"]["hash"]
     assert third["offline_policy"]["hash"] != first["offline_policy"]["hash"]
+
+
+@requires_git
+def test_python_source_does_not_borrow_unrelated_outer_git(tmp_path):
+    root = tmp_path / "outer"
+    offline = root / "python" / "mahjong_bc"
+    online = root / "vendor" / "mahjong_eval"
+    offline.mkdir(parents=True)
+    online.mkdir(parents=True)
+    (offline / "__init__.py").write_text("value = 1\n", encoding="utf-8")
+    (online / "__init__.py").write_text("value = 1\n", encoding="utf-8")
+    _git(root, "init")
+    _git(root, "add", ".")
+    _git(
+        root,
+        "-c",
+        "user.name=Source Test",
+        "-c",
+        "user.email=source-test@example.invalid",
+        "commit",
+        "-m",
+        "initial",
+    )
+    head = _git(root, "rev-parse", "HEAD").stdout.strip()
+    (offline / "__init__.py").write_text("value = 2\n", encoding="utf-8")
+
+    source = records.collect_python_source(
+        offline_directory=offline,
+        online_directory=online,
+        offline_package_version="1.2.3",
+        online_package_version="4.5.6",
+    )
+    assert source["online_evaluator"]["revision"] is None
+    assert source["online_evaluator"]["dirty"] is None
+    # The offline package does sit at its expected repository path, so the same
+    # outer repository legitimately supplies its revision and dirty flag.
+    assert source["offline_policy"]["revision"] == head
+    assert source["offline_policy"]["dirty"] is True
