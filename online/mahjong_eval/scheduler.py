@@ -556,6 +556,14 @@ def _record_choice(game: _RunningGame, index: int) -> None:
 
 
 def _finish_game(game: _RunningGame, terminal: Any) -> GameResult:
+    decisions = int(terminal.decisions)
+    if decisions != game.decisions:
+        raise _context_error(
+            game.spec,
+            None,
+            f"environment terminal decision count {decisions} does not match "
+            f"scheduler decision count {game.decisions}",
+        )
     return GameResult(
         seed=game.spec.seed,
         neural_seats=game.spec.neural_seats,
@@ -564,7 +572,7 @@ def _finish_game(game: _RunningGame, terminal: Any) -> GameResult:
             seat for seat, won in enumerate(tuple(terminal.winners)) if won
         ),
         end_reason=str(terminal.end_reason),
-        decisions=int(terminal.decisions),
+        decisions=decisions,
         neural_decisions=game.neural_decisions,
         neural_forced_decisions=game.neural_forced_decisions,
         forced_decisions=game.forced_decisions,
@@ -646,14 +654,6 @@ def summarize_games(
 
 def _validate_counts(games: Sequence[GameResult], counts: Mapping[str, Any]) -> None:
     decisions = counts["decisions"]
-    if decisions["neural"] + decisions["teacher"] != decisions["total"]:
-        raise SchedulingError(
-            "internal error: neural/teacher decision counts do not sum to the total"
-        )
-    if decisions["neural_forced"] + decisions["teacher_forced"] != decisions["forced"]:
-        raise SchedulingError(
-            "internal error: per-policy forced counts do not sum to the total"
-        )
     if decisions["forced"] > decisions["total"]:
         raise SchedulingError(
             "internal error: forced decision count exceeds the total"

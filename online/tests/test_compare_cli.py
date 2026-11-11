@@ -532,6 +532,78 @@ def test_module_entry_point_prints_version_provenance(tmp_path):
     assert document["native"]["extension"]["source_complete"] is True
 
 
+def _cli_without_import_script(blocked_module: str) -> str:
+    blocked_prefix = blocked_module + "."
+    return f"""
+import sys
+
+class BlockImport:
+    def find_spec(self, name, path=None, target=None):
+        if name == {blocked_module!r} or name.startswith({blocked_prefix!r}):
+            raise ModuleNotFoundError(f"No module named {{name!r}}", name=name)
+        return None
+
+sys.meta_path.insert(0, BlockImport())
+from mahjong_eval import cli
+raise SystemExit(cli.main(sys.argv[1:]))
+"""
+
+
+def _cli_without_import(tmp_path, blocked_module: str, *args):
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            _cli_without_import_script(blocked_module),
+            *args,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("blocked_module", ("mahjong_bc", "torch"))
+def test_help_and_version_work_without_offline_dependency(
+    tmp_path, blocked_module
+):
+    completed = _cli_without_import(tmp_path, blocked_module, "--help")
+    assert completed.returncode == 0, completed.stderr
+    assert "compare" in completed.stdout
+
+    completed = _cli_without_import(tmp_path, blocked_module, "version")
+    assert completed.returncode == 0, completed.stderr
+    document = json.loads(completed.stdout)
+    assert document["package"] == "mahjong-eval"
+    assert document["dependencies"] is None
+    assert blocked_module in document["dependencies_error"]
+
+
+@pytest.mark.parametrize("blocked_module", ("mahjong_bc", "torch"))
+def test_compare_without_offline_dependency_reports_install_hint(
+    tmp_path, blocked_module
+):
+    out = tmp_path / "run"
+    completed = _cli_without_import(
+        tmp_path,
+        blocked_module,
+        "compare",
+        "--checkpoint",
+        str(tmp_path / "best.pt"),
+        "--split",
+        "validation",
+        "--seeds",
+        "2",
+        "--out",
+        str(out),
+    )
+    assert completed.returncode == 2
+    assert "mahjong-bc" in completed.stderr
+    assert "pip install -e ./python" in completed.stderr
+    assert not out.exists()
+
+
 def test_persisted_score_disagreement_blocks_publication(
     checkpoints, validation_seed, tmp_path, capsys, monkeypatch
 ):
