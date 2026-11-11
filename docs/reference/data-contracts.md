@@ -17,19 +17,9 @@ Implementation, parser validation, and contract tests govern actual behavior;
 | Online environment snapshot | Rust `Game`/encoder → PyO3 `Env` → frozen inference | Owned canonical candidate snapshots; decision IDs protect against stale submissions; encoder version must match model | [PyO3 boundary](../../crates/python/src/lib.rs), [online guide](../../online/README.md#environment-and-teacher-api) |
 | Online comparison records | `mahjong-eval` → persisted review and summary | Plan, terminal records, costs, completion state; summaries recomputed from persisted records | [Record implementation](../../online/mahjong_eval/records.py), [online guide](../../online/README.md#records-and-provenance) |
 
-## Compatibility and identity
-
-- **Encoding:** Python rejects unsupported versions even when tensor widths
-  match; Rust owns feature semantics and candidate ordering.
-- **Corpus and cache:** `seed-sha256-80-10-10-v1` fixes split membership.
-  Preparation freezes a committed manifest; Python validates and preserves
-  Rust's opaque `cache_id` without recomputing it.
-- **Checkpoints:** Offline validation selects `best.pt` for formal online
-  comparison; `last.pt` is for recovery. Online evaluation never selects or
-  modifies the checkpoint.
-- **Records:** An incomplete comparison is not a finalized result. Source
-  and content identities, split assignments, and workload parameters must
-  stay with the reproduction evidence.
+The corpus split uses `seed-sha256-80-10-10-v1`. Encoding compatibility
+includes feature meanings and candidate order; cache identity includes the
+captured manifest; checkpoint roles distinguish model selection from recovery.
 
 ## When a protocol changes
 

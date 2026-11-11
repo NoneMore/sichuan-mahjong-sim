@@ -54,13 +54,8 @@ tile ownership, zero-sum settlement, deterministic replay and checkpoints.
 For cross-language changes, update the corresponding producer/consumer
 tests and version contracts.
 
-Standard Rust checks:
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace --all-targets
-```
+Use the [development checks](development.md#running) for workspace builds,
+formatting, Clippy and tests.
 
 For new performance or strategy claims, fix the workload, build,
 seed plan, measurement conditions and acceptance rule before experiments.
