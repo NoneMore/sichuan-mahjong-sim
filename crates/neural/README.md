@@ -52,12 +52,10 @@ Reusable collection requires a **clean, committed build**. The binary embeds
 build-time Git provenance and rejects dirty or unavailable source identity.
 Keep corpus and report outputs outside the source tree, or in an ignored directory.
 
-```text
-cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
-  --root ../bc-data --games 4 --seed-start 10 --shard-games 2 \
-  --cache-bytes 0 --report ../bc-outcome.json
+Create a corpus with the [BC pipeline collection step](../../docs/guides/bc-pipeline.md#1-collect-teacher-episodes-in-rust).
+To append four games and inspect the corpus:
 
-# Append four additional games using the existing corpus settings.
+```text
 cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
   --root ../bc-data --games 4
 
