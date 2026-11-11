@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "mahjong-eval"
+version = "0.1.0"
+description = "Online Sichuan mahjong environment binding for frozen-policy evaluation"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["numpy>=2.0"]
+
+[tool.maturin]
+manifest-path = "../crates/python/Cargo.toml"
+python-source = "."
+module-name = "mahjong_eval._native"
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+filterwarnings = ["error::DeprecationWarning:mahjong_eval.*"]

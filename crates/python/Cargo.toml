@@ -1,0 +1,28 @@
+[package]
+name = "sichuan-mahjong-python"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Python environment binding for the Sichuan mahjong simulator and decision encoder"
+publish = false
+
+[lib]
+name = "_native"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+# Pinned direct dependencies and a committed lockfile keep this independent
+# extension build within the Rust 1.75 baseline. `rustc-hash` is pinned in the
+# lockfile because newer releases raise their MSRV above 1.75.
+numpy = "=0.23.0"
+pyo3 = { version = "=0.23.5", features = ["abi3-py312", "extension-module"] }
+sichuan-mahjong-neural = { path = "../neural" }
+sichuan-mahjong-sim = { path = "../.." }
+
+[dev-dependencies]
+serde_json = "=1.0.151"
+
+# The extension is intentionally outside the root workspace: ordinary core,
+# collector, and neural builds never resolve or link Python.
+[workspace]

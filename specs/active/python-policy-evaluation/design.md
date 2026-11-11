@@ -62,9 +62,27 @@ Extend the Rust-to-Python handoff fixture to include binding snapshots. Native/
 Python teacher replay separately checks action mapping and progression; neither
 requires a strong learned policy.
 
-## Open build choice
+## Build choice
 
-PyO3/NumPy versions, packaging tools, and Cargo workspace arrangement await a
-minimal binding build that demonstrates Rust/Python compatibility, the existing
-Rust 1.75 baseline, and independent core/collector/offline paths. Resolve this in
-[T1](tasks.md#t1构建与首个决策).
+T1 verified a minimal binding build before committing to versions. The tested
+environment is CPython 3.12.10 x86-64 with NumPy 2.5.4, PyO3 0.23.5, rust-numpy
+0.23.0, maturin 1.16.0, and Rust 1.75.0. The wheel uses the PyO3 `abi3-py312`
+feature, so its verified minimum is Python 3.12; later Python versions are not
+claimed without evidence. The online package declares `numpy>=2.0` for the
+tested NumPy generation.
+
+The PyO3 crate is `crates/python`, its own Cargo workspace with an independent
+lockfile and target directory. The root workspace excludes it, so core, neural,
+collector, and offline training builds neither resolve nor link Python. The
+online `pyproject.toml` uses maturin with `manifest-path =
+"../crates/python/Cargo.toml"`, `python-source = "."`, and `module-name =
+"mahjong_eval._native"`. A committed lockfile pins `rustc-hash` to 2.1.1
+because later releases declare an MSRV above 1.75.
+
+The first-decision fixture is generated from the public core and encoder APIs
+and compared by both a Rust test and the installed Python package. It matches
+the existing seed-0 collection corpus bit for bit.
+
+Runtime provenance remains T4 work. `collection::source` identifies the neural
+crate's own build; T4 must add extension-scoped evidence that covers this crate,
+the core, and the neural crate rather than treating that identity as complete.
