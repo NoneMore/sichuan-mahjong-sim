@@ -79,7 +79,7 @@ fn main() {
         "EXT_GIT_COMMIT",
         commit
             .as_deref()
-            .filter(|value| !value.is_empty())
+            .filter(|value| available && !value.is_empty())
             .unwrap_or(""),
     );
 

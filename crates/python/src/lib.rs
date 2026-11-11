@@ -30,12 +30,16 @@ use sichuan_mahjong_sim::{
     Action, Decision as GameDecision, DecisionStage, EndReason, Game, GameResult, Seat,
 };
 
-create_exception!(_native, MahjongEvalError, PyException);
-create_exception!(_native, EnvironmentStateError, MahjongEvalError);
-create_exception!(_native, StaleDecisionError, MahjongEvalError);
-create_exception!(_native, CandidateIndexError, MahjongEvalError);
-create_exception!(_native, DecisionLimitError, MahjongEvalError);
-create_exception!(_native, GameRuleError, MahjongEvalError);
+create_exception!(mahjong_eval._native, MahjongEvalError, PyException);
+create_exception!(
+    mahjong_eval._native,
+    EnvironmentStateError,
+    MahjongEvalError
+);
+create_exception!(mahjong_eval._native, StaleDecisionError, MahjongEvalError);
+create_exception!(mahjong_eval._native, CandidateIndexError, MahjongEvalError);
+create_exception!(mahjong_eval._native, DecisionLimitError, MahjongEvalError);
+create_exception!(mahjong_eval._native, GameRuleError, MahjongEvalError);
 
 /// Decision identity is `(reset generation << 32) | sequence`.
 ///
@@ -460,13 +464,15 @@ impl Env {
         let encoded = encode(&decision);
         let index = encoded.target_index(&action).map_err(|error| {
             GameRuleError::new_err(format!(
-                "teacher action {action:?} is not a candidate of decision {}                  (seed {}, accepted {}): {error}",
+                "teacher action {action:?} is not a candidate of decision {} \
+                 (seed {}, accepted {}): {error}",
                 pending.decision_id, self.seed, self.accepted
             ))
         })?;
         if encoded.candidates[index].action != pending.candidate_actions[index] {
             return Err(PyRuntimeError::new_err(format!(
-                "teacher target lookup disagrees with cached canonical action at index                  {index} (decision {}, seed {})",
+                "teacher target lookup disagrees with cached canonical action at index \
+                 {index} (decision {}, seed {})",
                 pending.decision_id, self.seed
             )));
         }

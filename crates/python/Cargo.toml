@@ -11,12 +11,17 @@ name = "_native"
 path = "src/lib.rs"
 crate-type = ["cdylib"]
 
+[features]
+# Test executables link Python normally; only extension builds suppress that
+# linkage, as required for portable PyO3 extension-module builds.
+extension-module = ["pyo3/extension-module"]
+
 [dependencies]
 # Pinned direct dependencies and a committed lockfile keep this independent
 # extension build within the Rust 1.75 baseline. `rustc-hash` is pinned in the
 # lockfile because newer releases raise their MSRV above 1.75.
 numpy = "=0.23.0"
-pyo3 = { version = "=0.23.5", features = ["abi3-py312", "extension-module"] }
+pyo3 = { version = "=0.23.5", features = ["abi3-py312"] }
 sichuan-mahjong-neural = { path = "../neural" }
 sichuan-mahjong-sim = { path = "../.." }
 

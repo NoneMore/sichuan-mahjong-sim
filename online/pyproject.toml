@@ -14,6 +14,7 @@ dependencies = ["numpy>=2.0"]
 manifest-path = "../crates/python/Cargo.toml"
 python-source = "."
 module-name = "mahjong_eval._native"
+features = ["extension-module"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
