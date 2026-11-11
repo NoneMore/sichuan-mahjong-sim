@@ -99,6 +99,13 @@ more than one candidate; `forced_by_stage()` reports forced counts. Collation
 preserves candidate order and local targets, pads only to the batch maximum,
 and marks valid candidates with `mask`.
 
+`pad_decision_inputs(decisions)` is the label-free primitive behind collation
+and online inference. It accepts any objects exposing `state` and
+`candidate_features`, pads to the batch maximum with zero-filled candidate rows
+and a Boolean mask, and preserves valid scores and canonical order without
+requiring targets or other supervision. `collate_decisions` adds the offline
+labels and metadata on top of it.
+
 `iter_batches` follows the supplied index order and retains the final partial
 batch. Mmap datasets require `num_workers=0`; positive worker counts raise
 `DataError`. `contains_memory_mapped_arrays(dataset)` detects mapped data.

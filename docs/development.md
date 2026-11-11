@@ -113,6 +113,50 @@ wheel installation, training, checkpoint reload and frozen test evaluation. The
 [recovery validation](validation.md#offline-bc-recovery-validation) adds real-cache
 epoch replay, output migration and CUDA training/reload checks.
 
+### Python online evaluation
+
+The [online package](../online/README.md) builds the PyO3 environment binding,
+synchronous multi-game scheduling, and the formal frozen-policy comparison CLI.
+Install the offline package first because it provides `mahjong-bc` (not a PyPI
+name), then the extension:
+
+```text
+python -m pip install -e "./python[dev]"
+python -m pip install -e ./online          # or ./online[evaluation]
+python -m mahjong_eval version
+python -m pytest online/tests
+```
+
+`online/pyproject.toml` builds `mahjong_eval._native` with maturin and passes
+`features = ["extension-module"]`; plain `cargo check`/`cargo test` in
+`crates/python` do not enable PyO3's extension link mode and stay linkable
+without a Python host. Build the extension from the package rather than using
+raw `cargo build` output:
+
+```text
+cd online
+python -m maturin build --release --locked --out dist
+cd ..
+python -m pip install --force-reinstall --no-deps <produced-wheel>
+```
+
+`mahjong-eval compare --checkpoint FILE --split validation|test --seeds LIST
+--out DIR` rejects `last` and requires the selected `best` checkpoint. Seeds are
+validated against the frozen Rust split; validation runs are diagnostics and
+test runs are the frozen comparison. The run publishes `plan.json` before play,
+appends `games.jsonl` as games finish, writes `costs.json`, and only then marks
+`state.json` complete and recomputes `summary.json` from the persisted files.
+Measurements are single-process and separated into environment reset, environment
+step, teacher, and synchronized CUDA inference time; record the device and batch
+settings with any throughput claim. The
+[online validation](validation.md#python-online-comparison-smoke-validation)
+records real inputs and observed costs without claiming policy strength.
+
+The [cumulative online CI job](../.github/workflows/python-ci.yml) checks the
+standalone extension for both stable and Rust 1.75, builds the wheel, installs
+it with the offline package, and runs every online test. Offline `python/tests`
+stay independent of the binding.
+
 ### Policy A/B comparison example
 
 `examples/policy_ab.rs` runs a balanced 2A2B comparison. By default A is

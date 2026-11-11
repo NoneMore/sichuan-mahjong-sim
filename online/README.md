@@ -120,6 +120,71 @@ other timers exclude it. Any game, teacher, inference, or terminal-callback
 failure raises `SchedulingError` carrying the seed, placement, and decision
 context of the affected pending decision.
 
+## Formal comparison
+
+`mahjong-eval compare` (same as `python -m mahjong_eval compare`) runs the
+six placement games for every requested seed and publishes a reproducible run
+directory:
+
+```text
+mahjong-eval compare --checkpoint ../bc-run/best.pt --split validation \
+  --seeds 2,10 --out ../online-eval-validation \
+  --batch-size 64 --concurrent-games 6 \
+  --decision-limit 10000 --teacher-cache-bytes 27787264 --device cpu
+```
+
+| Argument | Meaning |
+|---|---|
+| `--checkpoint FILE` | Selected `best` checkpoint. `last` and plain policy exports are rejected. |
+| `--split validation or test` | Frozen Rust seed split. Validation runs are diagnostics; test runs are the frozen comparison. Neither selects a checkpoint. |
+| `--seeds LIST` | Comma-separated unique `u64` seeds; every seed must belong to `--split` under the Rust algorithm. |
+| `--out DIR` | Run directory. It may exist but must not contain run artifacts. |
+| `--batch-size N` | Maximum neural decisions per inference batch. Default 64. |
+| `--concurrent-games N` | Simultaneously active environment handles. Default 6. |
+| `--decision-limit N` | Per-game accepted-decision bound. Default: native 10000. |
+| `--teacher-cache-bytes N` | One shared teacher cache budget; `0` disables it. Default: native 27,787,264. |
+| `--device cpu or cuda[:index]` | Frozen inference device. Default `cpu`. |
+
+The checkpoint file is read once, hashed, and loaded from those exact bytes, so
+the recorded content identity cannot change even if the path is replaced.
+Frozen inference adopts the already loaded policy; the path is not read again.
+The plan is published before the first game and records checkpoint identity and
+role, encoding/model versions, installed `mahjong-eval`/`mahjong-bc` source
+hashes, the executing extension's compiled source plus environment, training
+provenance kept separate from evaluation identity, the split algorithm and each
+seed bucket, dependencies, selected device, batching/concurrency, decision
+limit, and teacher cache configuration.
+
+Each game appends one `games.jsonl` record as it finishes. The CLI re-reads and
+cross-checks all planned records, then writes `costs.json` atomically and only
+afterwards leaves the writer context. A clean close marks `state.json`
+`complete`; `summary.json` is then recomputed from the persisted plan and
+records by `finalize_run`. Costs include recomputable decision, forced,
+inference-row, and teacher-query counts, per-game accounting, and separate
+environment reset/step, teacher, and inference timings.
+
+Any game, inference, record, costs, or consistency failure stops the run:
+completed records and the plan remain, `state.json` stays `incomplete`, and no
+costs or summary is published. `records.finalize_run` independently refuses
+such a run. A later successful `finalize_run` on a complete run recomputes the
+same summary from disk.
+
+### Installation order
+
+Frozen inference and comparison need the offline `mahjong-bc` package. It is a
+repository-local distribution, not a PyPI name, so install it first:
+
+```text
+python -m pip install -e ./python
+python -m pip install -e ./online          # or ./online[evaluation]
+```
+
+`[project.optional-dependencies] evaluation = ["mahjong-bc"]` documents that
+dependency; because the local package is already installed, the extra adds no
+download. A native-only install (wheel without the extra) still imports and
+drives `Env`; only `mahjong_eval.inference`, `scheduler`, and `cli` need the
+offline package and PyTorch.
+
 ## Layout and independent builds
 
 The PyO3 crate lives in [`crates/python`](../../crates/python/Cargo.toml) as its

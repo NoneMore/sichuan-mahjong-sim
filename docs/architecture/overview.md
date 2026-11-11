@@ -14,7 +14,7 @@ intended Mahjong semantics.
 | Rule foundation | [Foundation](foundation.md) | Tile/hand model and pure shape, legality and settlement facts |
 | Authoritative game | [Game](game.md) | Sole mutable hand state, decisions, progression and payments |
 | Policies | [Policy](policy.md) | Player-visible action selection, exact analysis and optional memoization |
-| Neural adapters | [Neural](neural.md) | Rust encoding, teacher collection and NumPy preparation; Python datasets, offline training and policy checkpoints |
+| Neural adapters | [Neural](neural.md) | Rust encoding, teacher collection and NumPy preparation; Python datasets, offline training and policy checkpoints; PyO3 environment binding, online scheduling and frozen comparisons |
 | Execution | [Runner and CLI](execution.md) | Drives games and policies without interpreting rules |
 | Research tools | [Experiments](experiments.md) | Repeatable policy comparisons, timings and evidence records |
 
@@ -54,8 +54,12 @@ neither collection nor preparation changes Runner or the simulator core. The
 Python loader consumes only the prepared-cache protocol, validates its arrays,
 and builds padded batches without Rust bindings. Python trains a shared candidate
 scorer, selects checkpoints using validation NLL and evaluates frozen policies
-on held-out data. The subsystem guides explain ownership and cache constraints
-in detail.
+on held-out data. The online package adds a separate PyO3 workspace that exposes
+owned decision snapshots and canonical-action submission, plus synchronous
+multi-game scheduling and a comparison CLI that records plans, streamed terminal
+records, costs and recomputed summaries. None of these paths changes the
+authoritative `Game` loop or the offline build. The subsystem guides explain
+ownership and cache constraints in detail.
 
 These are current **implemented outcomes**, not prospective designs.
 Use [development](../development.md) for setup, CI and operational commands,

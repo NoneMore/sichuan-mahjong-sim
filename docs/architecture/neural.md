@@ -119,6 +119,59 @@ for in-repository source installs.
 See the [package guide](../../python/README.md#training-metrics-and-checkpoints)
 for policy, checkpoint-format and CLI contracts.
 
+## Online environment binding and comparison
+
+[`crates/python`](../../crates/python/) is a separate Cargo workspace and PyO3
+extension exposed as `mahjong_eval._native`. It is excluded from the root
+workspace, so core, neural, collector and offline training builds neither
+resolve nor link Python. The binding owns no rules: `Env.reset(seed)` returns an
+owned float32 snapshot of the first pending `Decision`, and `Env.step` resolves
+a local index through the handle's cached canonical actions and commits one
+`Action` to `Game`. Decision identities pack a per-handle reset generation and
+sequence, so stale identities and out-of-range indices are rejected before
+mutation; snapshots never alias authoritative state. Every stage, forced choice,
+response and continued play after a win remains an explicit pending decision.
+Terminal values report seat scores, Boolean win flags, end reason, and the
+accepted decision count including forced choices.
+
+`Env.teacher_index` evaluates `HeuristicPolicy` on the original Rust decision and
+maps its semantic choice through the encoder's canonical target lookup; it does
+not advance the game. Teacher cache contexts can be shared explicitly across
+handles and calls. `native_teacher_replay` exposes the same native teacher as a
+complete semantic trace for cross-language replay; split bucket/name and
+compiled extension source identity are separate query entry points. The
+extension's build script hashes its own crate, the simulator core and the neural
+crate, so the compiled identity is independent of the caller's working
+directory and of the neural crate's collection provenance.
+
+The [online Python package](../../online/README.md) owns scheduling, inference,
+and records. `inference.FrozenPolicy` adopts an already loaded `LoadedCheckpoint`
+(or loads one), rejects `last`, keeps eval-mode float32 weights on one device,
+and selects from the shared label-free `pad_decision_inputs` contract; single
+candidates bypass inference. `scheduler.run_games` drives several independent
+`Env` handles, caps concurrency, refills finished games, groups pending neural
+decisions by assigned policy into bounded chunks, routes returned indices by
+chunk position (not decision id, which concurrent handles reuse), queries the
+teacher through one shared cache, and commits forced choices as index zero. It
+reports per-game accounting, recomputable totals, scalar-only optional traces,
+and separate environment/teacher/inference timings; CUDA is synchronized at
+inference batch boundaries. Any game, inference, or terminal-callback failure
+stops scheduling with seed/placement/decision context.
+
+`records` defines the plan, run state, raw terminal record, and summary
+protocols. A plan fixes the seeds and six placements and carries checkpoint
+content identity, installed Python source hashes, compiled Rust source,
+training provenance kept separate from evaluation identity, split algorithm,
+dependencies, and the selected device/batching/cache configuration. `create_run`
+publishes state `incomplete`, then the plan, then the record stream; each
+terminal record is appended, flushed and fsynced as its game finishes. Only a
+clean close with no failed append changes the state to `complete`, and
+`finalize_run` recomputes the seed-blocked summary from the persisted files.
+`cli.compare` validates seeds with the Rust split, requires a selected `best`
+checkpoint, publishes the plan before play, cross-checks persisted records,
+writes costs while the writer context is still open, and only then closes and
+finalizes, so failures leave completed records without a summary.
+
 ## Verification
 
 [Feature fixtures](../../crates/neural/tests/encoding_features.rs) freeze v1

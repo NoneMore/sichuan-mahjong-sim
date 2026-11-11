@@ -48,7 +48,10 @@ public decision interface; the core has no neural dependency. See its
 commands and layout. The separate [Python package](python/README.md) provides
 cache validation, sharded mmap datasets, padded PyTorch batches and offline
 behavior-cloning training with versioned policy checkpoints, epoch-boundary
-recovery and frozen evaluation.
+recovery and frozen evaluation. The separate [online evaluation
+package](online/README.md) binds the simulator through PyO3, schedules several
+neural/teacher games in one process, and records frozen six-placement
+comparisons with checkpoint, source, split, and cost provenance.
 
 ### Policies
 

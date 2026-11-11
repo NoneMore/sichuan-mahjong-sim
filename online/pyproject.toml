@@ -14,8 +14,19 @@ dependencies = ["numpy>=2.0"]
 manifest-path = "../crates/python/Cargo.toml"
 python-source = "."
 module-name = "mahjong_eval._native"
+# Test executables link Python normally; wheels enable extension link mode.
 features = ["extension-module"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
 filterwarnings = ["error::DeprecationWarning:mahjong_eval.*"]
+
+[project.optional-dependencies]
+# `mahjong-bc` is a repository-local distribution, not a PyPI package. Install
+# it first with `pip install -e ./python`; then this extra is already satisfied.
+# A native-only install keeps working without it (the extension is imported
+# lazily), but frozen inference and comparison need the offline package.
+evaluation = ["mahjong-bc"]
+
+[project.scripts]
+mahjong-eval = "mahjong_eval.cli:main"
