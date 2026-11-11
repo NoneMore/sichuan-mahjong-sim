@@ -19,21 +19,17 @@ Implementation, parser validation, and contract tests govern actual behavior;
 
 ## Compatibility and identity
 
-- The Rust neural crate defines the meaning, shape, and canonical order of
-  encoded decisions. Python mirrors supported constants and **rejects**
-  incompatible versions; matching tensor widths alone are insufficient.
-- The corpus stores source provenance and a seed-only split algorithm
-  (`seed-sha256-80-10-10-v1`). Preparation captures one committed manifest,
-  so later appends cannot alter an already prepared cache.
-- The prepared cache is independently verifiable after collection. Its
-  opaque `cache_id` is computed in Rust; Python validates and preserves it
-  instead of reimplementing the hash.
-- `best.pt` is selected using offline validation and is the checkpoint
-  accepted by formal online comparison. `last.pt` carries recovery state.
-  Online comparison does not choose or modify the trained checkpoint.
-- Online records distinguish an incomplete run from a finalized one.
-  Source revisions, content identities, split assignments, and workload
-  parameters are part of reproducibility evidence, not interchangeable labels.
+- **Encoding:** Python rejects unsupported versions even when tensor widths
+  match; Rust owns feature semantics and candidate ordering.
+- **Corpus and cache:** `seed-sha256-80-10-10-v1` fixes split membership.
+  Preparation freezes a committed manifest; Python validates and preserves
+  Rust's opaque `cache_id` without recomputing it.
+- **Checkpoints:** Offline validation selects `best.pt` for formal online
+  comparison; `last.pt` is for recovery. Online evaluation never selects or
+  modifies the checkpoint.
+- **Records:** An incomplete comparison is not a finalized result. Source
+  and content identities, split assignments, and workload parameters must
+  stay with the reproduction evidence.
 
 ## When a protocol changes
 
