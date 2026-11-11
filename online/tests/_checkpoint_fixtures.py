@@ -46,7 +46,7 @@ def build_model(*, hidden: int, seed: int):
     """
 
     config = model_config(hidden)
-    with torch.random.fork_rng(devices=[]):
+    with torch.random.fork_rng(devices=range(torch.cuda.device_count())):
         return build_policy(config, seed=seed)
 
 

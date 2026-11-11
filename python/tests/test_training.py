@@ -4,7 +4,7 @@ import dataclasses
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 import pytest
@@ -405,103 +405,19 @@ class _ResumeBaseline:
     policy: Path
 
 
-@dataclasses.dataclass(frozen=True)
-class _ResumeRejectionCase:
-    name: str
-    expected: type[Exception]
-    match: str | None = None
-    source: str = "last"
-    loaded: bool = False
-    model_config: Callable[[ModelConfig], ModelConfig] | None = None
-    training_config: Callable[[TrainingConfig], TrainingConfig] | None = None
-    train_dataset: (
-        Callable[[PackedDecisionDataset], PackedDecisionDataset] | None
-    ) = None
-    validation_dataset: (
-        Callable[[PackedDecisionDataset], PackedDecisionDataset] | None
-    ) = None
-    dependencies: DependencyVersions | None = None
-    preparation_version: int | None = None
-
-
-def _other_capture_train(_: PackedDecisionDataset) -> PackedDecisionDataset:
-    return make_dataset(
-        split="train", counts=[2] * 8, seed=61, cache_id="other-dataset"
-    )
-
-
-def _other_capture_validation(_: PackedDecisionDataset) -> PackedDecisionDataset:
-    return make_dataset(
-        split="validation", counts=[2] * 4, seed=62, cache_id="other-dataset"
-    )
-
-
-def _other_validation_only(_: PackedDecisionDataset) -> PackedDecisionDataset:
-    return make_dataset(
-        split="validation", counts=[2, 2, 2], seed=63, cache_id="strict-resume"
-    )
-
-
-_RESUME_REJECTION_CASES = [
-    _ResumeRejectionCase(
-        "model-config",
-        ResumeError,
-        model_config=lambda _: ModelConfig(
-            state_hidden=(32,), scorer_hidden=(16,)
-        ),
-    ),
-    _ResumeRejectionCase(
-        "learning-rate",
-        ResumeError,
-        training_config=lambda config: dataclasses.replace(
-            config, learning_rate=0.02
-        ),
-    ),
-    _ResumeRejectionCase(
-        "epoch-count",
-        ResumeError,
-        training_config=lambda config: dataclasses.replace(config, epochs=2),
-    ),
-    _ResumeRejectionCase(
-        "dataset-capture",
-        ResumeError,
-        train_dataset=_other_capture_train,
-        validation_dataset=_other_capture_validation,
-    ),
-    _ResumeRejectionCase(
-        "validation-identity",
-        ResumeError,
-        validation_dataset=_other_validation_only,
-    ),
-    _ResumeRejectionCase(
-        "dependencies",
-        ResumeError,
-        dependencies=DependencyVersions(
-            python="different",
-            torch="different",
-            numpy="different",
-            cuda_build=None,
-        ),
-    ),
-    _ResumeRejectionCase(
-        "preparation-version",
-        ResumeError,
-        preparation_version=2,
-    ),
-    _ResumeRejectionCase("best-path", ResumeError, match="last", source="best"),
-    _ResumeRejectionCase(
-        "best-loaded", ResumeError, match="last", source="best", loaded=True
-    ),
-    _ResumeRejectionCase(
-        "policy-path",
-        CheckpointError,
-        match="recoverable training state",
-        source="policy",
-    ),
-    _ResumeRejectionCase(
-        "policy-loaded", ResumeError, match="last", source="policy", loaded=True
-    ),
-]
+_RESUME_REJECTION_CASES = (
+    "model-config",
+    "learning-rate",
+    "epoch-count",
+    "dataset-capture",
+    "validation-identity",
+    "dependencies",
+    "preparation-version",
+    "best-path",
+    "best-loaded",
+    "policy-path",
+    "policy-loaded",
+)
 
 
 @pytest.fixture(scope="module")
@@ -536,76 +452,74 @@ def resume_baseline(tmp_path_factory) -> _ResumeBaseline:
     )
 
 
-def _resume_case_trainer(
-    baseline: _ResumeBaseline,
-    output_dir: Path,
-    case: _ResumeRejectionCase,
-) -> Trainer:
-    train = (
-        baseline.train
-        if case.train_dataset is None
-        else case.train_dataset(baseline.train)
-    )
-    validation = (
-        baseline.validation
-        if case.validation_dataset is None
-        else case.validation_dataset(baseline.validation)
-    )
-    if case.preparation_version is not None:
-        train = _reidentify(
-            train,
-            dataclasses.replace(
-                train.identity, preparation_version=case.preparation_version
-            ),
-        )
-        validation = _reidentify(
-            validation,
-            dataclasses.replace(
-                validation.identity,
-                preparation_version=case.preparation_version,
-            ),
-        )
-    return Trainer(
-        train_dataset=train,
-        validation_dataset=validation,
-        model_config=(
-            baseline.model_config
-            if case.model_config is None
-            else case.model_config(baseline.model_config)
-        ),
-        training_config=(
-            baseline.training_config
-            if case.training_config is None
-            else case.training_config(baseline.training_config)
-        ),
-        output_dir=output_dir,
+@pytest.mark.parametrize("case", _RESUME_REJECTION_CASES)
+def test_resume_rejects_named_incompatibility(resume_baseline, tmp_path, case):
+    baseline = resume_baseline
+    options = dict(
+        train_dataset=baseline.train,
+        validation_dataset=baseline.validation,
+        model_config=baseline.model_config,
+        training_config=baseline.training_config,
+        output_dir=tmp_path / case,
         device="cpu",
-        dependencies=case.dependencies,
     )
+    source = baseline.last
+    expected = ResumeError
+    message = None
+    if case == "model-config":
+        options["model_config"] = ModelConfig(
+            state_hidden=(32,), scorer_hidden=(16,)
+        )
+    elif case == "learning-rate":
+        options["training_config"] = dataclasses.replace(
+            baseline.training_config, learning_rate=0.02
+        )
+    elif case == "epoch-count":
+        options["training_config"] = dataclasses.replace(
+            baseline.training_config, epochs=2
+        )
+    elif case == "dataset-capture":
+        options["train_dataset"] = make_dataset(
+            split="train", counts=[2] * 8, seed=61, cache_id="other-dataset"
+        )
+        options["validation_dataset"] = make_dataset(
+            split="validation", counts=[2] * 4, seed=62, cache_id="other-dataset"
+        )
+    elif case == "validation-identity":
+        options["validation_dataset"] = make_dataset(
+            split="validation", counts=[2, 2, 2], seed=63,
+            cache_id="strict-resume",
+        )
+    elif case == "dependencies":
+        options["dependencies"] = DependencyVersions(
+            python="different", torch="different", numpy="different",
+            cuda_build=None,
+        )
+    elif case == "preparation-version":
+        for split in ("train", "validation"):
+            dataset = getattr(baseline, split)
+            options[f"{split}_dataset"] = _reidentify(
+                dataset, dataclasses.replace(dataset.identity, preparation_version=2)
+            )
+    elif case in ("best-path", "best-loaded"):
+        source = baseline.best
+        message = "last"
+        if case == "best-loaded":
+            source = load_checkpoint(source)
+    elif case in ("policy-path", "policy-loaded"):
+        source = baseline.policy
+        if case == "policy-loaded":
+            source = load_policy_checkpoint(source)
+            message = "last"
+        else:
+            expected = CheckpointError
+            message = "recoverable training state"
+    else:
+        pytest.fail(f"unknown resume rejection case {case!r}")
 
-
-def _resume_case_source(
-    baseline: _ResumeBaseline, case: _ResumeRejectionCase
-):
-    path = getattr(baseline, case.source)
-    if not case.loaded:
-        return path
-    if case.source == "policy":
-        return load_policy_checkpoint(path)
-    return load_checkpoint(path)
-
-
-@pytest.mark.parametrize(
-    "case", _RESUME_REJECTION_CASES, ids=lambda case: case.name
-)
-def test_resume_rejects_named_incompatibility(
-    resume_baseline, tmp_path, case
-):
-    trainer = _resume_case_trainer(
-        resume_baseline, tmp_path / case.name, case
-    )
-    with pytest.raises(case.expected, match=case.match):
-        trainer.train(resume_from=_resume_case_source(resume_baseline, case))
+    trainer = Trainer(**options)
+    with pytest.raises(expected, match=message):
+        trainer.train(resume_from=source)
     assert not trainer.output_dir.exists()
 
 

@@ -19,8 +19,8 @@ from mahjong_bc.errors import DataError
 from _checkpoint_fixtures import build_checkpoint, copy_checkpoint
 from mahjong_eval import cli, records, scheduler
 
-#: Every seed plays one game per fixed neural-seat placement.
-GAMES_PER_SEED = len(records.PLACEMENTS)
+# Frozen comparison protocol: do not derive the oracle from production placements.
+GAMES_PER_SEED = 6
 
 
 @pytest.fixture(scope="module")
@@ -89,7 +89,7 @@ def _assert_incomplete_run(out: Path) -> records.RunPaths:
     paths = records.run_paths(out)
     assert paths.state.is_file()
     state = json.loads(paths.state.read_text(encoding="utf-8"))
-    assert state["status"] == records.STATE_INCOMPLETE
+    assert state["status"] == "incomplete"
     assert paths.plan.is_file()
     assert not paths.summary.exists()
     assert not (out / cli.COSTS_FILENAME).exists()
