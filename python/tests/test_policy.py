@@ -11,6 +11,9 @@ from mahjong_bc.config import ACTIVATION_NAMES, ModelConfig
 from mahjong_bc.errors import ConfigurationError, DataError
 from mahjong_bc.policy import (
     CandidatePolicy,
+    _decision_nll_validated,
+    _greedy_indices_validated,
+    _masked_cross_entropy_validated,
     build_policy,
     decision_nll,
     greedy_indices,
@@ -18,6 +21,8 @@ from mahjong_bc.policy import (
     masked_log_probs,
     sample_indices,
 )
+
+from .helpers import count_host_reads, host_read_count
 
 
 def small_policy(seed: int = 1) -> CandidatePolicy:
@@ -64,6 +69,95 @@ def test_model_emits_float32_logits_without_dropout_or_normalization():
     assert names["candidate_scorer"][-1].__class__ is nn.Linear
     assert names["state_encoder"][-1].__class__ is nn.ReLU
     assert isinstance(model.candidate_scorer[-2], nn.ReLU)
+
+
+def _padded_batch_inputs():
+    padded_mask = torch.tensor(
+        [
+            [False, False, True, True],
+            [False, False, False, False],
+            [False, True, True, True],
+            [False, False, False, True],
+            [False, False, True, True],
+            [False, False, False, False],
+        ]
+    )
+    generator = torch.Generator().manual_seed(31)
+    logits = torch.randn(6, 4, generator=generator).masked_fill(padded_mask, 1.0e9)
+    mask = ~padded_mask
+    targets = torch.tensor([1, 3, 0, 2, 0, 1])
+    return logits, mask, targets
+
+
+def test_internal_validated_primitives_match_public_loss_selection_and_gradients():
+    logits, mask, targets = _padded_batch_inputs()
+    eligible = mask.sum(dim=1) > 1
+    assert torch.equal(
+        decision_nll(logits, mask, targets),
+        _decision_nll_validated(logits, mask, targets),
+    )
+    assert torch.equal(
+        greedy_indices(logits, mask), _greedy_indices_validated(logits, mask)
+    )
+
+    reference = logits.clone().requires_grad_(True)
+    trusted = logits.clone().requires_grad_(True)
+    public_loss = masked_cross_entropy(reference, mask, targets, eligible=eligible)
+    trusted_loss = _masked_cross_entropy_validated(trusted, mask, targets, eligible)
+    assert torch.equal(public_loss, trusted_loss)
+    public_loss.backward()
+    trusted_loss.backward()
+    assert torch.equal(reference.grad, trusted.grad)
+    assert int(torch.count_nonzero(reference.grad[~mask])) == 0
+
+
+def test_internal_validated_primitives_skip_public_validation_round_trips():
+    logits, mask, targets = _padded_batch_inputs()
+    eligible = mask.sum(dim=1) > 1
+    trusted = count_host_reads(
+        lambda: (
+            _decision_nll_validated(logits, mask, targets),
+            _greedy_indices_validated(logits, mask),
+            _masked_cross_entropy_validated(logits, mask, targets, eligible),
+        )
+    )
+    assert host_read_count(trusted) == 0
+    public = count_host_reads(
+        lambda: masked_cross_entropy(logits, mask, targets, eligible=eligible)
+    )
+    # The public entry point still pays for its own value validation.
+    assert public["__bool__"] > 0
+
+
+def test_public_entry_points_still_reject_what_the_trusted_path_skips():
+    logits = torch.zeros(2, 3)
+    mask = torch.ones(2, 3, dtype=torch.bool)
+    targets = torch.tensor([0, 1])
+    nonfinite = logits.clone()
+    nonfinite[0, 0] = float("nan")
+    for entry in (
+        lambda: decision_nll(nonfinite, mask, targets),
+        lambda: masked_cross_entropy(nonfinite, mask, targets),
+        lambda: masked_log_probs(nonfinite, mask),
+        lambda: greedy_indices(nonfinite, mask),
+        lambda: sample_indices(nonfinite, mask),
+    ):
+        with pytest.raises(DataError, match="finite"):
+            entry()
+    with pytest.raises(DataError, match="float32"):
+        decision_nll(logits.double(), mask, targets)
+    with pytest.raises(DataError, match="boolean"):
+        decision_nll(logits, mask.to(torch.int64), targets)
+    with pytest.raises(DataError, match="does not reference a valid candidate"):
+        decision_nll(
+            logits,
+            torch.tensor([[True, False, True], [True, True, True]]),
+            torch.tensor([1, 0]),
+        )
+    with pytest.raises(DataError, match="at least one eligible"):
+        masked_cross_entropy(
+            logits, mask, targets, eligible=torch.zeros(2, dtype=torch.bool)
+        )
 
 
 def test_logits_are_computed_once_per_state_representation():

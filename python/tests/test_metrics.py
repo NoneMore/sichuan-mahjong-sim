@@ -8,7 +8,12 @@ import pytest
 import torch
 
 from mahjong_bc.config import ModelConfig
-from mahjong_bc.constants import CANDIDATE_WIDTH, STATE_WIDTH
+from mahjong_bc.constants import (
+    ACTION_KIND_COUNT,
+    CANDIDATE_WIDTH,
+    STAGE_COUNT,
+    STATE_WIDTH,
+)
 from mahjong_bc.data import (
     PackedDecisionDataset,
     ShardedDecisionDataset,
@@ -17,11 +22,13 @@ from mahjong_bc.data import (
 )
 from mahjong_bc.errors import DataError
 from mahjong_bc.metrics import MetricAccumulator, evaluate_dataset
-from mahjong_bc.policy import build_policy
+from mahjong_bc.policy import build_policy, decision_nll, greedy_indices
 
 from .helpers import (
     DelegatingDataset,
     assert_reports_equal,
+    count_host_reads,
+    host_read_count,
     identity,
     make_dataset,
     support_by_stage,
@@ -456,3 +463,205 @@ def test_accumulator_rejects_inconsistent_forced_split_counts():
     with pytest.raises(DataError):
         accumulator._add_forced_split(decisions=2, eligible=2, forced_by_stage=(1, 0, 0, 0, 0))
     assert accumulator.report().decisions == 0
+
+
+def test_accumulator_matches_per_decision_reference_groups():
+    dataset = make_dataset(
+        split="validation", counts=[2, 1, 3, 2, 1, 2, 3, 1, 2], seed=61
+    )
+    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=21)
+    accumulator = MetricAccumulator()
+    with torch.no_grad():
+        for batch in iter_batches(
+            dataset,
+            np.arange(len(dataset), dtype=np.int64),
+            batch_size=4,
+        ):
+            accumulator.add(
+                model(batch.states, batch.candidates, batch.mask),
+                batch.mask,
+                batch.targets,
+                batch.stages,
+                batch.target_kinds,
+            )
+    report = accumulator.report()
+
+    # Independent reference through the public per-decision helpers.
+    decisions = eligible = 0
+    nll_total = 0.0
+    correct_total = 0
+    forced = [0] * STAGE_COUNT
+    support = [0] * STAGE_COUNT
+    nll_by_stage = [0.0] * STAGE_COUNT
+    correct_by_stage = [0] * STAGE_COUNT
+    kind_support = [0] * ACTION_KIND_COUNT
+    kind_correct = [0] * ACTION_KIND_COUNT
+    with torch.no_grad():
+        for batch in iter_batches(
+            dataset, np.arange(len(dataset), dtype=np.int64), batch_size=4
+        ):
+            logits = model(batch.states, batch.candidates, batch.mask)
+            nll = decision_nll(logits, batch.mask, batch.targets)
+            chosen = greedy_indices(logits, batch.mask).eq(batch.targets)
+            for row in range(batch.batch_size):
+                stage = int(batch.stages[row])
+                kind = int(batch.target_kinds[row])
+                decisions += 1
+                if int(batch.mask[row].sum()) == 1:
+                    forced[stage] += 1
+                    continue
+                value = float(nll[row].item())
+                hit = int(chosen[row].item())
+                eligible += 1
+                nll_total += value
+                correct_total += hit
+                support[stage] += 1
+                nll_by_stage[stage] += value
+                correct_by_stage[stage] += hit
+                kind_support[kind] += 1
+                kind_correct[kind] += hit
+
+    def assert_ratio(actual, total, total_support):
+        if total_support == 0:
+            assert actual is None
+        else:
+            assert actual == pytest.approx(total / total_support, rel=1e-12, abs=1e-12)
+
+    assert report.decisions == decisions
+    assert report.eligible == eligible
+    assert report.forced == decisions - eligible
+    assert_ratio(report.nll, nll_total, eligible)
+    assert_ratio(report.top1, correct_total, eligible)
+    for index, metric in enumerate(report.stages):
+        assert metric.support == support[index]
+        assert metric.forced == forced[index]
+        assert_ratio(metric.nll, nll_by_stage[index], support[index])
+        assert_ratio(metric.top1, correct_by_stage[index], support[index])
+    for index, kind in enumerate(report.action_kinds):
+        assert kind.support == kind_support[index]
+        assert_ratio(kind.top1, kind_correct[index], kind_support[index])
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_accumulator_rejects_nonfinite_valid_logits_before_accumulating(bad):
+    accumulator = MetricAccumulator()
+    logits = torch.zeros(2, 3)
+    logits[1, 2] = bad
+    mask = torch.tensor([[True, False, False], [True, True, True]])
+    with pytest.raises(DataError, match="finite"):
+        accumulator.add(
+            logits,
+            mask,
+            torch.tensor([0, 2]),
+            torch.tensor([0, 1]),
+            torch.tensor([2, 3]),
+        )
+    report = accumulator.report()
+    assert (report.decisions, report.eligible, report.forced) == (0, 0, 0)
+    assert report.nll is None and report.top1 is None
+    assert all(stage.support == 0 and stage.forced == 0 for stage in report.stages)
+    assert all(kind.support == 0 and kind.top1 is None for kind in report.action_kinds)
+
+
+def test_accumulator_ignores_nonfinite_padding_and_keeps_public_messages():
+    logits = torch.tensor([[0.0, 0.0, float("nan")], [1.0, 0.0, float("inf")]])
+    mask = torch.tensor([[True, True, False], [True, True, False]])
+    accumulator = MetricAccumulator()
+    accumulator.add(
+        logits, mask, torch.tensor([0, 1]), torch.tensor([0, 0]), torch.tensor([2, 2])
+    )
+    report = accumulator.report()
+    assert (report.decisions, report.eligible, report.forced) == (2, 2, 0)
+
+    padded_mask = torch.tensor([[True, False, True], [True, True, True]])
+    cases = (
+        (
+            torch.zeros(2, 3).double(),
+            mask,
+            torch.tensor([0, 1]),
+            torch.tensor([0, 0]),
+            torch.tensor([2, 2]),
+            "float32",
+        ),
+        (
+            torch.zeros(2, 3),
+            mask.to(torch.int64),
+            torch.tensor([0, 1]),
+            torch.tensor([0, 0]),
+            torch.tensor([2, 2]),
+            "boolean",
+        ),
+        (
+            torch.zeros(2, 3),
+            padded_mask,
+            torch.tensor([1, 0]),
+            torch.tensor([0, 0]),
+            torch.tensor([2, 2]),
+            "does not reference a valid candidate",
+        ),
+        (
+            torch.zeros(2, 3),
+            mask,
+            torch.tensor([0, 3]),
+            torch.tensor([0, 0]),
+            torch.tensor([2, 2]),
+            "outside the padded candidate range",
+        ),
+        (
+            torch.zeros(2, 3),
+            mask,
+            torch.tensor([0, 1]),
+            torch.tensor([0, 5]),
+            torch.tensor([2, 2]),
+            "stages must be in",
+        ),
+        (
+            torch.zeros(2, 3),
+            mask,
+            torch.tensor([0, 1]),
+            torch.tensor([0, 0]),
+            torch.tensor([2, 9]),
+            "target_kinds must be in",
+        ),
+        (
+            torch.zeros(2, 3),
+            torch.tensor([[True, True, True], [False, False, False]]),
+            torch.tensor([0, 1]),
+            torch.tensor([0, 0]),
+            torch.tensor([2, 2]),
+            "at least one candidate",
+        ),
+    )
+    for logits_case, mask_case, targets, stages, kinds, message in cases:
+        rejected = MetricAccumulator()
+        with pytest.raises(DataError, match=message):
+            rejected.add(logits_case, mask_case, targets, stages, kinds)
+        assert rejected.report().decisions == 0
+
+
+def test_accumulator_host_transfers_per_batch_are_bounded():
+    logits = torch.tensor(
+        [[0.0, 0.0, -100.0], [0.0, 0.0, 0.0], [10.0, 0.0, 0.0]]
+    )
+    mask = torch.tensor([[True, True, False], [True, True, True], [True, False, False]])
+    targets = torch.tensor([0, 1, 0])
+    stages = torch.tensor([0, 0, 4])
+    kinds = torch.tensor([2, 3, 2])
+    reads = count_host_reads(
+        lambda: MetricAccumulator().add(logits, mask, targets, stages, kinds)
+    )
+    # One validation transfer and one aggregation transfer. Implicit device
+    # reads inside masked_select, boolean indexing and bincount are not counted
+    # here, so this bounds explicit scalar fetches only.
+    assert reads["cpu"] == 2
+    assert reads["item"] == reads["__bool__"] == reads["__int__"] == 0
+    forced = count_host_reads(
+        lambda: MetricAccumulator().add(
+            logits[:1, :1],
+            torch.tensor([[True]]),
+            targets[:1],
+            stages[:1],
+            kinds[:1],
+        )
+    )
+    assert forced["cpu"] == 2

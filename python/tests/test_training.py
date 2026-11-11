@@ -27,7 +27,8 @@ from mahjong_bc.config import (
 from mahjong_bc.constants import ROLE_BEST, ROLE_LAST, ROLE_POLICY
 from mahjong_bc.data import PackedDecisionDataset
 from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError, ResumeError
-from mahjong_bc.policy import build_policy
+import mahjong_bc.policy as policy_module
+from mahjong_bc.policy import CandidatePolicy, build_policy
 from mahjong_bc.train import (
     TRAIN_OUTPUT_NAMES,
     Trainer,
@@ -1175,3 +1176,229 @@ def test_completed_resume_to_new_output_copies_best_and_last_and_does_not_train(
     assert new_best.metrics["nll"] == pytest.approx(0.5)
     assert new_last.metrics["nll"] == pytest.approx(0.6)
     assert (new / "run.json").is_file()
+
+
+class _OutputPolicy(CandidatePolicy):
+    """Custom policy whose forward output is inspected after ``__call__``."""
+
+    def __init__(self, config, transform) -> None:
+        super().__init__(config)
+        self.transform = transform
+        self.forward_calls = 0
+
+    def forward(self, states, candidates, mask):
+        self.forward_calls += 1
+        return self.transform(super().forward(states, candidates, mask))
+
+
+def _install_output_policy(monkeypatch, transform):
+    created = []
+
+    def build(config=None, *, seed=None):
+        torch.manual_seed(seed)
+        policy = _OutputPolicy(config, transform).float()
+        policy.register_forward_pre_hook(
+            lambda module, args: setattr(
+                module, "hook_calls", getattr(module, "hook_calls", 0) + 1
+            )
+        )
+        created.append(policy)
+        return policy
+
+    monkeypatch.setattr(train_module, "build_policy", build)
+    return created
+
+
+@pytest.mark.parametrize("offset", [float("nan"), float("inf")])
+def test_training_rejects_nonfinite_model_output_before_any_update(
+    tmp_path, monkeypatch, offset
+):
+    train, validation = learnable_pair(cache_id="nonfinite-output")
+    _install_output_policy(monkeypatch, lambda logits: logits + offset)
+    trainer = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=2, batch_size=3, learning_rate=0.01),
+        output_dir=tmp_path / "nonfinite",
+        device="cpu",
+    )
+    with pytest.raises(DataError, match="finite"):
+        trainer.train()
+    assert trainer.optimizer is not None and not trainer.optimizer.state
+    for name in TRAIN_OUTPUT_NAMES:
+        assert not (tmp_path / "nonfinite" / name).exists()
+
+
+@pytest.mark.parametrize(
+    "transform, message",
+    [
+        (lambda logits: logits.double(), "logits must be a float32 tensor"),
+        (lambda logits: logits.unsqueeze(-1), "logits must have shape"),
+        (lambda logits: logits[:, :-1], "mask must have shape"),
+    ],
+)
+def test_training_rejects_structural_model_output_errors(
+    tmp_path, monkeypatch, transform, message
+):
+    train, validation = learnable_pair(cache_id="structure-output")
+    _install_output_policy(monkeypatch, transform)
+    trainer = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=1, batch_size=3, learning_rate=0.01),
+        output_dir=tmp_path / "structure",
+        device="cpu",
+    )
+    with pytest.raises(DataError, match=message):
+        trainer.train()
+    assert trainer.optimizer is not None and not trainer.optimizer.state
+
+
+def test_training_calls_the_custom_model_through_module_hooks(tmp_path, monkeypatch):
+    train, validation = learnable_pair(cache_id="hook-cache")
+    created = _install_output_policy(monkeypatch, lambda logits: logits)
+    trainer = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=1, batch_size=4, learning_rate=0.01),
+        output_dir=tmp_path / "hooks",
+        device="cpu",
+    )
+    summary = trainer.train()
+    (policy,) = created
+    assert summary.completed_epochs == 1
+    assert policy.forward_calls > 0
+    assert policy.hook_calls == policy.forward_calls
+
+
+def test_training_loss_matches_the_public_reference_exactly(tmp_path, monkeypatch):
+    train, validation = learnable_pair(cache_id="loss-equivalence")
+    config = _config(epochs=3, batch_size=3, learning_rate=0.05)
+    model_config = _small_model()
+    summaries = []
+    weights = []
+    for name in ("trusted", "reference"):
+        trainer = Trainer(
+            train_dataset=train,
+            validation_dataset=validation,
+            model_config=model_config,
+            training_config=config,
+            output_dir=tmp_path / name,
+            device="cpu",
+        )
+        with monkeypatch.context() as patch:
+            if name == "reference":
+                patch.setattr(
+                    train_module,
+                    "_masked_cross_entropy_validated",
+                    lambda logits, mask, targets, eligible: (
+                        policy_module.masked_cross_entropy(
+                            logits, mask, targets, eligible=eligible
+                        )
+                    ),
+                )
+            summaries.append(trainer.train())
+        assert trainer.model is not None
+        weights.append(
+            {key: value.clone() for key, value in trainer.model.state_dict().items()}
+        )
+    assert summaries[0].to_dict() == summaries[1].to_dict()
+    assert summaries[0].history[0]["train_nll"] == summaries[1].history[0]["train_nll"]
+    _assert_state_dict_equal(weights[0], weights[1])
+
+
+def test_batch_loss_buffering_stays_bounded_and_keeps_accumulation_order():
+    losses = [torch.tensor(value, dtype=torch.float32) for value in (0.5, 1.25, 2.0, 0.75, 3.5)]
+    decisions = [3, 2, 4, 1, 5]
+    expected = 0.0
+    for loss, count in zip(losses, decisions):
+        expected += float(loss.double().item()) * count
+    for chunk_size in (1, 2, 5):
+        totals = train_module._EpochLossTotals(chunk_size=chunk_size)
+        for loss, count in zip(losses, decisions):
+            totals.add(loss, count)
+            assert len(totals._losses) < chunk_size
+        assert totals.decisions == sum(decisions)
+        assert totals.mean() == expected / sum(decisions)
+
+
+def test_epoch_history_is_identical_across_loss_chunk_sizes(tmp_path, monkeypatch):
+    train, validation = learnable_pair(cache_id="chunk-size")
+    config = _config(epochs=2, batch_size=2, learning_rate=0.02)
+    model_config = _small_model()
+    summaries = []
+    for name, chunk_size in (("unchunked", 4096), ("chunked", 4)):
+        trainer = Trainer(
+            train_dataset=train,
+            validation_dataset=validation,
+            model_config=model_config,
+            training_config=config,
+            output_dir=tmp_path / name,
+            device="cpu",
+        )
+        with monkeypatch.context() as patch:
+            patch.setattr(train_module, "_LOSS_CHUNK_SIZE", chunk_size)
+            summaries.append(trainer.train())
+    assert summaries[0].to_dict() == summaries[1].to_dict()
+
+
+def _mask_off_targets(batch):
+    mask = batch.mask.clone()
+    mask[:, 0] = False
+    mask[:, 1] = True
+    return dataclasses.replace(
+        batch, mask=mask, targets=torch.zeros_like(batch.targets)
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate, message",
+    [
+        (
+            lambda batch: dataclasses.replace(
+                batch, eligible=torch.zeros_like(batch.eligible)
+            ),
+            "forced decision",
+        ),
+        (
+            lambda batch: dataclasses.replace(
+                batch, targets=batch.targets.clone().fill_(batch.candidates.shape[1])
+            ),
+            "outside the padded candidate range",
+        ),
+        (
+            lambda batch: dataclasses.replace(
+                batch, targets=batch.targets.float()
+            ),
+            "integer tensor",
+        ),
+        (_mask_off_targets, "does not reference a valid candidate"),
+    ],
+)
+def test_training_rejects_malformed_host_batches_before_updating(
+    tmp_path, monkeypatch, mutate, message
+):
+    train, validation = learnable_pair(cache_id="host-batches")
+    real_batches = train_module.iter_batches
+
+    def corrupting(dataset, indices, **kwargs):
+        for batch in real_batches(dataset, indices, **kwargs):
+            yield mutate(batch)
+
+    monkeypatch.setattr(train_module, "iter_batches", corrupting)
+    trainer = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=1, batch_size=3, learning_rate=0.01),
+        output_dir=tmp_path / "host-batches",
+        device="cpu",
+    )
+    with pytest.raises(DataError, match=message):
+        trainer.train()
+    assert trainer.optimizer is not None and not trainer.optimizer.state
+    for name in TRAIN_OUTPUT_NAMES:
+        assert not (tmp_path / "host-batches" / name).exists()

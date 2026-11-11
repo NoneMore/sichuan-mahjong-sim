@@ -181,23 +181,39 @@ def masked_candidate_inputs(candidates: Tensor, mask: Tensor) -> Tensor:
     return candidates.masked_fill(~mask.unsqueeze(-1), 0.0)
 
 
-def _validate_logits_mask(logits: Tensor, mask: Tensor) -> None:
+def _validate_mask_structure(
+    mask: Tensor, shape: tuple[int, int], device: torch.device
+) -> None:
+    """Check mask dtype/shape/device/device agreement without host reads."""
+
+    if not isinstance(mask, Tensor) or mask.dtype != torch.bool:
+        raise DataError("mask must be a boolean tensor")
+    if mask.shape != shape:
+        raise DataError(f"mask must have shape {shape}, got {tuple(mask.shape)}")
+    if shape[1] == 0:
+        raise DataError("each decision must have at least one candidate")
+    if mask.device != device:
+        raise DataError("logits and mask must be on the same device")
+
+
+def _validate_logits_mask_structure(logits: Tensor, mask: Tensor) -> None:
+    """Structural logits/mask checks without reading either value to the host.
+
+    Public entry points also check that every decision has a valid candidate;
+    internal batch paths validate that predicate once per batch on the host.
+    """
+
     if not isinstance(logits, Tensor) or logits.dtype != torch.float32:
         raise DataError("logits must be a float32 tensor")
     if logits.dim() != 2:
         raise DataError(f"logits must have shape [B, C], got {tuple(logits.shape)}")
-    if not isinstance(mask, Tensor) or mask.dtype != torch.bool:
-        raise DataError("mask must be a boolean tensor")
-    if mask.shape != logits.shape:
-        raise DataError(
-            f"mask must have shape {tuple(logits.shape)}, got {tuple(mask.shape)}"
-        )
-    if mask.shape[1] == 0:
-        raise DataError("each decision must have at least one candidate")
+    _validate_mask_structure(mask, tuple(logits.shape), logits.device)
+
+
+def _validate_logits_mask(logits: Tensor, mask: Tensor) -> None:
+    _validate_logits_mask_structure(logits, mask)
     if not bool(mask.any(dim=1).all()):
         raise DataError("every decision must have at least one valid candidate")
-    if logits.device != mask.device:
-        raise DataError("logits and mask must be on the same device")
 
 
 def _require_finite_valid(logits: Tensor, mask: Tensor) -> None:
@@ -205,18 +221,25 @@ def _require_finite_valid(logits: Tensor, mask: Tensor) -> None:
         raise DataError("valid candidate logits must be finite")
 
 
-def _validate_targets(logits: Tensor, mask: Tensor, targets: Tensor) -> None:
+def _validate_targets_structure(
+    targets: Tensor, batch_size: int, device: torch.device
+) -> None:
+    """Check target dtype/shape/device/device agreement without host reads."""
+
     if not isinstance(targets, Tensor):
         raise DataError("targets must be a torch tensor")
-    if targets.dim() != 1 or targets.shape[0] != logits.shape[0]:
+    if targets.dim() != 1 or targets.shape[0] != batch_size:
         raise DataError(
-            f"targets must have shape [{logits.shape[0]}], "
-            f"got {tuple(targets.shape)}"
+            f"targets must have shape [{batch_size}], got {tuple(targets.shape)}"
         )
     if targets.dtype not in (torch.int64, torch.int32):
         raise DataError(f"targets must be an integer tensor, got {targets.dtype}")
-    if targets.device != logits.device:
+    if targets.device != device:
         raise DataError("targets and logits must be on the same device")
+
+
+def _validate_targets(logits: Tensor, mask: Tensor, targets: Tensor) -> None:
+    _validate_targets_structure(targets, logits.shape[0], logits.device)
     if targets.numel() == 0:
         return
     if int(targets.min()) < 0 or int(targets.max()) >= logits.shape[1]:
@@ -246,6 +269,22 @@ def masked_log_probs(
     return _masked_log_softmax(logits, mask)
 
 
+def _decision_nll_validated(
+    logits: Tensor,
+    mask: Tensor,
+    targets: Tensor,
+) -> Tensor:
+    """Per-decision NLL for tensors a caller has already fully validated.
+
+    Internal batch paths check a padded batch once, including value checks, and
+    then reuse this primitive for the NLL instead of repeating every public
+    check. Public entry points keep their strict validation.
+    """
+
+    log_probs = _masked_log_softmax(logits, mask)
+    return -log_probs.gather(1, targets.unsqueeze(1).long()).squeeze(1)
+
+
 def decision_nll(
     logits: Tensor,
     mask: Tensor,
@@ -259,8 +298,7 @@ def decision_nll(
     _validate_targets(logits, mask, targets)
     if check_finite:
         _require_finite_valid(logits, mask)
-    log_probs = _masked_log_softmax(logits, mask)
-    return -log_probs.gather(1, targets.unsqueeze(1).long()).squeeze(1)
+    return _decision_nll_validated(logits, mask, targets)
 
 
 def masked_cross_entropy(
@@ -294,6 +332,22 @@ def masked_cross_entropy(
     return nll.masked_select(eligible).mean()
 
 
+def _masked_cross_entropy_validated(
+    logits: Tensor,
+    mask: Tensor,
+    targets: Tensor,
+    eligible: Tensor,
+) -> Tensor:
+    """Eligible-mean NLL for tensors a caller has already fully validated.
+
+    ``eligible`` must already be a boolean decision mask on the same device
+    with at least one selected decision, and the logits must be finite.
+    """
+
+    nll = _decision_nll_validated(logits, mask, targets)
+    return nll.masked_select(eligible).mean()
+
+
 def greedy_indices(logits: Tensor, mask: Tensor, *, check_finite: bool = True) -> Tensor:
     """Return the highest-logit valid candidate per decision.
 
@@ -305,6 +359,12 @@ def greedy_indices(logits: Tensor, mask: Tensor, *, check_finite: bool = True) -
     _validate_logits_mask(logits, mask)
     if check_finite:
         _require_finite_valid(logits, mask)
+    return _greedy_indices_validated(logits, mask)
+
+
+def _greedy_indices_validated(logits: Tensor, mask: Tensor) -> Tensor:
+    """Greedy selection for logits and mask a caller has already validated."""
+
     masked = logits.masked_fill(~mask, float("-inf"))
     maxima = masked.max(dim=1, keepdim=True).values
     positions = torch.arange(logits.shape[1], device=logits.device)

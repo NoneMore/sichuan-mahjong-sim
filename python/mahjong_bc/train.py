@@ -41,6 +41,7 @@ from .config import (
 )
 from .constants import PACKAGE_VERSION, ROLE_BEST, ROLE_LAST
 from .data import (
+    DecisionBatch,
     DecisionDataset,
     contains_memory_mapped_arrays,
     iter_batches,
@@ -48,9 +49,20 @@ from .data import (
 )
 from .errors import ConfigurationError, DataError, ResumeError
 from .metrics import MetricsReport, evaluate_dataset
-from .policy import CandidatePolicy, build_policy, masked_cross_entropy
+from .policy import (
+    CandidatePolicy,
+    _masked_cross_entropy_validated,
+    _require_finite_valid,
+    _validate_logits_mask_structure,
+    _validate_mask_structure,
+    _validate_targets_structure,
+    build_policy,
+)
 
 _ORDER_SEED_MASK = 0x9E3779B97F4A7C15
+#: Batch losses buffered on the device before one host transfer. Bounds the
+#: scalar allocation peak without changing the accumulation order.
+_LOSS_CHUNK_SIZE = 1024
 BEST_CHECKPOINT_NAME = "best.pt"
 LAST_CHECKPOINT_NAME = "last.pt"
 RUN_RECORD_NAME = "run.json"
@@ -125,6 +137,93 @@ class _TrainingProgress:
             best_epoch=self.best_epoch,
             history=tuple(self.history),
         )
+
+
+def _require_host_training_batch(batch: DecisionBatch) -> None:
+    """Check a collated training batch before it is copied to the device.
+
+    The traversal is eligible-only and the packed layout is validated when the
+    cache is loaded, so these invariants are host-side facts about the batch.
+    Checking them here keeps the public predicates and messages of the loss
+    helpers without a device round trip per batch. Model outputs are still
+    structurally checked and tested for NaN/Inf on the device before every
+    update.
+    """
+
+    if batch.states.dim() != 2 or batch.candidates.dim() != 3:
+        raise DataError(
+            "collated batches must carry states [B, state_width] and "
+            f"candidates [B, C, candidate_width], got {tuple(batch.states.shape)} "
+            f"and {tuple(batch.candidates.shape)}"
+        )
+    if batch.batch_size == 0:
+        raise DataError("at least one eligible decision is required")
+    _validate_mask_structure(
+        batch.mask,
+        (batch.batch_size, batch.candidates.shape[1]),
+        batch.states.device,
+    )
+    _validate_targets_structure(
+        batch.targets, batch.batch_size, batch.states.device
+    )
+    if not isinstance(batch.eligible, torch.Tensor) or batch.eligible.dtype != torch.bool:
+        raise DataError("eligible must be a boolean tensor")
+    if batch.eligible.shape != (batch.batch_size,):
+        raise DataError(
+            f"eligible must have shape ({batch.batch_size},), "
+            f"got {tuple(batch.eligible.shape)}"
+        )
+    if batch.eligible.device != batch.states.device:
+        raise DataError("eligible and logits must be on the same device")
+    if not bool(batch.eligible.all()):
+        raise DataError("training traversal included a forced decision")
+    if not bool(batch.mask.any(dim=1).all()):
+        raise DataError("every decision must have at least one valid candidate")
+    if int(batch.targets.min()) < 0 or int(
+        batch.targets.max()
+    ) >= batch.candidates.shape[1]:
+        raise DataError("target index is outside the padded candidate range")
+    if not bool(batch.mask.gather(1, batch.targets.long().unsqueeze(1)).all()):
+        raise DataError("target index does not reference a valid candidate")
+
+
+class _EpochLossTotals:
+    """Decision-weighted batch-loss sum with bounded device buffering.
+
+    Batch losses are fetched in fixed-size chunks, so device residency does not
+    grow with the epoch's step count. Each chunk is widened to float64 and then
+    accumulated in batch order, which reproduces the per-batch
+    ``float(loss.detach().double().item()) * decisions`` sum it replaces.
+    """
+
+    def __init__(self, chunk_size: int | None = None) -> None:
+        self._chunk_size = _LOSS_CHUNK_SIZE if chunk_size is None else chunk_size
+        self._losses: list[torch.Tensor] = []
+        self._batch_decisions: list[int] = []
+        self._total = 0.0
+        self.decisions = 0
+
+    def add(self, loss: torch.Tensor, decisions: int) -> None:
+        self._losses.append(loss.detach())
+        self._batch_decisions.append(decisions)
+        self.decisions += decisions
+        if len(self._losses) >= self._chunk_size:
+            self._flush()
+
+    def _flush(self) -> None:
+        if not self._losses:
+            return
+        values = torch.stack(self._losses).double().cpu().tolist()
+        for value, decisions in zip(values, self._batch_decisions):
+            self._total += float(value) * decisions
+        self._losses.clear()
+        self._batch_decisions.clear()
+
+    def mean(self) -> float:
+        self._flush()
+        if self.decisions == 0:
+            raise DataError("at least one eligible decision is required")
+        return self._total / self.decisions
 
 
 def _order_seed(seed: int) -> int:
@@ -629,8 +728,7 @@ class Trainer:
                 eligible_count, generator=self.order_generator
             ).numpy()
             epoch_indices = eligible_indices[permutation]
-            train_nll_sum = 0.0
-            train_decisions = 0
+            epoch_losses = _EpochLossTotals()
             epoch_steps = 0
             for batch in iter_batches(
                 self.train_dataset,
@@ -638,18 +736,17 @@ class Trainer:
                 batch_size=batch_size,
                 num_workers=self.training_config.num_workers,
             ):
+                _require_host_training_batch(batch)
                 moved = batch.to(self.device)
-                if not bool(moved.eligible.all()):
-                    raise DataError(
-                        "training traversal included a forced decision"
-                    )
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(moved.states, moved.candidates, moved.mask)
-                loss = masked_cross_entropy(
+                _validate_logits_mask_structure(logits, moved.mask)
+                _require_finite_valid(logits, moved.mask)
+                loss = _masked_cross_entropy_validated(
                     logits,
                     moved.mask,
                     moved.targets,
-                    eligible=moved.eligible,
+                    moved.eligible,
                 )
                 loss.backward()
                 optimizer.step()
@@ -657,14 +754,14 @@ class Trainer:
                 epoch_steps += 1
                 decisions = moved.batch_size
                 progress.samples_seen += decisions
-                train_decisions += decisions
-                train_nll_sum += float(loss.detach().double().item()) * decisions
+                epoch_losses.add(loss, decisions)
+            train_decisions = epoch_losses.decisions
             if train_decisions != eligible_count:
                 raise RuntimeError(
                     f"epoch {epoch} visited {train_decisions} decisions, "
                     f"expected {eligible_count}"
                 )
-            train_nll = train_nll_sum / train_decisions
+            train_nll = epoch_losses.mean()
             validation = evaluate_dataset(
                 model,
                 self.validation_dataset,
