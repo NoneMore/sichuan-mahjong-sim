@@ -121,56 +121,34 @@ for policy, checkpoint-format and CLI contracts.
 
 ## Online environment binding and comparison
 
-[`crates/python`](../../crates/python/) is a separate Cargo workspace and PyO3
-extension exposed as `mahjong_eval._native`. It is excluded from the root
-workspace, so core, neural, collector and offline training builds neither
-resolve nor link Python. The binding owns no rules: `Env.reset(seed)` returns an
-owned float32 snapshot of the first pending `Decision`, and `Env.step` resolves
-a local index through the handle's cached canonical actions and commits one
-`Action` to `Game`. Decision identities pack a per-handle reset generation and
-sequence, so stale identities and out-of-range indices are rejected before
-mutation; snapshots never alias authoritative state. Every stage, forced choice,
-response and continued play after a win remains an explicit pending decision.
-Terminal values report seat scores, Boolean win flags, end reason, and the
-accepted decision count including forced choices.
+[`crates/python`](../../crates/python/) is a standalone Cargo workspace exposing
+`mahjong_eval._native`. Excluding it from the root workspace keeps core,
+collector and offline builds independent of Python. Each `Env` owns one Game
+and its canonical action cache. Reset/step return owned encoded snapshots;
+identities include reset generation, and invalid requests are rejected before
+mutation. Rules, automatic transitions and terminal settlement stay in Game.
 
-`Env.teacher_index` evaluates `HeuristicPolicy` on the original Rust decision and
-maps its semantic choice through the encoder's canonical target lookup; it does
-not advance the game. Teacher cache contexts can be shared explicitly across
-handles and calls. `native_teacher_replay` exposes the same native teacher as a
-complete semantic trace for cross-language replay; split bucket/name and
-compiled extension source identity are separate query entry points. The
-extension's build script hashes its own crate, the simulator core and the neural
-crate, so the compiled identity is independent of the caller's working
-directory and of the neural crate's collection provenance.
+Teacher queries choose on the original Rust Decision, map semantic actions to
+canonical indices and leave progression to step. Explicit cache sharing preserves
+choices. Native semantic replay checks the binding path; split queries reuse the
+corpus contract. Build-time provenance covers binding/core/neural source bytes,
+separate from neural collection provenance and the caller's working directory.
 
-The [online Python package](../../online/README.md) owns scheduling, inference,
-and records. `inference.FrozenPolicy` adopts an already loaded `LoadedCheckpoint`
-(or loads one), rejects `last`, keeps eval-mode float32 weights on one device,
-and selects from the shared label-free `pad_decision_inputs` contract; single
-candidates bypass inference. `scheduler.run_games` drives several independent
-`Env` handles, caps concurrency, refills finished games, groups pending neural
-decisions by assigned policy into bounded chunks, routes returned indices by
-chunk position (not decision id, which concurrent handles reuse), queries the
-teacher through one shared cache, and commits forced choices as index zero. It
-reports per-game accounting, recomputable totals, scalar-only optional traces,
-and separate environment/teacher/inference timings; CUDA is synchronized at
-inference batch boundaries. Any game, inference, or terminal-callback failure
-stops scheduling with seed/placement/decision context.
+The [online Python package](../../online/README.md) separates execution concerns:
 
-`records` defines the plan, run state, raw terminal record, and summary
-protocols. A plan fixes the seeds and six placements and carries checkpoint
-content identity, installed Python source hashes, compiled Rust source,
-training provenance kept separate from evaluation identity, split algorithm,
-dependencies, and the selected device/batching/cache configuration. `create_run`
-publishes state `incomplete`, then the plan, then the record stream; each
-terminal record is appended, flushed and fsynced as its game finishes. Only a
-clean close with no failed append changes the state to `complete`, and
-`finalize_run` recomputes the seed-blocked summary from the persisted files.
-`cli.compare` validates seeds with the Rust split, requires a selected `best`
-checkpoint, publishes the plan before play, cross-checks persisted records,
-writes costs while the writer context is still open, and only then closes and
-finalizes, so failures leave completed records without a summary.
+| Module | Responsibility |
+|---|---|
+| `inference` | Frozen checkpoint weights, shared label-free padding/masks, greedy selection and forced bypass |
+| `scheduler` | Bounded concurrent handles, per-policy batches, handle-local routing, shared teacher cache and execution costs |
+| `records` | Planned placements, exact checkpoint/imported-source identity, flushed terminal records and seed-blocked summaries |
+| `cli` | Selected-best checkpoint and Rust-split validation, comparison setup and persisted-result checks |
+
+Concurrent handles can reuse decision ids, so routing also retains the originating
+handle. Every stage and forced choice remains explicit, including continued play
+after a win. Failures stop execution without substitute actions. The writer stays
+incomplete until records and costs succeed; only a clean close permits summary
+publication from persisted files. Training provenance is recorded separately from
+the executing Python packages and compiled Rust runtime.
 
 ## Verification
 

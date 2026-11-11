@@ -115,49 +115,25 @@ epoch replay, output migration and CUDA training/reload checks.
 
 ### Python online evaluation
 
-The [online package](../online/README.md) builds the PyO3 environment binding,
-synchronous multi-game scheduling, and the formal frozen-policy comparison CLI.
-Install the offline package first because it provides `mahjong-bc` (not a PyPI
-name), then the extension:
+Install the repository-local offline package before the online extension:
 
 ```text
 python -m pip install -e "./python[dev]"
-python -m pip install -e ./online          # or ./online[evaluation]
+python -m pip install -e "./online[evaluation]"
 python -m mahjong_eval version
 python -m pytest online/tests
 ```
 
-`online/pyproject.toml` builds `mahjong_eval._native` with maturin and passes
-`features = ["extension-module"]`; plain `cargo check`/`cargo test` in
-`crates/python` do not enable PyO3's extension link mode, so test executables
-link Python normally. Build the extension from the package rather than using
-raw `cargo build` output:
+The [online guide](../online/README.md) covers environment/teacher APIs, frozen
+comparison commands, records, wheel/sdist builds and standalone Rust checks.
+The binding lives outside the root workspace; root Cargo checks do not cover it.
+The [online CI job](../.github/workflows/python-ci.yml) checks stable/MSRV,
+installs the wheel, runs corpus handoff and online tests, then verifies an sdist
+build cannot borrow an outer checkout's Git identity. The offline job remains
+independent of the binding.
 
-```text
-cd online
-python -m maturin build --release --locked --out dist
-cd ..
-python -m pip install --force-reinstall --no-deps <produced-wheel>
-```
-
-`mahjong-eval compare --checkpoint FILE --split validation|test --seeds LIST
---out DIR` rejects `last` and requires the selected `best` checkpoint. Seeds are
-validated against the frozen Rust split; validation runs are diagnostics and
-test runs are the frozen comparison. The run publishes `plan.json` before play,
-appends `games.jsonl` as games finish, writes `costs.json`, and only then marks
-`state.json` complete and recomputes `summary.json` from the persisted files.
-Measurements are single-process and separated into environment reset, environment
-step, teacher, and synchronized CUDA inference time; record the device and batch
-settings with any throughput claim. The
-[online validation](validation.md#python-online-comparison-smoke-validation)
-records real inputs and observed costs without claiming policy strength.
-
-The [cumulative online CI job](../.github/workflows/python-ci.yml) checks the
-standalone extension for both stable and Rust 1.75, builds the wheel, installs
-it with the offline package, and runs every online test against a freshly
-collected teacher corpus. It also builds and imports a wheel from the source
-distribution, checking that an outer checkout is not borrowed as its Git source.
-Offline `python/tests` stay independent of the binding.
+[Online validation](validation.md#python-online-comparison-smoke-validation)
+records checkpoint inputs, device/batching costs and verification limits.
 
 ### Policy A/B comparison example
 
