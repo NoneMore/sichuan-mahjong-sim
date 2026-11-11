@@ -3,7 +3,7 @@
 Run these examples from the repository root. Their experiment-specific
 options are separate from the root self-play CLI.
 
-## Balanced policy A/B comparison
+## Policy A/B comparison example
 
 `policy_ab` plays six balanced 2A2B placements for each seed, with
 fresh policies and Runner per game. Options `--a` and `--b` accept
@@ -42,7 +42,7 @@ mean Delta across seed blocks and the between-block standard error;
 a positive Delta favors A. The independent sample unit is the seed
 block, not an individual seat or game.
 
-## Four-seat heuristic benchmark
+## Heuristic benchmark example
 
 `heuristic_bench` times complete batches of HeuristicPolicy self-play,
 with all seats sharing one cache context. Run cold and warm cache
