@@ -51,16 +51,5 @@ and comparison/benchmark workflows.
 
 ## Documentation
 
-Start with the [documentation map](docs/README.md) or go directly to:
-
-| Goal | Document |
-| --- | --- |
-| Understand the fixed game semantics | [Rules contract](docs/baseline-rules.md) |
-| Build, run, compare, and verify | [Development and verification](docs/development.md) |
-| Use the Rust Runner, policies, caches, and checkpoints | [Library API and continuation](docs/library.md) |
-| Navigate implemented subsystems | [Architecture overview](docs/architecture/overview.md) |
-| Collect and prepare teacher data | [Neural crate guide](crates/neural/README.md) |
-| Train an offline BC policy | [Python BC guide](python/README.md) |
-| Compare frozen policies online | [Online evaluation guide](online/README.md) |
-| Review historical measurements | [Historical validation](docs/validation.md) |
-| Contribute or use coding agents | [Project governance](docs/governance.md) |
+Use the [documentation map](docs/README.md) for task-specific guides,
+API references, architecture, validation records, and contributor guidance.

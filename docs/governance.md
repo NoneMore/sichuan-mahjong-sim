@@ -29,18 +29,13 @@ with genuinely agent-specific guidance kept separate.
 
 ## Where to look
 
-Use the [documentation map](README.md) for reader-oriented navigation.
+Use the [documentation map](README.md) to find task-specific guides. For change work, distinguish these sources:
 
-| Question | Start here |
+| Question | Source |
 | --- | --- |
-| Setup, build, run, test | [README quick start](../README.md#running), then [development guide](development.md) for CLI and CI |
-| Library API, policies, and checkpoint continuation | [Library guide](library.md) |
-| Fixed game semantics | [Baseline rules](baseline-rules.md) |
-| Current implementation | Relevant core `src/`, `crates/`, tests, and executable evidence |
-| Component boundaries | [Current architecture](architecture/overview.md), then code |
-| Past test coverage and measurements | [Validation](validation.md) |
-| Proposed change intent | `specs/active/<change>/`, when present |
-| Consequential decision history | `docs/adr/`, when present |
+| What does the current implementation do? | Relevant `src/`, `crates/`, tests, and executable evidence |
+| What is a proposed change intended to do? | `specs/active/<change>/`, when present |
+| Why was a consequential decision made? | `docs/adr/`, when present |
 
 ## Architecture knowledge
 

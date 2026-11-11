@@ -19,14 +19,5 @@ workflows, and historical measurements.
 | Inspect historical validations or measurements | [Historical validation](validation.md) |
 | Change the project or consult past decisions | [Governance](governance.md) and [archived changes](../specs/archive/) |
 
-## How to read these references
-
-- [Fixed gameplay rules](baseline-rules.md) define **intended** Mahjong
-  behavior; code and tests are the evidence for **implemented** behavior.
-- [Architecture guides](architecture/overview.md) describe current component
-  responsibilities, not proposed or historical designs.
-- [Development](development.md) and the module README files describe current
-  commands; [validation](validation.md) documents historical evidence, not a
-  performance guarantee.
-- [Governance](governance.md) defines how to reconcile disagreements and
-  when documentation must change with the code.
+For evidence precedence, documentation responsibilities, and how to resolve
+disagreements, follow [project governance](governance.md#evidence-and-intent).
