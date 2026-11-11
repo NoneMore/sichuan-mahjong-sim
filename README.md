@@ -35,6 +35,21 @@ uses a separate PyO3 binding to compare frozen neural policies with the teacher.
 See the [implemented architecture map](docs/architecture/overview.md) for
 component ownership, data flow, and code entry points.
 
+## What this checkout provides
+
+This is a research simulator and experiment toolkit, **not** an interactive
+Mahjong client, a multi-hand match engine, or a configurable rules platform.
+The root executable supports only `first` and `random` self-play; the
+heuristic and missing-only policies are available from the library and
+experiment examples. Frozen neural-policy evaluation uses the separate
+[online package](online/README.md).
+
+The repository does not ship a pretrained neural checkpoint or a prepared
+training corpus/cache. To evaluate a learned policy from scratch, follow the
+[collection → preparation → training → online evaluation guide](docs/guides/bc-pipeline.md)
+or provide your own compatible checkpoint. Source and regression fixtures
+are not substitutes for a trained model or its provenance.
+
 ## Running
 
 Use Rust 1.75 or newer (prefer current stable for development):
