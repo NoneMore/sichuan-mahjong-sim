@@ -127,9 +127,11 @@ weights decisions equally; forced choices are counted separately.
 
 `metrics.py` aggregates complete eligible validation/test sets by decision:
 overall NLL/top-1, per-stage support/NLL/top-1, teacher action-kind support/top-1,
-and separate forced counts. Zero-support groups report `null`. Validation mean
-NLL alone selects `best.pt`; test evaluation loads the frozen checkpoint and
-never influences selection or updates the file.
+and separate forced counts. Built-in packed and sharded splits score only their
+eligible decisions and take forced counts from the same layout metadata.
+Zero-support groups report `null`. Validation mean NLL alone selects `best.pt`;
+test evaluation loads the frozen checkpoint and never influences selection or
+updates the file.
 
 `run.json` records the resolved model/training configuration, training seed,
 device type, dependencies, dataset identities and provenance, checkpoint names,

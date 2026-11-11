@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -15,7 +15,13 @@ from .constants import (
     STAGE_COUNT,
     STAGE_NAMES,
 )
-from .data import DecisionDataset, iter_batches, require_dataset_identity
+from .data import (
+    DecisionDataset,
+    PackedDecisionDataset,
+    ShardedDecisionDataset,
+    iter_batches,
+    require_dataset_identity,
+)
 from .errors import DataError
 from .policy import CandidatePolicy, decision_nll, greedy_indices
 
@@ -193,6 +199,38 @@ class MetricAccumulator:
             self._support_by_kind[index] += int(kind_support[index])
             self._correct_by_kind[index] += int(kind_correct[index])
 
+    def _add_forced_split(
+        self,
+        *,
+        decisions: int,
+        eligible: int,
+        forced_by_stage: Sequence[int],
+    ) -> None:
+        """Record the forced rows a split's eligible-only pass skips.
+
+        The eligible rows themselves still arrive through :meth:`add`, so this
+        only adds the skipped rows and their stage counts. ``decisions`` and
+        ``eligible`` come from the same validated layout as the counts.
+        """
+
+        if decisions < 0 or eligible < 0 or eligible > decisions:
+            raise DataError(
+                "eligible decisions must be between zero and the decision count"
+            )
+        if len(forced_by_stage) != STAGE_COUNT:
+            raise DataError(f"forced_by_stage must contain {STAGE_COUNT} counts")
+        total = 0
+        for index, count in enumerate(forced_by_stage):
+            if count < 0:
+                raise DataError("forced_by_stage counts must be non-negative")
+            self._forced_by_stage[index] += int(count)
+            total += int(count)
+        if total != decisions - eligible:
+            raise DataError(
+                "forced_by_stage must sum to decisions minus eligible decisions"
+            )
+        self._decisions += decisions - eligible
+
     def report(self) -> MetricsReport:
         stages = tuple(
             StageMetrics(
@@ -233,6 +271,27 @@ class MetricAccumulator:
         )
 
 
+def _builtin_eligible_layout(
+    dataset: DecisionDataset,
+) -> tuple[np.ndarray, tuple[int, ...]] | None:
+    """Return eligible indices and forced counts for a built-in packed split.
+
+    Only the exact built-in classes qualify: a ``DecisionDataset`` subclass may
+    override ``eligible_indices`` or ``forced_by_stage`` with values that do
+    not describe the samples it returns, so such datasets keep the full
+    traversal whose forced counts come from the collated mask itself. A sharded
+    split qualifies only when every shard is a packed dataset too.
+    """
+
+    if type(dataset) is PackedDecisionDataset:
+        return dataset.eligible_indices(), dataset.forced_by_stage()
+    if type(dataset) is ShardedDecisionDataset and all(
+        type(shard) is PackedDecisionDataset for shard in dataset.shards
+    ):
+        return dataset.eligible_indices(), dataset.forced_by_stage()
+    return None
+
+
 def evaluate_dataset(
     model: CandidatePolicy,
     dataset: DecisionDataset,
@@ -243,7 +302,11 @@ def evaluate_dataset(
 ) -> MetricsReport:
     """Evaluate every decision in one split, aggregating by decision.
 
-    Forced decisions are included only in forced counts. The model is not
+    Forced decisions are included only in forced counts. Built-in packed and
+    sharded splits read those counts from their validated layout metadata and
+    never infer forced rows; their eligible decisions alone are batched
+    through the model. Other datasets still visit every decision so forced
+    counts are derived from the samples actually scored. The model is not
     modified and its previous train/eval mode is restored.
     """
 
@@ -252,7 +315,16 @@ def evaluate_dataset(
         raise DataError("batch_size must be positive")
     target_device = torch.device(device)
     accumulator = MetricAccumulator()
-    indices = np.arange(len(dataset), dtype=np.int64)
+    builtin_layout = _builtin_eligible_layout(dataset)
+    if builtin_layout is None:
+        indices = np.arange(len(dataset), dtype=np.int64)
+    else:
+        indices, forced_by_stage = builtin_layout
+        accumulator._add_forced_split(
+            decisions=len(dataset),
+            eligible=int(indices.size),
+            forced_by_stage=forced_by_stage,
+        )
     was_training = model.training
     model.eval()
     try:
