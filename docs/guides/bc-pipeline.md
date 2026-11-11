@@ -55,7 +55,7 @@ defines the array protocol, checksums, cache identity, and publication rules.
 
 ```sh
 python -m venv .venv
-# Activate the environment, or use its Python executable for all commands.
+source .venv/bin/activate  # POSIX; use .venv/Scripts/activate in Windows Git Bash
 # The CPU example uses the PyTorch CPU wheel; select the correct wheel for CUDA.
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 python -m pip install -e './python[dev]'
@@ -63,10 +63,10 @@ python -m mahjong_bc cache-info --dataset ../bc-cache
 ```
 
 The Python loader consumes the prepared cache, not the original Rust corpus.
-It checks dataset identities and mappings before exposing mmap shards and
-padded candidate batches. The root `.venv/` is ignored by Git; if it already
-exists, reuse it instead of recreating it. See the [offline BC package guide](../../python/README.md)
-for shell-specific environment activation and dataset access.
+If `.venv/` already exists, reuse it instead of recreating it. On Windows Git
+Bash, activate with `source .venv/Scripts/activate` instead of the POSIX
+command. See the [offline BC package guide](../../python/README.md) for dataset
+access and cache validation details.
 
 ## 4. Train, select, and evaluate a frozen policy
 
@@ -110,15 +110,6 @@ rewrite the offline checkpoint. A complete comparison requires the offline
 See [online install and run](../../online/README.md#install-and-run)
 and [records and provenance](../../online/README.md#records-and-provenance)
 for the full command contract and incomplete-run behavior.
-
-## What each stage owns
-
-| Stage | Output | Authoritative detail |
-| --- | --- | --- |
-| Rust collection | Committed JSONL corpus and manifest | [Neural crate](../../crates/neural/README.md#teacher-data-collection) |
-| Rust preparation | Sharded `.npy` cache and `dataset.json` | [Neural crate](../../crates/neural/README.md#dataset-preparation) |
-| Python offline BC | `best.pt`, `last.pt`, `run.json` | [Python package](../../python/README.md) |
-| Python online comparison | Plan, terminal records, costs, summary | [Online package](../../online/README.md) |
 
 For component ownership, see the [neural architecture guide](../architecture/neural.md).
 For dated measurements and reproduction limits, see [historical validation](../validation.md).

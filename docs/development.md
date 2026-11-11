@@ -1,22 +1,10 @@
 # Development and verification
 
-Use this guide for workspace setup, build checks, and current CI. For daily
-workflows, follow the task guides linked below; for module-specific CLI flags
-and file contracts, use the corresponding crate or package README.
-The [documentation map](README.md) is the main navigation entry.
-
-## On this page
-
-| Task | Reference |
-| --- | --- |
-| Build and verify the workspace | [Running](#running) and [Continuous integration](#continuous-integration) |
-| Run seeded simulation batches | [Self-play](guides/self-play.md) |
-| Collect, prepare, train, and evaluate BC models | [BC pipeline](guides/bc-pipeline.md) |
-| Compare policies or benchmark heuristics | [Policy comparison](guides/policy-comparison.md) |
-| Resume games or check deterministic replay | [Checkpoint and replay](guides/checkpoint-replay.md) |
+Use this guide for workspace setup and verification. For runnable workflows,
+start from the [documentation map](README.md); module READMEs own detailed
+CLI options and artifact contracts.
 
 ## Running
-
 
 The workspace contains the dependency-free simulator core and a
 [neural adapter crate](../crates/neural/README.md) that consumes the public core
@@ -31,68 +19,32 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 ```
 
-The root CLI's seeded runs, flags, seed behavior, and report fields are in
-[Run seeded self-play](guides/self-play.md). The Rust library's `Runner` and
-policy API remain in the [library guide](library.md).
-
 ## Neural and Python workflows
 
-End-to-end execution order and artifact handoffs are in the
-[behavior-cloning pipeline guide](guides/bc-pipeline.md). Each module's
-README remains the authority for its commands and format details.
+The [BC pipeline](guides/bc-pipeline.md) provides the runnable
+collection → preparation → training → evaluation sequence. Each stage links to
+its module README for flags, format contracts, and recovery procedures.
 
 ### Python environment
 
 Use the Git-ignored `.venv/` at the repository root for Python tooling. Reuse it
 when present; otherwise create an isolated environment with `python -m venv .venv`.
 In Git Bash on Windows, activate it with `source .venv/Scripts/activate`, or invoke
-`.venv/Scripts/python.exe` directly. Install dependencies into this environment,
-not the global Python or user site-packages.
-
-### Behavior-cloning collection
-
-Use [teacher collection](../crates/neural/README.md#teacher-data-collection)
-for `bc-collect` options, provenance, locking, and recovery. See the
-[pipeline](guides/bc-pipeline.md#1-collect-teacher-episodes-in-rust) for
-its place in the end-to-end workflow.
-
-### Cache preparation
-
-Use [dataset preparation](../crates/neural/README.md#dataset-preparation)
-for `bc-prepare` options and the NumPy cache contract. The
-[pipeline](guides/bc-pipeline.md#2-prepare-and-verify-the-numpy-cache) covers the
-handoff to Python.
-
-### Python offline behavior cloning
-
-Use the [offline package guide](../python/README.md) for training, resuming,
-checkpoint inspection, and frozen evaluation. Run
-`python -m pytest python/tests` after installation; see the
-[BC pipeline](guides/bc-pipeline.md#4-train-select-and-evaluate-a-frozen-policy)
-for the sequence from cache to checkpoint.
-
-### Python online evaluation
-
-Use the [online package guide](../online/README.md) for installation,
-PyO3 bindings, frozen comparison, and records. The binding is not part
-of the root Rust workspace. The [pipeline](guides/bc-pipeline.md#5-compare-frozen-policies-in-the-online-environment)
-covers its checkpoint handoff and seed-split constraints.
+`.venv/Scripts/python.exe` directly. On POSIX, use
+`source .venv/bin/activate`. Install dependencies into this environment, not the
+global Python or user site-packages.
 
 ## Policy experiments
-
-The standalone tools for balanced A/B comparisons and four-seat heuristic
-benchmarks are documented in [policy comparison](guides/policy-comparison.md).
-They do not add heuristic styles to the root simulator CLI.
 
 ### Policy A/B comparison example
 
 See [balanced policy comparison](guides/policy-comparison.md#policy-ab-comparison-example)
-for placements, flags, output files, and statistical interpretation.
+for commands, placements, and statistical interpretation.
 
 ### Heuristic benchmark example
 
 See [heuristic benchmark](guides/policy-comparison.md#heuristic-benchmark-example)
-for cache lifecycle, seed selection, reports, and measurement boundaries.
+for commands, cache lifecycle, and measurement boundaries.
 
 ## Continuous integration
 
