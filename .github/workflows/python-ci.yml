@@ -31,3 +31,40 @@ jobs:
           .venv/bin/python -m pip install -e './python[dev]'
       - name: Run dataset loader, policy, training and CLI tests
         run: .venv/bin/python -m pytest python/tests
+
+  online:
+    name: Native environment / online comparison / CPU tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchains
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup toolchain install 1.75.0 --profile minimal
+      - name: Create isolated Python environment
+        run: |
+          python3 --version
+          python3 -m venv .venv
+      - name: Install CPU dependencies and offline policy package
+        run: |
+          .venv/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          .venv/bin/python -m pip install -e './python[dev]' 'numpy>=2' 'maturin>=1.16,<2'
+      - name: Check standalone extension and its MSRV
+        run: |
+          cargo +stable fmt --manifest-path crates/python/Cargo.toml -- --check
+          cargo +stable clippy --manifest-path crates/python/Cargo.toml --all-targets --locked -- -D warnings
+          cargo +1.75.0 check --manifest-path crates/python/Cargo.toml --all-targets --locked
+          cargo +stable test --manifest-path crates/python/Cargo.toml --all-targets --locked
+      - name: Build and install online wheel
+        working-directory: online
+        run: |
+          ../.venv/bin/python -m maturin build --release --locked --out ../target/online-wheels
+          ../.venv/bin/python -m pip install --no-deps ../target/online-wheels/*.whl
+      - name: Run environment, inference, records and comparison tests
+        env:
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+        run: .venv/bin/python -m pytest online/tests
