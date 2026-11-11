@@ -7,31 +7,14 @@ For component responsibilities,
 see the [execution](architecture/execution.md) and
 [policy](architecture/policy.md) architecture guides.
 
-## Policies
+## Construct policies
 
-- `FirstLegalPolicy`: deterministic baseline, preferring `Hu` and otherwise
-  choosing a legal action.
-- `RandomPolicy`: seeded legal-choice baseline, also preferring `Hu`;
-  useful for coverage and replay, not playing strength.
-- `HeuristicPolicy`: deterministic native policy that ranks post-discard hands
-  by shanten, then ukeire, with a discard-win fan tie-break at tenpai, and
-  applies conservative peng and kong gates. It reads only `Decision`, uses no
-  RNG, and has no logical checkpoint state; any internal analysis cache is
-  discardable without changing later decisions.
-- `MissingOnlyPolicy`: stateless ablation that uses the heuristic
-  fewest-tile missing-suit declaration and delegates all other choices to
-  `FirstLegalPolicy`. It shares the heuristic exchange-selection behavior.
-
-`Runner::random(seed)` initializes a separate RNG stream for each seat. There is
-no heuristic or missing-only runner shortcut: build `HeuristicPolicy::new()` or
-`MissingOnlyPolicy::new()` values and pass them to `Runner::new`. For heuristic
-self-play, prefer `HeuristicPolicy::shared_group()` so all four seats share one
-bounded analysis-cache context rather than four independent budgets. The main
-simulation CLI still offers only `--policy first|random`. Both policies are
-available through the library and the
-[`policy_ab` example](guides/policy-comparison.md#policy-ab-comparison-example); four-seat heuristic
-self-play also has a dedicated
-[`heuristic_bench` example](guides/policy-comparison.md#heuristic-benchmark-example).
+The public `Policy` trait selects from the current `Decision`; available
+strategies and their behavior are listed in [Policy architecture](architecture/policy.md).
+Use `Runner::first_legal()` or `Runner::random(seed)` for the built-in
+baselines. To run heuristic or missing-only policies, construct four policy
+values and pass them to `Runner::new`. For heuristic self-play,
+`HeuristicPolicy::shared_group()` shares a bounded cache across seats.
 
 ## Heuristic cache contexts
 
@@ -97,9 +80,3 @@ reasons, decisions, and separate timings. `policy_time` covers `Policy::choose`;
 `rules_time` covers `next_decision` and `submit`; batch `total_time` is the
 whole measured wall clock, including game creation.
 
-## Continuation and checkpoints
-
-See [checkpoint continuation and replay](guides/checkpoint-replay.md) for
-`Game::clone`, stateless-policy continuation, and RNG-state preservation for
-stateful policies. The `Game` clone alone is not a complete random-policy
-checkpoint.

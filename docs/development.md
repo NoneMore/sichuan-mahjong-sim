@@ -34,18 +34,6 @@ In Git Bash on Windows, activate it with `source .venv/Scripts/activate`, or inv
 `source .venv/bin/activate`. Install dependencies into this environment, not the
 global Python or user site-packages.
 
-## Policy experiments
-
-### Policy A/B comparison example
-
-See [balanced policy comparison](guides/policy-comparison.md#policy-ab-comparison-example)
-for commands, placements, and statistical interpretation.
-
-### Heuristic benchmark example
-
-See [heuristic benchmark](guides/policy-comparison.md#heuristic-benchmark-example)
-for commands, cache lifecycle, and measurement boundaries.
-
 ## Continuous integration
 
 Markdown links, anchors, and fenced-code balance are checked by the
