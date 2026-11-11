@@ -36,7 +36,7 @@ Use the [documentation map](README.md) to find task-specific guides. For change 
 | What does the current implementation do? | Relevant `src/`, `crates/`, tests, and executable evidence |
 | What is a proposed change intended to do? | `specs/active/<change>/`, when present |
 | Why was a consequential decision made? | `docs/adr/`, when present |
-| Which experiment-backed decisions remain unimplemented? | [Research decisions](research-decisions.md) |
+| Which experimental decisions remain unimplemented, and how were they tested? | [Research methods and decisions](research-decisions.md) |
 
 ## Architecture knowledge
 
@@ -85,8 +85,8 @@ sub-Change. It may span tasks or PRs; trivial work does not need one.
 - For substantial investigations, identify scratch outputs and likely retention
   needs early when useful. When work stops, consider only the process artifacts
   created or modified by that Change: promote durable code, tests, and current
-  knowledge; retain only supported, unimplemented decisions and source links
-  when they remain actionable; discard in-tree research summaries whose
+  knowledge; retain experimental methods and actionable, supported, unimplemented
+  decisions rather than one-off numeric results; discard in-tree summaries whose
   conclusions have been implemented or do not support a clear decision.
   Follow any independently required evidence-retention obligations before
   discarding generated outputs. Trivial work needs
@@ -130,8 +130,11 @@ do not edit the old ADR to point forward. Older ADRs may move to
 - Record build, environment, seeds, policy, workload, and results when making
   new performance or strategy claims; previous-revision measurements do not
   establish current performance.
-- Keep only supported conclusions involving unimplemented choices in
-  [research decisions](research-decisions.md): state the decision and link to
-  immutable sources, without copying historical measurements or results.
-  Do not retain inconclusive evidence or already-implemented acceptance
-  evidence. Remove entries when they cease to affect development.
+- Keep only evidence-supported decisions involving unimplemented choices in
+  [research methods and decisions](research-decisions.md). Preserve the
+  hypothesis, controlled alternatives, experimental method, statistical unit,
+  predeclared acceptance criteria, uncertainty, and remaining decision;
+  include source links for provenance, not as a substitute for explaining
+  how the conclusion was reached. Do not retain raw historical measurements,
+  unsupported conclusions, or already-implemented acceptance evidence.
+  Remove entries when they cease to affect development.
