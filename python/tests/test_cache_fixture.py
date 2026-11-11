@@ -5,19 +5,11 @@ import numpy as np
 from mahjong_bc.cache import load_prepared_cache
 from mahjong_bc.constants import SPLIT_NAMES
 
-from .cache_fixture import read_manifest, synthetic_cache, write_cache
+from .cache_fixture import episode_seeds, read_manifest, write_cache
 
 
-def _episode_seeds(dataset) -> tuple[int, ...]:
-    return tuple(
-        dict.fromkeys(
-            int(dataset[index].episode_id) for index in range(len(dataset))
-        )
-    )
-
-
-def test_default_interval_uses_actual_frozen_split_coverage(tmp_path):
-    fixture = synthetic_cache(tmp_path / "cache")
+def test_default_interval_uses_actual_frozen_split_coverage(shared_cache):
+    fixture = shared_cache
 
     assert (fixture.seed_start, fixture.games) == (148, 10)
     assert fixture.seeds == {
@@ -73,14 +65,14 @@ def test_large_fixed_interval_generates_without_composition_search(tmp_path):
         dataset = cache.load_split(split)
         try:
             assert len(dataset) == len(source)
-            assert _episode_seeds(dataset) == fixture.seeds[split]
+            assert episode_seeds(dataset) == fixture.seeds[split]
         finally:
             dataset.close()
 
 
 def test_same_fixed_interval_generates_identical_semantics(tmp_path):
-    first = synthetic_cache(tmp_path / "first")
-    second = synthetic_cache(tmp_path / "second")
+    first = write_cache(tmp_path / "first")
+    second = write_cache(tmp_path / "second")
 
     assert read_manifest(first.root) == read_manifest(second.root)
     for split in SPLIT_NAMES:

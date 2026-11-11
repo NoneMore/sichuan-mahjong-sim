@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -22,17 +24,13 @@ from mahjong_bc.constants import PACKAGE_VERSION, ROLE_POLICY
 from mahjong_bc.policy import build_policy
 from mahjong_bc.train import TRAIN_OUTPUT_NAMES
 
-from .cache_fixture import synthetic_cache
+from .cache_fixture import read_manifest
 
 
 def _parse(capsys) -> dict:
     captured = capsys.readouterr()
     assert captured.err == ""
     return json.loads(captured.out)
-
-
-def _read_manifest(root: Path) -> dict:
-    return json.loads((root / "dataset.json").read_text(encoding="utf-8"))
 
 
 def _cache_snapshot(root: Path) -> dict[str, bytes]:
@@ -127,9 +125,21 @@ def _write_checkpoint(path: Path) -> Path:
     return path
 
 
-def test_cache_info_reports_manifest_inventory(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
-    manifest = _read_manifest(fixture.root)
+@pytest.fixture(scope="module")
+def completed_resume_run(tmp_path_factory, shared_cache):
+    """One real one-epoch run reused read-only by the resume-path cases."""
+
+    old = tmp_path_factory.mktemp("completed-resume-run") / "old"
+    captured = io.StringIO()
+    with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
+        rc = main(_train_args(shared_cache.root, old))
+    assert rc == 0, captured.getvalue()
+    return shared_cache, old
+
+
+def test_cache_info_reports_manifest_inventory(shared_cache, capsys):
+    fixture = shared_cache
+    manifest = read_manifest(fixture.root)
 
     assert main(["cache-info", "--dataset", str(fixture.root)]) == 0
     info = _parse(capsys)
@@ -241,9 +251,9 @@ def test_installed_metadata_and_console_script():
     assert json.loads(result.stdout)["package"] == "mahjong-bc"
 
 
-def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
-    manifest = _read_manifest(fixture.root)
+def test_train_evaluate_inspect_synthetic_cache_end_to_end(shared_cache, tmp_path, capsys):
+    fixture = shared_cache
+    manifest = read_manifest(fixture.root)
     output = tmp_path / "run"
     log = tmp_path / "train.log.json"
     rc = main(
@@ -387,9 +397,9 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(tmp_path, capsys):
 
 
 def test_cli_fresh_run_protects_existing_outputs_and_requires_config(
-    tmp_path, capsys
+    shared_cache, tmp_path, capsys
 ):
-    fixture = synthetic_cache(tmp_path / "cache")
+    fixture = shared_cache
     output = tmp_path / "existing"
     args = [
         "train",
@@ -439,8 +449,8 @@ def test_cli_fresh_run_protects_existing_outputs_and_requires_config(
     assert not missing.exists()
 
 
-def test_cli_train_omitted_options_use_config_defaults(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
+def test_cli_train_omitted_options_use_config_defaults(shared_cache, tmp_path, capsys):
+    fixture = shared_cache
     output = tmp_path / "defaults"
     assert main(
         [
@@ -496,12 +506,10 @@ def test_cli_activation_choices_match_config_names():
         )
 
 
-def test_cli_resume_to_new_output_and_conflicting_options(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
-    old = tmp_path / "old"
-    assert main(_train_args(fixture.root, old)) == 0
-    capsys.readouterr()
-
+def test_cli_resume_to_new_output_and_conflicting_options(
+    completed_resume_run, tmp_path, capsys
+):
+    fixture, old = completed_resume_run
     new = tmp_path / "new"
     log = tmp_path / "resume.log.json"
     assert main(
@@ -534,12 +542,10 @@ def test_cli_resume_to_new_output_and_conflicting_options(tmp_path, capsys):
     assert not policy_output.exists()
 
 
-def test_cli_resume_reads_last_checkpoint_once(tmp_path, capsys, monkeypatch):
-    fixture = synthetic_cache(tmp_path / "cache")
-    old = tmp_path / "old"
-    assert main(_train_args(fixture.root, old)) == 0
-    capsys.readouterr()
-
+def test_cli_resume_reads_last_checkpoint_once(
+    completed_resume_run, tmp_path, capsys, monkeypatch
+):
+    fixture, old = completed_resume_run
     real_load = checkpoint_module.torch.load
     reads: list[Path] = []
 
@@ -556,11 +562,10 @@ def test_cli_resume_reads_last_checkpoint_once(tmp_path, capsys, monkeypatch):
     assert (new / "last.pt").is_file()
 
 
-def test_cli_resume_output_and_log_paths_remain_protected(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
-    old = tmp_path / "old"
-    assert main(_train_args(fixture.root, old)) == 0
-    capsys.readouterr()
+def test_cli_resume_output_and_log_paths_remain_protected(
+    completed_resume_run, tmp_path, capsys
+):
+    fixture, old = completed_resume_run
     before = _cache_snapshot(fixture.root)
 
     inside = fixture.root / "resumed"
@@ -596,8 +601,8 @@ def test_cli_resume_output_and_log_paths_remain_protected(tmp_path, capsys):
     assert not output.exists()
 
 
-def test_cli_rejects_training_split_evaluation(tmp_path):
-    fixture = synthetic_cache(tmp_path / "cache")
+def test_cli_rejects_training_split_evaluation(shared_cache):
+    fixture = shared_cache
     with pytest.raises(SystemExit):
         main(
             [
@@ -614,9 +619,9 @@ def test_cli_rejects_training_split_evaluation(tmp_path):
 
 @pytest.mark.parametrize("relative", [None, "nested-output"])
 def test_cli_train_output_must_be_outside_cache_root(
-    tmp_path, capsys, relative
+    shared_cache, tmp_path, capsys, relative
 ):
-    fixture = synthetic_cache(tmp_path / "cache")
+    fixture = shared_cache
     output = fixture.root if relative is None else fixture.root / relative
     before = _cache_snapshot(fixture.root)
     assert main(_train_args(fixture.root, output)) == 2
@@ -633,9 +638,9 @@ def test_cli_train_output_must_be_outside_cache_root(
     [*TRAIN_OUTPUT_NAMES, None],
 )
 def test_cli_train_log_file_cannot_alias_training_outputs(
-    tmp_path, capsys, log_path
+    shared_cache, tmp_path, capsys, log_path
 ):
-    fixture = synthetic_cache(tmp_path / "cache")
+    fixture = shared_cache
     output = tmp_path / "train"
     log = output if log_path is None else output / log_path
     before = _cache_snapshot(fixture.root)
@@ -649,9 +654,9 @@ def test_cli_train_log_file_cannot_alias_training_outputs(
 
 
 def test_cli_train_log_file_must_be_outside_cache_and_not_preexisting(
-    tmp_path, capsys
+    shared_cache, tmp_path, capsys
 ):
-    fixture = synthetic_cache(tmp_path / "cache")
+    fixture = shared_cache
     before = _cache_snapshot(fixture.root)
     output = tmp_path / "train"
 
@@ -674,9 +679,9 @@ def test_cli_train_log_file_must_be_outside_cache_and_not_preexisting(
 
 
 def test_cli_evaluate_report_paths_cannot_alias_checkpoint_or_touch_cache(
-    tmp_path, capsys
+    shared_cache, tmp_path, capsys
 ):
-    fixture = synthetic_cache(tmp_path / "cache")
+    fixture = shared_cache
     checkpoint = _write_checkpoint(tmp_path / "policy.pt")
     checkpoint_before = checkpoint.read_bytes()
     cache_before = _cache_snapshot(fixture.root)
@@ -704,9 +709,9 @@ def test_cli_evaluate_report_paths_cannot_alias_checkpoint_or_touch_cache(
 
 @pytest.mark.parametrize("destination_option", ["--output", "--log-file"])
 def test_cli_evaluate_report_outputs_do_not_overwrite_existing_files(
-    tmp_path, capsys, destination_option
+    shared_cache, tmp_path, capsys, destination_option
 ):
-    fixture = synthetic_cache(tmp_path / "cache")
+    fixture = shared_cache
     checkpoint = _write_checkpoint(tmp_path / "policy.pt")
     checkpoint_before = checkpoint.read_bytes()
     cache_before = _cache_snapshot(fixture.root)
@@ -725,8 +730,8 @@ def test_cli_evaluate_report_outputs_do_not_overwrite_existing_files(
     assert _cache_snapshot(fixture.root) == cache_before
 
 
-def test_cli_cache_info_output_cannot_be_inside_cache_root(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
+def test_cli_cache_info_output_cannot_be_inside_cache_root(shared_cache, capsys):
+    fixture = shared_cache
     manifest = fixture.root / "dataset.json"
     before_bytes = manifest.read_bytes()
     before = _cache_snapshot(fixture.root)
@@ -740,8 +745,8 @@ def test_cli_cache_info_output_cannot_be_inside_cache_root(tmp_path, capsys):
     assert _cache_snapshot(fixture.root) == before
 
 
-def test_cli_report_output_and_log_may_share_a_fresh_destination(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
+def test_cli_report_output_and_log_may_share_a_fresh_destination(shared_cache, tmp_path, capsys):
+    fixture = shared_cache
     checkpoint = _write_checkpoint(tmp_path / "policy.pt")
     destination = tmp_path / "evaluation.json"
     assert main(
@@ -758,8 +763,8 @@ def test_cli_report_output_and_log_may_share_a_fresh_destination(tmp_path, capsy
     assert written["command"] == "evaluate"
 
 
-def test_cli_path_checks_resolve_symlinked_parent_directories(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
+def test_cli_path_checks_resolve_symlinked_parent_directories(shared_cache, tmp_path, capsys):
+    fixture = shared_cache
     output = tmp_path / "train"
     output.mkdir()
     alias = tmp_path / "output-alias"
@@ -779,8 +784,8 @@ def test_cli_path_checks_resolve_symlinked_parent_directories(tmp_path, capsys):
 
 
 @pytest.mark.skipif(os.name != "nt", reason="case-insensitive path alias test")
-def test_cli_path_checks_normalize_filesystem_case(tmp_path, capsys):
-    fixture = synthetic_cache(tmp_path / "cache")
+def test_cli_path_checks_normalize_filesystem_case(shared_cache, tmp_path, capsys):
+    fixture = shared_cache
     output = tmp_path / "TrainCase"
     output.mkdir()
     log = Path(str(output).upper()) / "BEST.PT"

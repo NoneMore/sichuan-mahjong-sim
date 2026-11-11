@@ -8,10 +8,6 @@ the offending array file.
 
 from __future__ import annotations
 
-import hashlib
-from pathlib import Path
-from typing import Any
-
 import numpy as np
 import pytest
 
@@ -30,7 +26,7 @@ from mahjong_bc.constants import (
 from mahjong_bc.data import PackedDecisionDataset
 from mahjong_bc.errors import CacheContractError, DataError
 
-from .cache_fixture import read_manifest, write_cache, write_manifest
+from .cache_fixture import read_manifest, rewrite_cache_array
 
 
 def _valid_arrays() -> dict[str, np.ndarray]:
@@ -98,26 +94,6 @@ def _packed(arrays: dict[str, np.ndarray]) -> PackedDecisionDataset:
     )
 
 
-def _rewrite_cache_array(
-    root: Path,
-    manifest: dict[str, Any],
-    name: str,
-    values: np.ndarray,
-) -> str:
-    shard = manifest["splits"]["train"]["shards"][0]
-    descriptor = shard["arrays"][name]
-    relative = descriptor["file"]
-    np.save(root / relative, values, allow_pickle=False)
-    descriptor["dtype"] = values.dtype.name
-    descriptor["shape"] = list(values.shape)
-    descriptor["bytes"] = (root / relative).stat().st_size
-    descriptor["sha256"] = hashlib.sha256(
-        (root / relative).read_bytes()
-    ).hexdigest()
-    write_manifest(root, manifest)
-    return relative
-
-
 def test_expected_shapes_cover_the_prepared_wire_arrays():
     assert expected_shapes(3, 7) == {
         "states": (3, STATE_WIDTH),
@@ -183,15 +159,21 @@ def test_packed_construction_translates_violations_to_data_error(name):
     "name", list(_CORRUPTIONS), ids=list(_CORRUPTIONS)
 )
 def test_cache_keeps_file_context_for_shared_contract_violations(
-    tmp_path, name
+    fresh_cache, name
 ):
-    root = tmp_path / name
-    write_cache(root)
+    root = fresh_cache.root
     manifest = read_manifest(root)
     relative = manifest["splits"]["train"]["shards"][0]["arrays"][name]["file"]
     values = np.load(root / relative)
     values = _CORRUPTIONS[name](values)
-    relative = _rewrite_cache_array(root, manifest, name, values)
+    relative = rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name=name,
+        values=values,
+    )
     with pytest.raises(CacheContractError) as excinfo:
         load_prepared_cache(root)
     assert relative in str(excinfo.value)
