@@ -21,7 +21,4 @@ workflows, and research decisions still relevant to future work.
 | Load datasets and train an offline BC policy | [Python BC guide](../python/README.md) |
 | Run frozen neural-vs-teacher comparisons | [Online evaluation guide](../online/README.md) |
 | Review unimplemented research choices and how they were tested | [Experimental methods and decisions](research-decisions.md) |
-| Change the project or consult past decisions | [Governance](governance.md) and [archived changes](../specs/archive/) |
-
-For evidence precedence, documentation responsibilities, and how to resolve
-disagreements, follow [project governance](governance.md).
+| Contribute code or consult development conventions | [Developer governance](governance.md) |
