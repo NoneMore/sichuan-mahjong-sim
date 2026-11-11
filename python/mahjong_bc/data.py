@@ -396,7 +396,10 @@ class PackedDecisionDataset(DecisionDataset):
             raise DataError("dataset is closed")
         _check_batch_positions(positions, len(self))
         rows = np.arange(positions.size, dtype=np.int64)
-        return _gather_segments(positions.size, ((rows, self, positions),))
+        segments = ((rows, self, positions),)
+        if _unsigned_metadata_overflows(segments):
+            return _reference_batch(self, positions)
+        return _gather_segments(positions.size, segments)
 
 
 class ShardedDecisionDataset(DecisionDataset):
@@ -525,6 +528,8 @@ class ShardedDecisionDataset(DecisionDataset):
             if shard._closed:
                 raise DataError("dataset is closed")
             segments.append((rows, shard, positions[rows] - self._starts[int(index)]))
+        if _unsigned_metadata_overflows(segments):
+            return _reference_batch(self, positions)
         return _gather_segments(positions.size, tuple(segments))
 
 
@@ -549,6 +554,38 @@ def _episode_values(
         return
     for position in positions:
         yield values[int(position)]
+
+
+def _reference_batch(dataset: DecisionDataset, positions: np.ndarray) -> DecisionBatch:
+    """Build one batch the documented per-sample way.
+
+    Used when a batch carries a value the vectorized path cannot convert
+    faithfully, so the caller's error or conversion behavior is preserved.
+    """
+
+    return collate_decisions([dataset[int(index)] for index in positions])
+
+
+def _unsigned_metadata_overflows(
+    segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
+) -> bool:
+    """Whether gathered unsigned metadata exceeds the int64 batch dtype.
+
+    ``decision_indices`` is unsigned on the wire but int64 in a batch, so a
+    value at or above ``2**63`` must fail like the per-sample tensor build
+    instead of silently wrapping. Only the rows of this batch are inspected.
+    """
+
+    limit = int(np.iinfo(np.int64).max)
+    for _, shard, local in segments:
+        values = shard.decision_indices
+        if values is None or not local.size:
+            continue
+        if not np.issubdtype(values.dtype, np.unsignedinteger):
+            continue
+        if int(values[local].max()) > limit:
+            return True
+    return False
 
 
 def _gather_segments(
@@ -583,8 +620,14 @@ def _gather_segments(
     episode_values: list[object] = [None] * batch_size
 
     for rows, shard, local in segments:
-        counts[rows] = shard._candidate_counts[local]
-        starts[rows] = shard.offsets[local]
+        # Counts come from the current offsets, not the cached layout: an in
+        # place offsets edit stays visible to batching, as it is to
+        # ``__getitem__``.
+        segment_starts = np.asarray(shard.offsets[local], dtype=np.int64)
+        counts[rows] = (
+            np.asarray(shard.offsets[local + 1], dtype=np.int64) - segment_starts
+        )
+        starts[rows] = segment_starts
         states[rows] = shard.states[local]
         targets[rows] = shard.targets[local]
         stages[rows] = shard.stages[local]

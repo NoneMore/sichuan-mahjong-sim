@@ -944,6 +944,38 @@ def test_subclass_getitem_override_is_not_bypassed(monkeypatch):
         _assert_batches_equal(got, want)
 
 
+def test_vectorized_counts_follow_current_offsets(monkeypatch):
+    # A valid in-place offsets edit must stay visible to batching exactly as it
+    # is to ``__getitem__``; the cached construction-time layout is stale.
+    dataset = _metadata_dataset(counts=[2, 2, 3], seed=119)
+    dataset.targets[0] = 0
+    dataset.offsets[1] = 1
+    current = [
+        int(dataset.offsets[index + 1] - dataset.offsets[index])
+        for index in range(len(dataset))
+    ]
+    assert current == [1, 3, 3]
+    assert int(dataset._candidate_counts[0]) == 2
+    batches = _assert_vectorized_equals_reference(monkeypatch, dataset, [0, 1, 2], 2)
+    assert batches[0].mask.sum(dim=1).tolist() == current[:2]
+    assert batches[0].eligible.tolist() == [count > 1 for count in current[:2]]
+    assert batches[1].mask.sum(dim=1).tolist() == current[2:]
+    assert batches[1].eligible.tolist() == [count > 1 for count in current[2:]]
+
+
+def test_vectorized_unsigned_metadata_overflow_keeps_reference_error():
+    dataset = _metadata_dataset(counts=[2, 2], seed=120)
+    dataset.decision_indices[0] = np.uint64(2**63)
+    with pytest.raises(ValueError) as reference:
+        collate_decisions([dataset[0]])
+    with pytest.raises(ValueError) as batched:
+        list(iter_batches(dataset, [0, 1], batch_size=2))
+    assert str(batched.value) == str(reference.value)
+    # Decisions below the int64 range keep the vectorized batch.
+    other = list(iter_batches(dataset, [1], batch_size=1))
+    assert other[0].decision_indices.tolist() == [int(dataset.decision_indices[1])]
+
+
 def test_packed_shards_without_target_kinds_keep_the_per_sample_path(monkeypatch):
     dataset = _metadata_dataset(counts=[2, 1, 3], seed=118, target_kinds=False)
     expected = _reference_batches(dataset, [0, 1, 2, 2], 2)
