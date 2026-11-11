@@ -3,8 +3,8 @@
 [`Runner`](../../src/runner.rs) drives exactly four policies against a
 [`Game`](game.md), but it does not implement Mahjong rules. The
 [`main.rs` CLI](../../src/main.rs) is a thin batch-execution entry point.
-For commands and public API examples, use [development](../development.md)
-and the [library guide](../library.md).
+For CLI self-play use the [self-play guide](../guides/self-play.md);
+for public API examples use the [library guide](../library.md).
 
 ## Component composition
 
@@ -46,7 +46,7 @@ Game and policy RNG state are separately seeded and owned. Cloning Game
 alone cannot restore a stateful policy run: the policies' RNG positions must
 also be preserved. Stateless policies need no separate logical checkpoint;
 heuristic caches are disposable. See the
-[library checkpoint examples](../library.md#continuation-and-checkpoints).
+[checkpoint continuation examples](../guides/checkpoint-replay.md).
 
 ## Verification boundary
 

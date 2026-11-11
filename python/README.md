@@ -6,6 +6,8 @@ Offline behavior cloning for Sichuan mahjong: Rust
 No Rust bindings or original corpus are needed after preparation. Online play
 is outside this package.
 
+For the complete collection-to-evaluation sequence, see the [BC pipeline guide](../docs/guides/bc-pipeline.md).
+
 ## Setup and commands
 
 Use Python 3.10+ and the repository's Git-ignored `.venv/` (see the

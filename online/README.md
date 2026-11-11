@@ -5,6 +5,8 @@ rules, legal candidates, encoding and settlement; Python owns synchronous
 multi-game scheduling, inference and comparison records. Offline training stays
 in the independent [`mahjong-bc`](../python/README.md) package.
 
+For the upstream data and checkpoint handoff, see the [BC pipeline guide](../docs/guides/bc-pipeline.md).
+
 ## Install and run
 
 Use the repository `.venv` with Python 3.12 or later. Install the repository-local

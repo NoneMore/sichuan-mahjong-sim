@@ -8,12 +8,15 @@ workflows, and historical measurements.
 
 | If you want to… | Start here |
 | --- | --- |
-| Run a seeded game or check a checkout | [Development: running](development.md#running) |
-| Use a Rust `Runner`, policy cache, or checkpoint | [Library API and continuation](library.md) |
+| Run a seeded game | [Self-play guide](guides/self-play.md) |
+| Build and check a checkout | [Development and verification](development.md#running) |
+| Use the Rust `Runner` and policy caches | [Library API](library.md) |
+| Resume or replay an in-memory game | [Checkpoint and replay](guides/checkpoint-replay.md) |
 | Understand legal actions, scoring, or excluded variants | [Fixed gameplay rules](baseline-rules.md) |
 | Trace `Game` / `Decision` / `Policy` boundaries | [Architecture overview](architecture/overview.md) |
-| Compare policies or benchmark heuristics | [Development: policy experiments](development.md#policy-experiments) |
-| Collect teacher data and prepare NumPy caches | [Neural crate guide](../crates/neural/README.md) |
+| Compare policies or benchmark heuristics | [Policy comparison](guides/policy-comparison.md) |
+| Follow collection → cache → training → evaluation | [BC pipeline](guides/bc-pipeline.md) |
+| Check teacher collection or cache format details | [Neural crate guide](../crates/neural/README.md) |
 | Load datasets and train an offline BC policy | [Python BC guide](../python/README.md) |
 | Run frozen neural-vs-teacher comparisons | [Online evaluation guide](../online/README.md) |
 | Inspect historical validations or measurements | [Historical validation](validation.md) |

@@ -4,7 +4,7 @@ These [standalone Rust examples](../../examples/) operate **outside** the
 Game/Policy/Runner library boundary. They may choose seeds, policy placements,
 cache lifecycles, and output formats; they may not redefine game rules or
 alter a policy's legal-action contract. Operational commands and exact CLI
-options belong in the [development guide](../development.md).
+options belong in the [policy comparison guide](../guides/policy-comparison.md).
 
 ## Composition
 
@@ -23,7 +23,7 @@ heuristic memoization may outlive a placement.
 The statistical summary is reconstructed from validated persisted
 `games.tsv` records, not a separate in-memory counter. An incomplete run
 cannot become a completed comparison. Exact placements, seeds and report
-formats are specified in [development](../development.md).
+formats are specified in [policy comparison](../guides/policy-comparison.md).
 
 ## Heuristic benchmark
 
@@ -32,7 +32,7 @@ four-seat heuristic self-play with explicit cache lifecycles: cold uses a
 separate warmup context; warm retains the runner and context. This determines
 which initialization work is charged to the measured phase. Cache snapshots
 are outside timing, and allocation degradation remains observable.
-See [development](../development.md#heuristic-benchmark-example) for seeds,
+See [policy comparison](../guides/policy-comparison.md#heuristic-benchmark-example) for seeds,
 CLI options and report fields.
 
 ## Evidence and verification
