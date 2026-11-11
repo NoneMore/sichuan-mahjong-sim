@@ -19,16 +19,14 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 use sichuan_mahjong_neural::collection::{
     action_kind_id, build_info, encode_action, environment_info, seed_split as rust_seed_split,
-    split_bucket as rust_split_bucket, Seed, ACTION_KIND_NAMES,
+    split_bucket as rust_split_bucket, stage_id, Seed, ACTION_KIND_NAMES,
 };
 use sichuan_mahjong_neural::encoding::{
     canonicalize, encode, ACTION_WIDTH, ENCODING_VERSION, STATE_WIDTH,
 };
 use sichuan_mahjong_sim::policy::{HeuristicCache, HeuristicPolicy, Policy, DEFAULT_BUDGET_BYTES};
 use sichuan_mahjong_sim::runner::DEFAULT_DECISION_LIMIT;
-use sichuan_mahjong_sim::{
-    Action, Decision as GameDecision, DecisionStage, EndReason, Game, GameResult, Seat,
-};
+use sichuan_mahjong_sim::{Action, Decision as GameDecision, EndReason, Game, GameResult, Seat};
 
 create_exception!(mahjong_eval._native, MahjongEvalError, PyException);
 create_exception!(
@@ -71,7 +69,7 @@ impl PendingDecision {
         Ok(Self {
             decision_id,
             actor_seat: decision.seat.index() as u8,
-            stage: stage_code(decision.observation.stage),
+            stage: stage_id(decision.observation.stage),
             state: encoded.state.flatten().to_vec(),
             candidate_features,
             candidate_actions,
@@ -610,7 +608,7 @@ fn native_teacher_replay(
         let entry = PyDict::new(py);
         entry.set_item("decision_id", make_decision_id(1, sequence))?;
         entry.set_item("actor_seat", decision.seat.index())?;
-        entry.set_item("stage", stage_code(decision.observation.stage))?;
+        entry.set_item("stage", stage_id(decision.observation.stage))?;
         entry.set_item("candidate_count", encoded.candidates.len())?;
         entry.set_item("teacher_index", index)?;
         entry.set_item("action", action_dict(py, encoded.candidates[index].action)?)?;
@@ -753,18 +751,6 @@ fn environment_dict(py: Python<'_>) -> PyResult<Py<PyDict>> {
 
 fn make_decision_id(generation: u32, sequence: u32) -> u64 {
     (u64::from(generation) << 32) | u64::from(sequence)
-}
-
-/// Frozen v1 wire stage code. The encoding fixture compares this value with
-/// the encoder's state features, so an order change cannot pass silently.
-fn stage_code(stage: DecisionStage) -> u8 {
-    match stage {
-        DecisionStage::Exchange => 0,
-        DecisionStage::MissingSuit => 1,
-        DecisionStage::Turn => 2,
-        DecisionStage::DiscardResponse => 3,
-        DecisionStage::AddedKongResponse => 4,
-    }
 }
 
 /// Copies state values into a NumPy-owned array. The Python array owns its
