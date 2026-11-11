@@ -17,13 +17,13 @@ legal candidates. It is deterministic and stateless, with no teacher analysis
 or simulated transitions. Versioning covers feature meaning, layout, scales,
 and candidate order, not just tensor dimensions.
 
-| Entry point | Responsibility |
-| --- | --- |
-| [`encoding/mod.rs`](../../crates/neural/src/encoding/mod.rs) | Assembly and semantic target lookup |
-| [`schema.rs`](../../crates/neural/src/encoding/schema.rs) | Feature types, frozen mappings and flattening |
-| [`state.rs`](../../crates/neural/src/encoding/state.rs) | Player-visible state conversion |
-| [`candidates.rs`](../../crates/neural/src/encoding/candidates.rs) | Candidate enumeration, canonical order and action features |
+The canonical layout, scales and category mappings are owned by
+[`encoding/schema.rs`](../../crates/neural/src/encoding/schema.rs); the
+[candidate encoder](../../crates/neural/src/encoding/candidates.rs) owns
+canonical enumeration and action features. Schema changes require contract
+tests and a deliberate compatibility decision even if tensor widths stay fixed.
 
+## Teacher collection
 ## Teacher collection
 
 The neural-side collector drives `Game`, `HeuristicPolicy`, and the encoder
@@ -31,20 +31,12 @@ without extending Runner. It labels the original decision once and records the
 pre-action encoding only after submission succeeds. All seats, stages, forced
 actions, passes, and losing trajectories are retained.
 
-Modules under [`collection/`](../../crates/neural/src/collection/) separate
-execution from persistence:
+Collection separates the public Game/teacher drive loop from strict JSONL
+validation, immutable shard storage, and manifest publication. The
+[collection module](../../crates/neural/src/collection/mod.rs) owns their
+protocol; callers should not reconstruct it from this architecture map.
 
-| Module | Responsibility |
-| --- | --- |
-| `corpus.rs` | Seed ranges, shard boundaries, committed inventory and read coordination |
-| `driver.rs` | One teacher episode into a fallible record sink; no filesystem knowledge |
-| `storage.rs` | OS lock, pending shards and atomic publication |
-| `format.rs` | JSONL protocol and validation, reusing encoder mappings/order/features |
-| `manifest.rs`, `seed.rs` | Inventory, identity and deterministic split contracts |
-| `source.rs`, `build.rs` | Compiled provenance and build/environment facts |
-| `stats.rs`, `report.rs` | Coverage, choice metrics and measurement outputs |
-
-A corpus fixes source and encoding versions. Complete episodes form immutable
+A corpus fixes source and encoding versions.A corpus fixes source and encoding versions. Complete episodes form immutable
 JSONL shards; per-shard manifest entries keep inventory proportional to shard
 count. The seed-only split remains stable across growth and source revisions.
 An OS-locked writer validates and publishes each shard before atomically
@@ -64,15 +56,12 @@ manifest bytes and immutable shard membership, unchanged by later appends.
 Its fallible episode visitor reuses strict collection validation, keeping
 output provisional until the complete shard checksum validates.
 
-| Module | Responsibility |
-| --- | --- |
-| `writer.rs` | Snapshot streaming, bounded split buffers and staging publication |
-| `manifest.rs` | Versioned dataset manifest, layout, provenance and `cache_id` |
-| `npy.rs` | Strict little-endian C-order `.npy` writer/reader |
-| `verify.rs` | Corpus-independent cache validation |
-| `error.rs` | Preparation and verification error types |
+The [preparation module](../../crates/neural/src/prepare/mod.rs) owns streaming
+and verification; its [manifest contract](../../crates/neural/src/prepare/manifest.rs)
+owns dataset identity and array inventory. This architecture guide intentionally
+does not duplicate their field-level schemas.
 
-Each split retains one bounded output buffer (or one oversized episode), plus
+Each split retains one bounded output bufferEach split retains one bounded output buffer (or one oversized episode), plus
 one input episode in the reader. Shards rotate at episode boundaries; a staging
 directory is published only after validation. `dataset.json` binds the array
 inventory, versions, checksums, counts, and separate collection/preparation
@@ -139,16 +128,14 @@ choices. Native semantic replay checks the binding path; split queries reuse the
 corpus contract. Build-time provenance covers binding/core/neural source bytes,
 separate from neural collection provenance and the caller's working directory.
 
-The [online Python package](../../online/README.md) separates execution concerns:
+The [online Python package](../../online/README.md) owns frozen inference,
+bounded per-policy batching, handle-local routing and persisted comparison
+records. The [inference](../../online/mahjong_eval/inference.py),
+[scheduler](../../online/mahjong_eval/scheduler.py) and
+[records](../../online/mahjong_eval/records.py) modules are the implementation
+entry points; field formats and commands belong in its package guide.
 
-| Module | Responsibility |
-|---|---|
-| `inference` | Frozen checkpoint weights, shared label-free padding/masks, greedy selection and forced bypass |
-| `scheduler` | Bounded concurrent handles, per-policy batches, handle-local routing, shared teacher cache and execution costs |
-| `records` | Planned placements, exact checkpoint/imported-source identity, flushed terminal records and seed-blocked summaries |
-| `cli` | Selected-best checkpoint and Rust-split validation, comparison setup and persisted-result checks |
-
-Concurrent handles can reuse decision ids, so routing also retains the originating
+Concurrent handles can reuse decision idsConcurrent handles can reuse decision ids, so routing also retains the originating
 handle. Every stage and forced choice remains explicit, including continued play
 after a win. Failures stop execution without substitute actions. The writer stays
 incomplete until records and costs succeed; only a clean close permits summary
