@@ -20,7 +20,7 @@ workflows, and historical measurements.
 | Check teacher collection or cache format details | [Neural crate guide](../crates/neural/README.md) |
 | Load datasets and train an offline BC policy | [Python BC guide](../python/README.md) |
 | Run frozen neural-vs-teacher comparisons | [Online evaluation guide](../online/README.md) |
-| Inspect historical validations or measurements | [Historical validation index](validation.md) |
+| Understand what historical evidence supports and whether it still applies | [Evidence and present relevance](validation.md) |
 | Change the project or consult past decisions | [Governance](governance.md) and [archived changes](../specs/archive/) |
 
 For evidence precedence, documentation responsibilities, and how to resolve
