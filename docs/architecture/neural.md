@@ -5,6 +5,9 @@ interfaces. The dependency is one-way: building the core with
 `-p sichuan-mahjong-sim` does not compile neural code or its dependencies.
 `Game` retains sole ownership of legality, hidden state, transitions, and settlement.
 
+For the runnable collection → preparation → training → evaluation sequence,
+see the [BC pipeline guide](../guides/bc-pipeline.md).
+
 ## Decision encoding
 
 `encoding` converts a player-scoped `Decision` into state features and canonical

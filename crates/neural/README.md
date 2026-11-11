@@ -5,6 +5,8 @@ offline NumPy cache preparation. This workspace crate consumes
 `sichuan-mahjong-sim` through its public interfaces; serialization, hashing, and
 filesystem dependencies remain on the neural side.
 
+For the end-to-end Rust → Python workflow, see the [BC pipeline guide](../../docs/guides/bc-pipeline.md).
+
 ## Decision encoding
 
 ```rust
