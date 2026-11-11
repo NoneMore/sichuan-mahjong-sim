@@ -8,7 +8,8 @@
 //! deliberately non-physical `2`, `3`, and `5` capacities to stress the bounds.
 
 use super::super::{suit_table, suit_table_with_mask, INF};
-use super::oracle::{reference_suit_table, RANKS};
+use super::super::test_support::targets::{reference_needed_table as reference_suit_table, RANKS};
+use super::super::test_support::Lcg;
 
 fn assert_suit_table(
     hand: &[u8; RANKS],
@@ -95,22 +96,17 @@ fn representative_tables_match_concrete_targets() {
 ///
 /// Held counts and capacities are drawn independently from `0..=4`; the hand is
 /// trimmed to at most fourteen tiles. Capacities `2` and `3` cannot come from
-/// a single own peng/kong but still exercise the bounds.
+/// a single own peng/kong but still exercise the bounds. The raw seed keeps the
+/// historical even-state stream exactly.
 fn generated_capacity_cases() -> Vec<([u8; RANKS], [u8; RANKS])> {
-    let mut state = 0x0000_5EED_0F0F_0002u64;
-    let mut next = |bound: u64| -> u64 {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        (state >> 33) % bound
-    };
+    let mut rng = Lcg::raw(0x0000_5EED_0F0F_0002);
     let mut cases = Vec::new();
     for _ in 0..40 {
         let mut hand = [0u8; RANKS];
         let mut capacity = [0u8; RANKS];
         for (held, cap) in hand.iter_mut().zip(capacity.iter_mut()) {
-            *held = next(5) as u8;
-            *cap = next(5) as u8;
+            *held = rng.below(5) as u8;
+            *cap = rng.below(5) as u8;
         }
         let mut total: usize = hand.iter().map(|&held| held as usize).sum();
         for held in hand.iter_mut().rev() {

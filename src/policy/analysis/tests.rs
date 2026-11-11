@@ -13,53 +13,9 @@ use crate::hand::Hand;
 use crate::seat::Seat;
 use crate::tile::{Suit, Tile};
 
-fn tile(suit: Suit, rank: u8) -> Tile {
-    Tile::from_suit_rank(suit, rank).expect("rank in range")
-}
-
-fn hand(tiles: &[Tile]) -> Hand {
-    Hand::from_tiles(tiles).expect("legal hand")
-}
-
-fn suit_hand(wan: &[u8], tong: &[u8], tiao: &[u8]) -> Hand {
-    let mut tiles = Vec::new();
-    for (suit, ranks) in [(Suit::Wan, wan), (Suit::Tong, tong), (Suit::Tiao, tiao)] {
-        tiles.extend(ranks.iter().map(|&rank| tile(suit, rank)));
-    }
-    hand(&tiles)
-}
-
-fn capacities(melds: &[Meld], missing: Suit) -> [u8; TILE_KINDS] {
-    let mut cap = [COPIES_PER_TILE; TILE_KINDS];
-    for rank in 0..9 {
-        cap[tile(missing, rank as u8 + 1).index() as usize] = 0;
-    }
-    for meld in melds {
-        let index = meld.tile().index() as usize;
-        cap[index] = cap[index].saturating_sub(meld.tile_count());
-    }
-    cap
-}
-
-fn add_set(counts: &mut [u8; TILE_KINDS], set: &[u8; TILE_KINDS]) {
-    for (count, add) in counts.iter_mut().zip(set.iter()) {
-        *count += *add;
-    }
-}
-
-fn remove_set(counts: &mut [u8; TILE_KINDS], set: &[u8; TILE_KINDS]) {
-    for (count, remove) in counts.iter_mut().zip(set.iter()) {
-        *count -= *remove;
-    }
-}
-
-fn deficit_of(counts: &[u8; TILE_KINDS], hand: &Hand) -> u8 {
-    let mut deficit = 0u8;
-    for (target, held) in counts.iter().zip(hand.counts().iter()) {
-        deficit += target.saturating_sub(*held);
-    }
-    deficit
-}
+use super::test_fixtures::capacity_by_kind;
+use super::test_support::targets::{add_counts, subtract_counts, target_deficit};
+use super::test_support::{hand, suit_hand, tile, Lcg};
 
 #[allow(clippy::too_many_arguments)]
 fn standard_search(
@@ -84,7 +40,7 @@ fn standard_search(
                 }
             }
             if legal {
-                *best = (*best).min(deficit_of(&total, hand));
+                *best = (*best).min(target_deficit(hand.counts(), &total));
             }
         }
         return;
@@ -96,9 +52,9 @@ fn standard_search(
         if !legal {
             continue;
         }
-        add_set(counts, set);
+        add_counts(counts, set);
         standard_search(index, remaining - 1, sets, pairs, cap, hand, counts, best);
-        remove_set(counts, set);
+        subtract_counts(counts, set);
     }
 }
 
@@ -112,7 +68,7 @@ fn seven_pairs_search(
     best: &mut u8,
 ) {
     if units == 0 {
-        *best = (*best).min(deficit_of(counts, hand));
+        *best = (*best).min(target_deficit(hand.counts(), counts));
         return;
     }
     if position == kinds.len() {
@@ -141,7 +97,7 @@ fn seven_pairs_search(
 
 fn oracle(hand: &Hand, melds: &[Meld], missing: Suit) -> u8 {
     assert!(melds.len() <= 4);
-    let cap = capacities(melds, missing);
+    let cap = capacity_by_kind(melds, missing);
     let target_sets = 4 - melds.len();
     let mut best = INF;
 
@@ -409,13 +365,10 @@ fn sample_hand(seed: u64, len: usize, missing: Suit) -> Hand {
         .into_iter()
         .filter(|tile| tile.suit() != missing)
         .collect();
-    let mut state = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+    let mut rng = Lcg::raw(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
     let mut hand = Hand::new();
     while hand.total() < len {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        let tile = allowed[(state >> 33) as usize % allowed.len()];
+        let tile = allowed[rng.below(allowed.len())];
         let _ = hand.add(tile);
     }
     hand

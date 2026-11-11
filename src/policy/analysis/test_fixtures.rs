@@ -27,6 +27,9 @@ use crate::hand::Hand;
 use crate::seat::Seat;
 use crate::tile::{Suit, Tile, COPIES_PER_TILE, TILE_KINDS};
 
+pub(super) use super::test_support::{counts_from_ranks, hand_from_counts, suit_counts, tile};
+use super::test_support::Lcg;
+
 /// One legal post-discard analysis position.
 #[derive(Clone, Debug)]
 pub(super) struct State {
@@ -36,27 +39,6 @@ pub(super) struct State {
     pub(super) missing: Suit,
     /// Public copies per kind, including the own meld tiles.
     pub(super) public: [u8; TILE_KINDS],
-}
-
-pub(super) fn tile(suit: Suit, rank: u8) -> Tile {
-    Tile::from_suit_rank(suit, rank).expect("rank in range")
-}
-
-pub(super) fn hand_from_counts(counts: &[u8; TILE_KINDS]) -> Hand {
-    let mut hand = Hand::new();
-    for kind in Tile::ALL {
-        for _ in 0..counts[kind.index() as usize] {
-            hand.add(kind).expect("at most four copies per kind");
-        }
-    }
-    hand
-}
-
-pub(super) fn suit_counts(hand: &Hand, suit: Suit) -> [u8; 9] {
-    let mut local = [0u8; 9];
-    let start = suit.index() * 9;
-    local.copy_from_slice(&hand.counts()[start..start + 9]);
-    local
 }
 
 /// Copies of each kind owned by the declared melds.
@@ -183,7 +165,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 1. Standard tenpai with three distinct waits (within-standard union).
         State::new(
             "standard-tenpai",
-            hand_from_counts(&counts(&[(wan, &[1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 9])])),
             vec![],
             tiao,
             &[],
@@ -191,7 +173,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 2. Larger exact distance with two live suits.
         State::new(
             "scattered",
-            hand_from_counts(&counts(&[
+            hand_from_counts(&counts_from_ranks(&[
                 (wan, &[1, 2, 3, 4, 5, 6, 7, 8, 9]),
                 (tong, &[1, 4, 7, 9]),
             ])),
@@ -203,7 +185,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // the standard route also waits on 3W; both routes tie at distance one.
         State::new(
             "route-tie-overlap",
-            hand_from_counts(&counts(&[(wan, &[1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 7])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 7])])),
             vec![],
             tiao,
             &[],
@@ -212,7 +194,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // standard route waits on 7W, so the combined mask is exactly both.
         State::new(
             "route-tie-disjoint",
-            hand_from_counts(&counts(&[(wan, &[3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[3, 3, 3, 3, 4, 4, 5, 5, 6, 6, 8, 9, 9])])),
             vec![],
             tiao,
             &[],
@@ -222,7 +204,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // strictly worse.
         State::new(
             "seven-pairs-internal-tie",
-            hand_from_counts(&counts(&[
+            hand_from_counts(&counts_from_ranks(&[
                 (wan, &[1, 1, 2, 2, 3, 3, 4, 4, 5, 5]),
                 (tong, &[1, 4, 7]),
             ])),
@@ -234,7 +216,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // the standard route is worse, so only the quadded kind is marked.
         State::new(
             "seven-pairs-triple",
-            hand_from_counts(&counts(&[(wan, &[1, 1, 1, 2, 2, 3, 3, 5, 5, 7, 7, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 1, 1, 2, 2, 3, 3, 5, 5, 7, 7, 9, 9])])),
             vec![],
             tong,
             &[],
@@ -243,7 +225,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // is free surplus. No missing-suit bit may appear.
         State::new(
             "uncleared-missing-tile",
-            hand_from_counts(&counts(&[
+            hand_from_counts(&counts_from_ranks(&[
                 (wan, &[1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6]),
                 (tiao, &[1]),
             ])),
@@ -254,7 +236,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 8. Open hand: one peng leaves three concealed sets and a pair.
         State::new(
             "one-peng",
-            hand_from_counts(&counts(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9])])),
             vec![Meld::peng(tile(tong, 6), Seat::DEALER)],
             tiao,
             &[],
@@ -263,7 +245,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // publicly owned three times, so it can never be marked or unseen.
         State::new(
             "peng-capacity",
-            hand_from_counts(&counts(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 9])])),
             vec![Meld::peng(tile(wan, 5), Seat::DEALER)],
             tiao,
             &[],
@@ -271,7 +253,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 10. Own concealed kong exhausts 3W; the structural 3W wait is gone.
         State::new(
             "concealed-kong-capacity",
-            hand_from_counts(&counts(&[(wan, &[1, 2, 4, 5, 6, 7, 8, 9, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 4, 5, 6, 7, 8, 9, 9, 9])])),
             vec![Meld::concealed_kong(tile(wan, 3))],
             tiao,
             &[],
@@ -279,7 +261,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 11. Added kong consumes the fourth 8W copy; same capacity rule.
         State::new(
             "added-kong-capacity",
-            hand_from_counts(&counts(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 9, 9, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 3, 4, 5, 6, 7, 9, 9, 9])])),
             vec![Meld::added_kong(tile(wan, 8), Seat::DEALER)],
             tiao,
             &[],
@@ -287,7 +269,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 12. Two pengs leave two concealed sets plus the pair.
         State::new(
             "two-peng",
-            hand_from_counts(&counts(&[(wan, &[1, 2, 3, 4, 5, 6, 9])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 2, 3, 4, 5, 6, 9])])),
             vec![
                 Meld::peng(tile(tong, 6), Seat::DEALER),
                 Meld::peng(tile(tong, 7), Seat::DEALER),
@@ -298,7 +280,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 13. Three melds leave one concealed set plus the pair.
         State::new(
             "three-meld",
-            hand_from_counts(&counts(&[(wan, &[1, 1, 2, 2])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[1, 1, 2, 2])])),
             vec![
                 Meld::peng(tile(tong, 6), Seat::DEALER),
                 Meld::peng(tile(tong, 7), Seat::DEALER),
@@ -310,7 +292,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 14. Four melds leave the pair only (zero concealed sets).
         State::new(
             "four-meld",
-            hand_from_counts(&counts(&[(wan, &[3])])),
+            hand_from_counts(&counts_from_ranks(&[(wan, &[3])])),
             vec![
                 Meld::peng(tile(tong, 5), Seat::DEALER),
                 Meld::peng(tile(tong, 6), Seat::DEALER),
@@ -323,7 +305,7 @@ pub(super) fn boundary_states() -> Vec<State> {
         // 15. Four melds under a different missing suit still leave a pair.
         State::new(
             "four-meld-missing-wan",
-            hand_from_counts(&counts(&[(tong, &[3])])),
+            hand_from_counts(&counts_from_ranks(&[(tong, &[3])])),
             vec![
                 Meld::peng(tile(tong, 5), Seat::DEALER),
                 Meld::added_kong(tile(tiao, 1), Seat::DEALER),
@@ -334,38 +316,6 @@ pub(super) fn boundary_states() -> Vec<State> {
             &[],
         ),
     ]
-}
-
-/// Builds a counted hand from `(suit, one-based ranks)` groups.
-fn counts(groups: &[(Suit, &[u8])]) -> [u8; TILE_KINDS] {
-    let mut counts = [0u8; TILE_KINDS];
-    for &(suit, ranks) in groups {
-        for &rank in ranks {
-            counts[tile(suit, rank).index() as usize] += 1;
-        }
-    }
-    counts
-}
-
-/// Small deterministic LCG; no test-only dependency is added.
-struct Lcg(u64);
-
-impl Lcg {
-    fn new(seed: u64) -> Self {
-        Self(seed | 1)
-    }
-
-    fn next(&mut self) -> u64 {
-        self.0 = self
-            .0
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        self.0
-    }
-
-    fn below(&mut self, bound: usize) -> usize {
-        ((self.next() >> 33) % bound as u64) as usize
-    }
 }
 
 /// Deterministic sample of legal physical positions.
