@@ -66,9 +66,17 @@ fn main() {
     );
     emit("EXT_SOURCE_SCOPE", &SOURCE_SCOPE.join("+"));
 
-    let commit =
-        git_stdout(&root, &["rev-parse", "--verify", "HEAD"]).map(|value| value.trim().to_owned());
-    let dirty = git_status_dirty(&root);
+    // A source distribution may be unpacked inside an unrelated checkout.
+    // Its content hash is valid, but that outer repository is not its source.
+    let source_repository = git_stdout(&root, &["rev-parse", "--show-toplevel"])
+        .and_then(|path| fs::canonicalize(path.trim()).ok())
+        .zip(fs::canonicalize(&root).ok())
+        .is_some_and(|(git_root, source_root)| git_root == source_root);
+    let commit = source_repository
+        .then(|| git_stdout(&root, &["rev-parse", "--verify", "HEAD"]))
+        .flatten()
+        .map(|value| value.trim().to_owned());
+    let dirty = source_repository.then(|| git_status_dirty(&root)).flatten();
     let available = commit.as_ref().is_some_and(|value| !value.is_empty()) && dirty.is_some();
     emit("EXT_GIT_AVAILABLE", if available { "1" } else { "0" });
     emit(

@@ -430,8 +430,9 @@ GPU work while the other timers exclude it.
 | cuda:0 | 12 | 82 | 0.401 [0.368-0.413] | 0.369 [0.333-0.377] | 0.0132 | 0.0059 | 0.00031 |
 
 Every setting produced the identical summary (neural mean -2.8333, delta
--5.6667), so batch size and device did not change decisions. For this small
-model and workload, CPU was 3.7-4.4 times faster in total play time and CUDA's
+-5.6667) and accepted-decision totals. These aggregate checks do not establish
+action-by-action equivalence. For this small model and workload, CPU was 3.7-4.4
+times faster in total play time and CUDA's
 per-batch overhead dominated; the evidence supports CPU with one batch per wave
 here only. It does not establish a general CPU/GPU preference, throughput, or
 larger-model behavior.
@@ -478,8 +479,7 @@ The online test suite injects mid-run game-step, inference, and costs-output
 failures while using real record writing: completed `games.jsonl` lines remain,
 `plan.json` remains, `state.json` stays `incomplete`, no `costs.json` or
 `summary.json` is published, and the public `records.finalize_run` refuses the
-run. Scheduler
-tests separately cover game-step failure, callback failure, partial batches,
+run. Scheduler tests separately cover game-step failure, callback failure, partial batches,
 concurrent progress differences, same decision ids across handles, forced
 bypass, invalid inference indices, and recomputable counts. With
 `MAHJONG_EVAL_ACCEPTANCE_CORPUS` pointing at the read-only corpus above, the

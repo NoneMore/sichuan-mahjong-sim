@@ -4,7 +4,7 @@ Online environment binding for running frozen neural policies against the
 Sichuan mahjong simulator. The Rust core still owns rules, candidates, legal
 actions, and settlement; this package owns scheduling and policy inference.
 Offline training and dataset tooling remain in the separate
-[`mahjong-bc`](../../python/README.md) package.
+[`mahjong-bc`](../python/README.md) package.
 
 ## Status
 
@@ -188,17 +188,16 @@ offline package and PyTorch.
 
 ## Layout and independent builds
 
-The PyO3 crate lives in [`crates/python`](../../crates/python/Cargo.toml) as its
+The PyO3 crate lives in [`crates/python`](../crates/python/Cargo.toml) as its
 own Cargo workspace and is excluded from the root workspace. Ordinary core,
 neural, collector, and offline training builds therefore neither resolve nor
 link Python. The package metadata here builds the extension as
 `mahjong_eval._native` and adds this Python package.
 
 The crate keeps PyO3's `extension-module` link mode behind its own
-`extension-module` feature, so plain `cargo check` and `cargo test` stay
-linkable without a Python host. Only the maturin build below passes
-`features = ["extension-module"]`; Python imports and the online tests therefore
-use the built wheel or editable install, not a raw `cargo build` output.
+`extension-module` feature. Plain Cargo test executables link Python normally;
+maturin enables `features = ["extension-module"]` for extension builds.
+Python imports and online tests use the wheel or editable install.
 
 Use the repository `.venv` (Python 3.12 in the verified environment):
 
