@@ -94,6 +94,5 @@ substituting actions.
   Record environment, teacher, and inference costs before choosing CPU/GPU batching
   settings or claiming throughput.
 
-Whether to expose diagnostic `last.pt` evaluation remains undecided; it is not
-required for formal comparison. If offered, evaluate its policy weights rather
-than embedded best weights.
+Diagnostic `last.pt` evaluation is not exposed by this Change. Formal comparison
+requires the offline-selected `best` checkpoint; online scores never select it.

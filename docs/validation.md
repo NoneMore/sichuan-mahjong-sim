@@ -381,7 +381,8 @@ checkpoint is a 1-epoch 16/8 model and the samples are two validation seeds and
 one test seed.
 
 Environment: Windows 10 19045, x86-64 with 16 logical processors,
-CPython 3.12.10, NumPy 2.5.4, PyTorch 2.14.1+cu126 (CUDA 12.6 build), Rust
+CPython 3.12.10, NumPy 2.5.4, PyTorch 2.14.1+cu126 on an NVIDIA GeForce
+RTX 2070 (CUDA 12.6 build), Rust
 1.75.0 release extension. The editable extension was built by maturin from the
 binding commit `6710013` (including the importable-exception and explicit
 `extension-module` feature fix `ddaf0fd`); the loaded extension reports
@@ -485,3 +486,35 @@ bypass, invalid inference indices, and recomputable counts. With
 `MAHJONG_EVAL_ACCEPTANCE_CORPUS` pointing at the read-only corpus above, the
 complete online suite passed **151 tests**, including the full-trajectory
 environment/teacher handoff and exception pickling checks.
+
+### Integrated wheel verification
+
+A separate integration check at `ff6f227` built the ordinary wheel with Rust
+1.75, installed it into the project `.venv`, and passed **152 online tests**,
+including the corpus handoff and a new persisted-score disagreement regression.
+The imported evaluator came from `site-packages`, not the editable worktree.
+Its Python source hash was
+`6568296e3cf26d0e1111c931b340a80b7b0f6abac8092b1bcb07480657161015`;
+the compiled Rust source hash was
+`bac3278a85712cb0d2274b69e4dfb1ccab9ad73fe89548754a068dd5f85be2ab`.
+These differ from the earlier worktree observations above; source hashes record
+actual build/import bytes, including checkout line endings.
+
+The same checkpoint was copied to `target/python-eval-acceptance/portable/`.
+Both comparisons ran from an unrelated temporary working directory with an I/O
+audit hook rejecting every open under the corpus, cache, and training run.
+Validation completed 12 games / 898 decisions; test completed 6 / 435. A separate
+stdlib-only script (no project imports) checked six distinct placements per seed,
+zero-sum scores, checkpoint hash, decision totals, mean scores and seed-block SE
+against the persisted JSON. Results matched the scores and counts above.
+Observed CPU play times were 0.0787 s for validation and 0.0533 s for test;
+these are single-run observations, not throughput guarantees.
+
+The source distribution was also unpacked inside the outer checkout, rebuilt
+with Rust 1.75, installed to a separate target directory and driven through a
+53-decision teacher game. Its complete content hash was independently recomputed;
+Git identity was unavailable rather than borrowed from the outer repository.
+CI includes this packaging/provenance regression and the real corpus handoff.
+Linux CI was not executed locally: WSL could not start
+(`HCS/ERROR_NO_SYSTEM_RESOURCES`). Local build and execution evidence is Windows
+MSVC / CPython 3.12; the configured Ubuntu job remains the Linux verification.

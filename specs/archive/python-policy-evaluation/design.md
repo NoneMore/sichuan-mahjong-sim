@@ -83,6 +83,8 @@ The first-decision fixture is generated from the public core and encoder APIs
 and compared by both a Rust test and the installed Python package. It matches
 the existing seed-0 collection corpus bit for bit.
 
-Runtime provenance remains T4 work. `collection::source` identifies the neural
-crate's own build; T4 must add extension-scoped evidence that covers this crate,
-the core, and the neural crate rather than treating that identity as complete.
+The extension build script captures a content hash over the binding, core, and
+neural source scopes. Git metadata is attached only when the source root is the
+actual checkout root; an sdist does not borrow an outer repository. The neural
+crate's collection provenance remains separate. Maturin enables the crate's
+`extension-module` feature; ordinary Cargo test executables link Python normally.
