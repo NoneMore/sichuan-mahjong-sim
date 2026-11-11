@@ -64,6 +64,14 @@ fn approx(left: f64, right: f64) {
     assert!((left - right).abs() < 1e-9, "expected {right}, got {left}");
 }
 
+/// Owned arguments for `parse_args`, which takes `Vec<String>`.
+///
+/// Kept local to this tool's test root: the two CLI tools have different
+/// option contracts and must not share parser fixtures.
+fn owned_args(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
 #[path = "tests/artifacts.rs"]
 mod artifacts;
 #[path = "tests/cli.rs"]

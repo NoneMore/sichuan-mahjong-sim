@@ -187,10 +187,34 @@ pub(super) fn pending_actions(game: &mut Game) -> Vec<Action> {
     }
 }
 
-pub(super) fn added_kong_setup() -> Game {
-    let mut game = blank_game();
-    game.melds[0] = vec![Meld::peng(w(5), seat(1))];
-    let declarer = vec![
+/// Fourteen-tile source hand for the 5W scenarios: the fourth 5W, a full Tong
+/// run, and 1234W. The other copies of 5W are available to claimants.
+pub(super) fn five_wan_source_hand() -> Hand {
+    let mut tiles = vec![w(5)];
+    tiles.extend(tong_run());
+    tiles.extend([w(1), w(2), w(3), w(4)]);
+    hand(&tiles)
+}
+
+/// Thirteen-tile hand waiting on 5W: 345W plus three Tong sets, with `pair`.
+pub(super) fn five_wan_waiter_hand(pair: Tile) -> Hand {
+    let mut tiles = vec![pair, pair, w(3), w(4)];
+    tiles.extend(tong_run());
+    hand(&tiles)
+}
+
+/// Thirteen-tile hand waiting on 5W through either a Peng or a Hu: 55W plus
+/// the 1W pair and a full Tong run. The fourth 5W completes 555W for Hu.
+fn peng_or_hu_waiter_hand() -> Hand {
+    let mut tiles = vec![w(5), w(5), w(1), w(1)];
+    tiles.extend(tong_run());
+    hand(&tiles)
+}
+
+/// Eleven-tile declarer hand behind a Peng of 5W: the fourth 5W, 1234W/6789W,
+/// and the 1T/2T tail. The 9W is the planned post-kong discard.
+pub(super) fn added_kong_declarer_hand() -> Hand {
+    hand(&[
         w(5),
         w(1),
         w(2),
@@ -202,11 +226,21 @@ pub(super) fn added_kong_setup() -> Game {
         w(9),
         t(1),
         t(2),
-    ];
-    game.hands[0] = hand(&declarer);
-    let mut waiter = vec![w(1), w(1), w(3), w(4)];
-    waiter.extend(tong_run());
-    game.hands[1] = hand(&waiter);
+    ])
+}
+
+/// Thirteen-tile hand waiting on 9W: 789W plus the 1W pair and a Tong run.
+pub(super) fn nine_wan_waiter_hand() -> Hand {
+    let mut tiles = vec![w(7), w(8), w(1), w(1)];
+    tiles.extend(tong_run());
+    hand(&tiles)
+}
+
+pub(super) fn added_kong_setup() -> Game {
+    let mut game = blank_game();
+    game.melds[0] = vec![Meld::peng(w(5), seat(1))];
+    game.hands[0] = added_kong_declarer_hand();
+    game.hands[1] = five_wan_waiter_hand(w(1));
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),
@@ -217,25 +251,8 @@ pub(super) fn added_kong_setup() -> Game {
 
 pub(super) fn peng_and_hu_setup() -> Game {
     let mut game = blank_game();
-    let mut source = vec![w(5)];
-    source.extend(tong_run());
-    source.extend([w(1), w(2), w(3), w(4)]);
-    game.hands[0] = hand(&source);
-    game.hands[1] = hand(&[
-        w(5),
-        w(5),
-        w(1),
-        w(1),
-        t(1),
-        t(2),
-        t(3),
-        t(4),
-        t(5),
-        t(6),
-        t(7),
-        t(8),
-        t(9),
-    ]);
+    game.hands[0] = five_wan_source_hand();
+    game.hands[1] = peng_or_hu_waiter_hand();
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),
@@ -246,13 +263,8 @@ pub(super) fn peng_and_hu_setup() -> Game {
 
 pub(super) fn single_waiter_setup() -> Game {
     let mut game = blank_game();
-    let mut source = vec![w(5)];
-    source.extend(tong_run());
-    source.extend([w(1), w(2), w(3), w(4)]);
-    game.hands[0] = hand(&source);
-    let mut waiter = vec![w(1), w(1), w(3), w(4)];
-    waiter.extend(tong_run());
-    game.hands[1] = hand(&waiter);
+    game.hands[0] = five_wan_source_hand();
+    game.hands[1] = five_wan_waiter_hand(w(1));
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),

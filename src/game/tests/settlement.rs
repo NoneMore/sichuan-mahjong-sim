@@ -12,16 +12,10 @@ fn three_waiter_setup() -> Game {
     // All three hands wait on 5W: 345W plus three Tong sets, with a distinct
     // pair in each hand. The source holds the fourth 5W.
     let mut game = blank_game();
-    let mut a = vec![w(1), w(1), w(3), w(4)];
-    a.extend(tong_run());
-    let mut b = vec![w(2), w(2), w(3), w(4)];
-    b.extend(tong_run());
-    let mut c = vec![w(6), w(6), w(3), w(4)];
-    c.extend(tong_run());
     game.hands[0] = hand(&[w(5)]);
-    game.hands[1] = hand(&a);
-    game.hands[2] = hand(&b);
-    game.hands[3] = hand(&c);
+    game.hands[1] = five_wan_waiter_hand(w(1));
+    game.hands[2] = five_wan_waiter_hand(w(2));
+    game.hands[3] = five_wan_waiter_hand(w(6));
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),
@@ -77,14 +71,11 @@ fn response_collection_is_isolated_and_clone_preserves_the_future() {
 
     submit_specific(&mut game, seat(1), Action::Hu);
     assert_eq!(game.scores, [0, 0, 0, 0]);
-    let next_before = {
-        let decision = game.next_decision().unwrap();
-        assert_eq!(decision.seat, seat(2));
-        match decision.legal_actions {
-            LegalActions::Actions(actions) => actions.to_vec(),
-            LegalActions::Exchange { .. } => panic!("expected response"),
-        }
-    };
+    assert_eq!(
+        game.next_decision().expect("seat 2 response").seat,
+        seat(2)
+    );
+    let next_before = pending_actions(&mut game);
     let mut fork = game.clone();
 
     submit_specific(&mut game, seat(2), Action::Hu);
@@ -99,11 +90,7 @@ fn response_collection_is_isolated_and_clone_preserves_the_future() {
         let mut probe = three_waiter_setup();
         discard_5w_to_three_waiters(&mut probe);
         submit_specific(&mut probe, seat(1), Action::Hu);
-        let decision = probe.next_decision().unwrap();
-        match decision.legal_actions {
-            LegalActions::Actions(actions) => actions.to_vec(),
-            LegalActions::Exchange { .. } => panic!("expected response"),
-        }
+        pending_actions(&mut probe)
     };
     assert_eq!(next_before, after_first_hu);
     assert_valid(&game);

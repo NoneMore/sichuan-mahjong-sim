@@ -101,10 +101,7 @@ fn missing_suit_tiles_force_discards_and_block_claims() {
     };
     refresh_wall(&mut game);
 
-    let actions = match game.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected turn actions"),
-    };
+    let actions = pending_actions(&mut game);
     assert!(!actions.is_empty());
     for action in actions {
         let Action::Discard(tile) = action else {

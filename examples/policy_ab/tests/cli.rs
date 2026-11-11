@@ -4,8 +4,7 @@ use super::*;
 
 #[test]
 fn arguments_require_all_inputs_and_a_distinct_seed_list() {
-    let parsed = parse_args(
-        [
+    let parsed = parse_args(owned_args(&[
             "--seeds",
             "1,2",
             "--policy-seed",
@@ -14,10 +13,7 @@ fn arguments_require_all_inputs_and_a_distinct_seed_list() {
             "50",
             "--out",
             "run",
-        ]
-        .iter()
-        .map(|value| (*value).to_owned()),
-    )
+        ]))
     .unwrap();
     match parsed {
         Command::Run(options) => {
@@ -31,47 +27,31 @@ fn arguments_require_all_inputs_and_a_distinct_seed_list() {
         Command::Help => panic!("expected a run command"),
     }
 
-    let args = |values: &[&str]| {
-        values
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect::<Vec<_>>()
-    };
     assert!(matches!(
-        parse_args(args(&["--help", "--seeds", "0"])).unwrap(),
+        parse_args(owned_args(&["--help", "--seeds", "0"])).unwrap(),
         Command::Help
     ));
-    assert!(parse_args(args(&[])).is_err());
-    assert!(parse_args(args(&["--seeds", "1"])).is_err());
-    assert!(parse_args(args(&["--seeds", "1,,2"])).is_err());
-    assert!(parse_args(args(&["--seeds", ""])).is_err());
-    assert!(parse_args(args(&["--seeds", "1,1"])).is_err());
-    assert!(parse_args(args(&["--seeds", "abc"])).is_err());
-    assert!(parse_args(args(&["--seeds", "1", "--decision-limit", "0"])).is_err());
-    assert!(parse_args(args(&["--seeds", "1", "--policy-seed"])).is_err());
-    assert!(parse_args(args(&["--seeds", "1", "--seeds", "2"])).is_err());
-    assert!(parse_args(args(&["--seeds", "1", "extra"])).is_err());
+    assert!(parse_args(owned_args(&[])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "1"])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "1,,2"])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", ""])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "1,1"])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "abc"])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "1", "--decision-limit", "0"])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "1", "--policy-seed"])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "1", "--seeds", "2"])).is_err());
+    assert!(parse_args(owned_args(&["--seeds", "1", "extra"])).is_err());
 }
 
 #[test]
 fn help_short_circuits_later_arguments() {
-    let parsed = parse_args(
-        ["-h", "--seeds", "not-a-seed"]
-            .iter()
-            .map(|value| (*value).to_owned()),
-    )
+    let parsed = parse_args(owned_args(&["-h", "--seeds", "not-a-seed"]))
     .unwrap();
     assert!(matches!(parsed, Command::Help));
 }
 
 #[test]
 fn policy_selection_defaults_to_first_versus_random() {
-    let args = |values: &[&str]| {
-        values
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect::<Vec<_>>()
-    };
     let base = [
         "--seeds",
         "1",
@@ -82,7 +62,7 @@ fn policy_selection_defaults_to_first_versus_random() {
         "--out",
         "run",
     ];
-    let defaults = parse_args(args(&base)).unwrap();
+    let defaults = parse_args(owned_args(&base)).unwrap();
     let Command::Run(defaults) = defaults else {
         panic!("expected a run command");
     };
@@ -92,7 +72,7 @@ fn policy_selection_defaults_to_first_versus_random() {
     // Selection is independent of argument order.
     let mut explicit = base.to_vec();
     explicit.extend_from_slice(&["--a", "heuristic", "--b", "first"]);
-    let Command::Run(options) = parse_args(args(&explicit)).unwrap() else {
+    let Command::Run(options) = parse_args(owned_args(&explicit)).unwrap() else {
         panic!("expected a run command");
     };
     assert_eq!(options.plan.style_a, Style::Heuristic);
@@ -114,14 +94,8 @@ fn every_policy_style_parses_and_round_trips_through_its_name() {
     assert_eq!(Style::Heuristic.name(), "heuristic");
     assert_eq!(Style::MissingOnly.name(), "missing-only");
 
-    let args = |values: &[&str]| {
-        values
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect::<Vec<_>>()
-    };
     for style in ["first", "random", "heuristic", "missing-only"] {
-        let parsed = parse_args(args(&[
+        let parsed = parse_args(owned_args(&[
             "--seeds",
             "1",
             "--policy-seed",
@@ -146,7 +120,7 @@ fn every_policy_style_parses_and_round_trips_through_its_name() {
     // Supply every required run input so these cannot pass merely because
     // unrelated required options are missing.
     let invalid = |extra: &[&str]| {
-        let mut arguments = args(&[
+        let mut arguments = owned_args(&[
             "--seeds",
             "1",
             "--policy-seed",
@@ -156,7 +130,7 @@ fn every_policy_style_parses_and_round_trips_through_its_name() {
             "--out",
             "run",
         ]);
-        arguments.extend(args(extra));
+        arguments.extend(owned_args(extra));
         parse_args(arguments).unwrap_err()
     };
     assert_eq!(invalid(&["--a"]), "--a requires a value");
@@ -188,12 +162,6 @@ fn seed_parsing_preserves_input_order_and_full_u64_values() {
 
 #[test]
 fn cache_budget_option_parses_and_requires_a_heuristic_seat() {
-    let args = |values: &[&str]| {
-        values
-            .iter()
-            .map(|value| (*value).to_owned())
-            .collect::<Vec<_>>()
-    };
     let base = [
         "--seeds",
         "1",
@@ -209,7 +177,7 @@ fn cache_budget_option_parses_and_requires_a_heuristic_seat() {
         "first",
     ];
 
-    let Command::Run(defaults) = parse_args(args(&base)).unwrap() else {
+    let Command::Run(defaults) = parse_args(owned_args(&base)).unwrap() else {
         panic!("expected a run command");
     };
     assert_eq!(defaults.plan.cache_budget, CacheBudget::CandidateDefault);
@@ -217,7 +185,7 @@ fn cache_budget_option_parses_and_requires_a_heuristic_seat() {
 
     let mut explicit = base.to_vec();
     explicit.extend_from_slice(&["--cache-budget-bytes", "0"]);
-    let Command::Run(options) = parse_args(args(&explicit)).unwrap() else {
+    let Command::Run(options) = parse_args(owned_args(&explicit)).unwrap() else {
         panic!("expected a run command");
     };
     assert_eq!(options.plan.cache_budget, CacheBudget::Explicit(0));
@@ -225,7 +193,7 @@ fn cache_budget_option_parses_and_requires_a_heuristic_seat() {
     let invalid = |extra: &[&str]| {
         let mut values = base.to_vec();
         values.extend_from_slice(extra);
-        parse_args(args(&values)).unwrap_err()
+        parse_args(owned_args(&values)).unwrap_err()
     };
     assert!(invalid(&["--cache-budget-bytes", "abc"]).contains("invalid"));
     assert_eq!(
@@ -251,7 +219,7 @@ fn cache_budget_option_parses_and_requires_a_heuristic_seat() {
         "--cache-budget-bytes",
         "100",
     ];
-    let error = parse_args(args(&no_heuristic)).unwrap_err();
+    let error = parse_args(owned_args(&no_heuristic)).unwrap_err();
     assert!(
         error.contains("requires at least one heuristic seat"),
         "{error}"
@@ -279,7 +247,7 @@ fn cache_budget_option_parses_and_requires_a_heuristic_seat() {
             "--cache-budget-bytes",
             "0",
         ];
-        assert!(parse_args(args(&values)).is_ok(), "{styles:?}");
+        assert!(parse_args(owned_args(&values)).is_ok(), "{styles:?}");
     }
 }
 

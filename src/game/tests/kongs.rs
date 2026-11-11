@@ -66,34 +66,8 @@ fn unrobbed_added_kong_pays_then_draws_one_replacement() {
 fn kong_discard_setup() -> Game {
     let mut game = blank_game();
     game.melds[0] = vec![Meld::peng(w(5), seat(1))];
-    game.hands[0] = hand(&[
-        w(5),
-        w(1),
-        w(2),
-        w(3),
-        w(4),
-        w(6),
-        w(7),
-        w(8),
-        w(9),
-        t(1),
-        t(2),
-    ]);
-    game.hands[1] = hand(&[
-        w(7),
-        w(8),
-        w(1),
-        w(1),
-        t(1),
-        t(2),
-        t(3),
-        t(4),
-        t(5),
-        t(6),
-        t(7),
-        t(8),
-        t(9),
-    ]);
+    game.hands[0] = added_kong_declarer_hand();
+    game.hands[1] = nine_wan_waiter_hand();
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),
@@ -176,13 +150,19 @@ fn kong_discard_pays_one_more_than_the_same_plain_discard() {
     assert_valid(&kong);
 }
 
+/// Four 1W plus a full Tong run and the 2W: a concealed kong leaves a
+/// complete Tong run and the 2W to discard after the replacement draw.
+fn concealed_kong_declarer_hand() -> Hand {
+    let mut tiles = vec![w(1), w(1), w(1), w(1)];
+    tiles.extend(tong_run());
+    tiles.push(w(2));
+    hand(&tiles)
+}
+
 #[test]
 fn concealed_kong_pays_active_opponents_and_draws_from_the_tail() {
     let mut game = blank_game();
-    let mut declarer = vec![w(1), w(1), w(1), w(1)];
-    declarer.extend(tong_run());
-    declarer.push(w(2));
-    game.hands[0] = hand(&declarer);
+    game.hands[0] = concealed_kong_declarer_hand();
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),
@@ -226,10 +206,7 @@ fn inactive_winners_do_not_pay_kong_charges() {
     });
     game.discards.push(DiscardInfo::new(seat(0), w(5)));
     game.discards[0].winners[1] = true;
-    let mut declarer = vec![w(1), w(1), w(1), w(1)];
-    declarer.extend(tong_run());
-    declarer.push(w(2));
-    game.hands[0] = hand(&declarer);
+    game.hands[0] = concealed_kong_declarer_hand();
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),
@@ -250,10 +227,7 @@ fn inactive_winners_do_not_pay_kong_charges() {
 #[test]
 fn open_kong_pays_the_discarder_and_draws_one_replacement() {
     let mut game = blank_game();
-    let mut source = vec![w(5)];
-    source.extend(tong_run());
-    source.extend([w(1), w(2), w(3), w(4)]);
-    game.hands[0] = hand(&source);
+    game.hands[0] = five_wan_source_hand();
     let mut claimant = vec![w(5), w(5), w(5)];
     claimant.extend(tong_run());
     claimant.push(w(6));
@@ -306,21 +280,7 @@ fn peng_then_discard_setup() -> Game {
         t(2),
         t(3),
     ]);
-    game.hands[2] = hand(&[
-        w(7),
-        w(8),
-        w(1),
-        w(1),
-        t(1),
-        t(2),
-        t(3),
-        t(4),
-        t(5),
-        t(6),
-        t(7),
-        t(8),
-        t(9),
-    ]);
+    game.hands[2] = nine_wan_waiter_hand();
     game.stage = Stage::Action {
         seat: S0,
         kind: ActionKind::AfterDraw(DrawKind::Normal),
@@ -392,19 +352,13 @@ fn empty_wall_blocks_kongs_but_not_peng() {
     assert_eq!(game.wall_remaining(), 0);
     assert_valid(&game);
 
-    let actions = match game.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected turn actions"),
-    };
+    let actions = pending_actions(&mut game);
     assert!(actions
         .iter()
         .all(|action| !matches!(action, Action::ConcealedKong(_) | Action::AddedKong(_))));
 
     let mut response = blank_game();
-    let mut source = vec![w(5)];
-    source.extend(tong_run());
-    source.extend([w(1), w(2), w(3), w(4)]);
-    response.hands[0] = hand(&source);
+    response.hands[0] = five_wan_source_hand();
     response.hands[1] = hand(&[
         w(5),
         w(5),
@@ -427,10 +381,7 @@ fn empty_wall_blocks_kongs_but_not_peng() {
     refresh_wall(&mut response);
     drain_wall_to_discards(&mut response);
     submit_specific(&mut response, seat(0), Action::Discard(w(5)));
-    let response_actions = match response.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected response actions"),
-    };
+    let response_actions = pending_actions(&mut response);
     assert!(response_actions.contains(&Action::Peng));
     assert!(!response_actions.contains(&Action::OpenKong));
     submit_specific(&mut response, seat(1), Action::Peng);
