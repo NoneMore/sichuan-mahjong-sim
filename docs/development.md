@@ -1,8 +1,9 @@
 # Development and verification
 
-Use this guide for workspace setup and verification. For runnable workflows,
-start from the [documentation map](README.md); module READMEs own detailed
-CLI options and artifact contracts.
+This guide covers workspace setup and verification. The
+[developer governance](governance.md) defines contribution conventions;
+the [documentation map](README.md) links to runnable workflows. Module
+READMEs own detailed CLI options and artifact contracts.
 
 ## Running
 
