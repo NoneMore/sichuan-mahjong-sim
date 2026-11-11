@@ -571,20 +571,27 @@ def _unsigned_metadata_overflows(
 ) -> bool:
     """Whether gathered unsigned metadata exceeds the int64 batch dtype.
 
-    ``decision_indices`` is unsigned on the wire but int64 in a batch, so a
-    value at or above ``2**63`` must fail like the per-sample tensor build
-    instead of silently wrapping. Only the rows of this batch are inspected.
+    ``decision_indices`` and ``actor_seats`` are unsigned on the wire but int64
+    in a batch, so a value at or above ``2**63`` must fail like the per-sample
+    tensor build instead of silently wrapping. Only the rows of this batch are
+    inspected, and only arrays whose dtype can hold such a value are read, so
+    the usual uint8/uint16/uint32 metadata adds no host work.
     """
 
     limit = int(np.iinfo(np.int64).max)
     for _, shard, local in segments:
-        values = shard.decision_indices
-        if values is None or not local.size:
+        if not local.size:
             continue
-        if not np.issubdtype(values.dtype, np.unsignedinteger):
-            continue
-        if int(values[local].max()) > limit:
-            return True
+        for values in (shard.actor_seats, shard.decision_indices):
+            if values is None:
+                continue
+            dtype = values.dtype
+            if not np.issubdtype(dtype, np.unsignedinteger):
+                continue
+            if int(np.iinfo(dtype).max) <= limit:
+                continue
+            if int(values[local].max()) > limit:
+                return True
     return False
 
 

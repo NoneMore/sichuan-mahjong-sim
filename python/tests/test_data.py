@@ -976,6 +976,20 @@ def test_vectorized_unsigned_metadata_overflow_keeps_reference_error():
     assert other[0].decision_indices.tolist() == [int(dataset.decision_indices[1])]
 
 
+def test_vectorized_actor_overflow_keeps_reference_error():
+    dataset = _metadata_dataset(counts=[2, 2], seed=121)
+    dataset.actor_seats = dataset.actor_seats.astype(np.uint64)
+    dataset.actor_seats[0] = np.uint64(2**63)
+    with pytest.raises(ValueError) as reference:
+        collate_decisions([dataset[0]])
+    with pytest.raises(ValueError) as batched:
+        list(iter_batches(dataset, [0, 1], batch_size=2))
+    assert str(batched.value) == str(reference.value)
+    # Only the selected rows determine whether a batch needs the fallback.
+    other = list(iter_batches(dataset, [1], batch_size=1))
+    assert other[0].actor_seats.tolist() == [int(dataset.actor_seats[1])]
+
+
 def test_packed_shards_without_target_kinds_keep_the_per_sample_path(monkeypatch):
     dataset = _metadata_dataset(counts=[2, 1, 3], seed=118, target_kinds=False)
     expected = _reference_batches(dataset, [0, 1, 2, 2], 2)

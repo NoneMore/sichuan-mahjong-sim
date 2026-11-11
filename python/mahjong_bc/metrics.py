@@ -355,6 +355,23 @@ class MetricAccumulator:
         )
 
 
+def _offsets_match_cached_counts(shard: PackedDecisionDataset) -> bool:
+    """Whether a shard's current offsets still imply its validated counts.
+
+    Batching reads the current offsets, so an in-place edit can change which
+    decisions are eligible after construction cached the original layout.
+    """
+
+    offsets = shard.offsets
+    if offsets is None:
+        # A closed shard has no offsets. Reach its documented "closed" error
+        # through the full traversal instead of failing on a missing array.
+        return False
+    counts = shard.candidate_counts()
+    current = np.diff(np.asarray(offsets, dtype=np.int64))
+    return current.shape == counts.shape and np.array_equal(current, counts)
+
+
 def _builtin_eligible_layout(
     dataset: DecisionDataset,
 ) -> tuple[np.ndarray, tuple[int, ...]] | None:
@@ -364,16 +381,23 @@ def _builtin_eligible_layout(
     override ``eligible_indices`` or ``forced_by_stage`` with values that do
     not describe the samples it returns, so such datasets keep the full
     traversal whose forced counts come from the collated mask itself. A sharded
-    split qualifies only when every shard is a packed dataset too.
+    split qualifies only when every shard is a packed dataset too. A built-in
+    split qualifies only while its offsets still match the counts it was
+    validated with, because only then does its cached layout describe the rows
+    that batching will return.
     """
 
     if type(dataset) is PackedDecisionDataset:
-        return dataset.eligible_indices(), dataset.forced_by_stage()
-    if type(dataset) is ShardedDecisionDataset and all(
+        shards: Sequence[PackedDecisionDataset] = (dataset,)
+    elif type(dataset) is ShardedDecisionDataset and all(
         type(shard) is PackedDecisionDataset for shard in dataset.shards
     ):
-        return dataset.eligible_indices(), dataset.forced_by_stage()
-    return None
+        shards = dataset.shards
+    else:
+        return None
+    if not all(_offsets_match_cached_counts(shard) for shard in shards):
+        return None
+    return dataset.eligible_indices(), dataset.forced_by_stage()
 
 
 def evaluate_dataset(
@@ -387,11 +411,13 @@ def evaluate_dataset(
     """Evaluate every decision in one split, aggregating by decision.
 
     Forced decisions are included only in forced counts. Built-in packed and
-    sharded splits read those counts from their validated layout metadata and
-    never infer forced rows; their eligible decisions alone are batched
-    through the model. Other datasets still visit every decision so forced
-    counts are derived from the samples actually scored. The model is not
-    modified and its previous train/eval mode is restored.
+    sharded splits whose current offsets still match their validated layout
+    read those counts from that metadata and never infer forced rows; their
+    eligible decisions alone are batched through the model. Other datasets,
+    including built-in splits whose offsets changed after construction, visit
+    every decision so forced counts are derived from the samples actually
+    scored. The model is not modified and its previous train/eval mode is
+    restored.
     """
 
     require_dataset_identity(dataset, "evaluation dataset")

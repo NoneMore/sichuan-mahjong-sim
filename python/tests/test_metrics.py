@@ -332,6 +332,59 @@ def test_evaluate_dataset_skips_forced_rows_for_builtin_packed_split():
     assert_reports_equal(report, baseline, tolerance=1e-6)
 
 
+@pytest.mark.parametrize("sharded", [False, True])
+def test_evaluation_uses_current_layout_after_offsets_change(sharded):
+    first = make_dataset(
+        split="validation", counts=[1, 2, 3], stages=[0, 1, 2], seed=61
+    )
+    first.targets[:] = 0
+    if sharded:
+        second = make_dataset(
+            split="validation", counts=[1, 2], stages=[3, 4], seed=62
+        )
+        dataset = ShardedDecisionDataset(
+            (first, second), identity(split="validation", decisions=5, eligible=3)
+        )
+    else:
+        dataset = first
+    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=21)
+    recording = _RecordingPolicy(model)
+    evaluate_dataset(recording, dataset, batch_size=2, device="cpu")
+    assert sum(recording.rows) == dataset.eligible_count
+    recording.rows.clear()
+
+    # Eligible indices are cached, but sampling follows the current spans.
+    # This swaps a forced and an eligible row without changing the total count.
+    first.offsets[1] = 2
+    assert np.diff(first.offsets).tolist() == [2, 1, 3]
+    report = evaluate_dataset(recording, dataset, batch_size=2, device="cpu")
+    reference = evaluate_dataset(
+        model, DelegatingDataset(dataset), batch_size=2, device="cpu"
+    )
+    assert sum(recording.rows) == len(dataset)
+    assert_reports_equal(report, reference)
+    assert (report.eligible, report.forced) == ((3, 2) if sharded else (2, 1))
+    assert support_by_stage(report) == ((1, 0, 1, 0, 1) if sharded else (1, 0, 1, 0, 0))
+    assert tuple(stage.forced for stage in report.stages) == (
+        (0, 1, 0, 1, 0) if sharded else (0, 1, 0, 0, 0)
+    )
+
+
+@pytest.mark.parametrize("sharded", [False, True])
+def test_evaluation_closed_layout_keeps_closed_error(sharded):
+    first = make_dataset(split="validation", counts=[1, 2], seed=63)
+    dataset = (
+        ShardedDecisionDataset(
+            (first,), identity(split="validation", decisions=2, eligible=1)
+        )
+        if sharded else first
+    )
+    first.close()
+    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=22)
+    with pytest.raises(DataError, match="closed"):
+        evaluate_dataset(model, dataset, batch_size=2, device="cpu")
+
+
 def test_evaluate_dataset_all_forced_split_needs_no_forward():
     dataset = make_dataset(
         split="validation",
