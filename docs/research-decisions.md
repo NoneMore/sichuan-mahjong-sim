@@ -92,8 +92,11 @@ difference `Δ` and between-seed standard error `SE`. Do not add the
 contrasts as if they measured independent strategy gains.
 
 In a separate cost study, compare full-game and exchange-only time for all
-four variants over five repetitions with reversed execution order and cold
-cache contexts shared across seats *within* each measured phase. Do not
+four variants over five repetitions with reversed execution order: 20,480
+four-seat games and 81,920 isolated exchange calls across the original
+protocol. Use the fixed 27,787,264-byte cache budget and 10,000-decision
+per-game limit. Start each timing phase with a cold cache context, shared
+across seats *within* that phase. Do not
 charge diagnostic rescoring or output writes to the timing interval. Inspect
 one initial decision per seed/seat to distinguish changed exchange *suit*
 from merely changed *three-tile selection*.
@@ -121,8 +124,9 @@ suit DP without altering exact masks or slowing complete games? B uses the
 previous `g > d` cutoff. C adds, before transition enumeration, a
 rank-local bound for required current/next-rank tiles:
 `L_r = max(0, a+b-hand[r]) + max(0, b-hand[r+1])`;
-prune only when `g + L_r > d`. Keep the cutoff **strict** so equal-cost
-optimal masks survive. `d` is the exact whole-hand distance for the same
+prune only when `g + L_r > d` (the second term is zero at the
+last rank, without reading past the hand). Keep the cutoff **strict** so
+equal-cost optimal masks survive. `d` is the exact whole-hand distance for the same
 context; non-bounded paths, seven pairs, policy selection and cache lifecycle
 are unchanged.
 
@@ -169,14 +173,15 @@ transposes a co-occurrence matrix into candidate-specific Needed masks.
 Apply only when `D > 0`, the hand has `14-3m` tiles and candidate
 distance equals the original optimum; otherwise fall back to the baseline.
 The actual baseline had already reused per-suit caches and computed
-roughly `k+2` bounded tables, so the experiment must compare **actual
-work**, not a hypothetical `3k` recalculation.
+roughly `k+2` or `k+3` bounded tables, so the experiment must
+compare **actual work**, not a hypothetical `3k` recalculation.
 
 **How it was tested.** Independently compare complete
 `(deficit, needed_mask)`/ukeire results, all tied targets and fallback
 paths against the existing bounded computation and concrete-target oracle.
 Replay 40 fixed games (seeds `7..=26`, `10007..=10026`), including
-clone continuations and reporting unexercised claim stages. Measure request,
+clone continuations at decision 24 and 80 when unfinished, and reporting
+unexercised claim stages. Measure request,
 build, forward/backward scan, snapshot allocation and transposition costs
 *outside* formal timing. For each of seeds `7` and `10007`, use
 `heuristic_bench --games 2000 --warmup 20` with three B/B and five B/C
@@ -230,7 +235,9 @@ hits, builds, and per-evaluator overlapping `(suit, counts)` keys in
 real access order; simulate possible reuse without merging different
 evaluator/meld/missing-suit/capacity contexts. Then compare both masks
 and costs with a concrete-target oracle, individual discard decisions,
-and 64 fixed-seed game traces including clone/continuation. Isolated
+and 64 fixed-seed game traces (seeds `7..=38` and
+`10007..=10038`) including clone/continuation at decision 24
+when unfinished. Isolated
 build/cache/memory probes explain trade-offs but are **not** the adoption
 metric. For each of seeds `7` and `10007`, use uninstrumented four-seat
 `heuristic_bench --games 2000 --warmup 20`, three B/B pairs followed by
