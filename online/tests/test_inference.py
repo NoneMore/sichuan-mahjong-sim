@@ -10,6 +10,7 @@ from mahjong_bc.checkpoint import (
     TrainingCheckpointState,
     atomic_torch_save,
     build_payload,
+    load_policy_checkpoint,
     save_checkpoint,
 )
 from mahjong_bc.config import (
@@ -29,7 +30,7 @@ from mahjong_bc.constants import (
     STATE_WIDTH,
 )
 from mahjong_bc.data import pad_decision_inputs
-from mahjong_bc.errors import CheckpointError, DataError
+from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError
 from mahjong_bc.policy import build_policy, greedy_indices
 
 from mahjong_eval.inference import FrozenPolicy
@@ -301,6 +302,119 @@ def test_checkpoint_roles_are_limited_to_frozen_policies(tmp_path):
     last = _write_checkpoint(tmp_path / "last.pt", role=ROLE_LAST)
     with pytest.raises(CheckpointError, match="not 'last'"):
         FrozenPolicy(last)
+
+
+def test_from_loaded_keeps_weights_after_checkpoint_path_removed(tmp_path):
+    path = _write_checkpoint(tmp_path / "best.pt")
+    loaded = load_policy_checkpoint(path)
+    weights = {
+        name: value.detach().clone()
+        for name, value in loaded.model.state_dict().items()
+    }
+    rng = np.random.default_rng(21)
+    decisions = [_decision(rng, count) for count in (3, 1, 2, 4)]
+    expected = FrozenPolicy(path).select_indices(decisions)
+
+    path.unlink()
+    assert not path.exists()
+    policy = FrozenPolicy.from_loaded(loaded)
+    assert policy.checkpoint == path
+    assert policy.role == ROLE_BEST
+    assert policy.device == torch.device("cpu")
+    assert policy.metadata()["has_training_state"] is True
+    assert policy.metadata()["path"] == str(path)
+    assert policy._model is not loaded.model
+    assert all(
+        not parameter.requires_grad
+        for parameter in policy._model.parameters()
+    )
+    for name, value in policy._model.state_dict().items():
+        assert torch.equal(value, weights[name])
+    assert policy.select_indices(decisions) == expected
+
+
+def test_from_loaded_never_rereads_checkpoint_path(tmp_path, monkeypatch):
+    path = _write_checkpoint(tmp_path / "best.pt")
+    loaded = load_policy_checkpoint(path)
+    rng = np.random.default_rng(22)
+    decisions = [_decision(rng, count) for count in (2, 3, 1)]
+    expected = FrozenPolicy(path).select_indices(decisions)
+
+    path.write_bytes(b"replaced checkpoint bytes")
+
+    def _must_not_load(*args, **kwargs):
+        raise AssertionError("from_loaded must not reload the checkpoint")
+
+    monkeypatch.setattr(
+        "mahjong_eval.inference.load_policy_checkpoint", _must_not_load
+    )
+    policy = FrozenPolicy.from_loaded(loaded)
+    assert policy.checkpoint == path
+    assert policy.select_indices(decisions) == expected
+
+
+def test_from_loaded_reuses_role_validation_without_file_access(tmp_path):
+    last_path = _write_checkpoint(tmp_path / "last.pt", role=ROLE_LAST)
+    loaded = load_policy_checkpoint(last_path)
+    last_path.unlink()
+    with pytest.raises(CheckpointError, match="not 'last'"):
+        FrozenPolicy.from_loaded(loaded)
+    with pytest.raises(ConfigurationError):
+        FrozenPolicy.from_loaded(object())  # type: ignore[arg-type]
+
+
+def test_from_loaded_freezes_independent_copies_on_requested_device(tmp_path):
+    path = _write_checkpoint(tmp_path / "best.pt")
+    loaded = load_policy_checkpoint(path)
+    first = FrozenPolicy.from_loaded(loaded, torch.device("cpu"))
+    second = FrozenPolicy.from_loaded(loaded)
+    assert first.device == torch.device("cpu")
+    assert second.device == torch.device("cpu")
+    assert first._model is not second._model
+    assert first._model is not loaded.model
+    for policy in (first, second):
+        assert all(
+            parameter.device == torch.device("cpu")
+            for parameter in policy._model.parameters()
+        )
+        assert all(
+            not parameter.requires_grad
+            for parameter in policy._model.parameters()
+        )
+    assert any(
+        parameter.requires_grad for parameter in loaded.model.parameters()
+    )
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+def test_from_loaded_moves_independent_copy_to_cuda(tmp_path):
+    path = _write_checkpoint(tmp_path / "best.pt")
+    loaded = load_policy_checkpoint(path)
+    policy = FrozenPolicy.from_loaded(loaded, "cuda")
+    assert policy.device.type == "cuda"
+    assert all(
+        parameter.device == policy.device
+        for parameter in policy._model.parameters()
+    )
+    assert all(
+        parameter.device.type == "cpu"
+        for parameter in loaded.model.parameters()
+    )
+    rng = np.random.default_rng(23)
+    assert policy.select_indices([_decision(rng, 2)])[0] in (0, 1)
+
+    loaded_cuda = load_policy_checkpoint(path, device="cuda")
+    cpu_policy = FrozenPolicy.from_loaded(loaded_cuda, "cpu")
+    assert cpu_policy.device == torch.device("cpu")
+    assert all(
+        parameter.device == torch.device("cpu")
+        for parameter in cpu_policy._model.parameters()
+    )
+    assert all(
+        parameter.device.type == "cuda"
+        for parameter in loaded_cuda.model.parameters()
+    )
+    assert cpu_policy.select_indices([_decision(rng, 2)])[0] in (0, 1)
 
 
 def test_legacy_format2_best_checkpoint_is_readable(tmp_path):

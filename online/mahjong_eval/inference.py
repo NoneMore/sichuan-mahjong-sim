@@ -1,21 +1,23 @@
 """Frozen neural policy inference for online game evaluation.
 
 A :class:`FrozenPolicy` owns one eval-mode candidate policy loaded from an
-offline checkpoint. Pending decisions need only expose ``state`` and
-``candidate_features`` arrays; batching, padding, masking and greedy selection
-reuse the offline package. No native extension, training data, or run
-directory is required.
+offline checkpoint, or adopted from an already loaded ``LoadedCheckpoint``.
+Pending decisions need only expose ``state`` and ``candidate_features`` arrays;
+batching, padding, masking and greedy selection reuse the offline package. No
+native extension, training data, or run directory is required.
 """
 
 from __future__ import annotations
 
+import copy
+from dataclasses import replace
 from pathlib import Path
 from typing import Iterable
 
 import torch
 from torch import Tensor
 
-from mahjong_bc.checkpoint import load_policy_checkpoint
+from mahjong_bc.checkpoint import LoadedCheckpoint, load_policy_checkpoint
 from mahjong_bc.config import ModelConfig
 from mahjong_bc.constants import (
     FORCED_CANDIDATE_COUNT,
@@ -23,7 +25,7 @@ from mahjong_bc.constants import (
     ROLE_POLICY,
 )
 from mahjong_bc.data import DecisionInputs, pad_decision_inputs
-from mahjong_bc.errors import CheckpointError, DataError
+from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError
 from mahjong_bc.policy import greedy_indices
 from mahjong_bc.train import resolve_device
 
@@ -38,9 +40,10 @@ class FrozenPolicy:
     """Selected policy weights exposed as a greedy decision selector.
 
     The checkpoint loader validates container, model, and encoding versions
-    before model construction. The policy is evaluated in eval mode without
-    gradients; single-candidate decisions are submitted as index zero without
-    model inference.
+    before model construction. :meth:`from_loaded` reuses an already validated
+    ``LoadedCheckpoint`` without reading its path again. The policy is
+    evaluated in eval mode without gradients; single-candidate decisions are
+    submitted as index zero without model inference.
     """
 
     def __init__(
@@ -48,17 +51,66 @@ class FrozenPolicy:
         checkpoint: str | Path,
         device: str | torch.device = "cpu",
     ) -> None:
-        self._device = resolve_device(device)
-        loaded = load_policy_checkpoint(checkpoint, device=self._device)
+        target = resolve_device(device)
+        loaded = load_policy_checkpoint(checkpoint, device=target)
+        self._adopt(loaded, target, clone_model=False)
+
+    @classmethod
+    def from_loaded(
+        cls,
+        loaded: LoadedCheckpoint,
+        device: str | torch.device = "cpu",
+    ) -> FrozenPolicy:
+        """Build a frozen policy from an already loaded checkpoint.
+
+        The checkpoint file is not read again. The policy owns a frozen copy
+        of ``loaded.model`` placed on ``device``, so removing or replacing the
+        original path, or creating another policy from the same loaded value,
+        cannot alter this policy's weights or device.
+        """
+
+        if not isinstance(loaded, LoadedCheckpoint):
+            raise ConfigurationError("loaded must be a LoadedCheckpoint")
+        target = resolve_device(device)
+        policy = cls.__new__(cls)
+        policy._adopt(loaded, target, clone_model=True)
+        return policy
+
+    def _adopt(
+        self,
+        loaded: LoadedCheckpoint,
+        target: torch.device,
+        *,
+        clone_model: bool,
+    ) -> None:
         if loaded.role not in _SUPPORTED_ROLES:
             raise CheckpointError(
                 f"{loaded.path} has checkpoint role {loaded.role!r}; frozen "
                 "inference accepts selected 'best' (or 'policy') checkpoints, "
                 "not 'last'"
             )
-        loaded.model.eval().requires_grad_(False)
-        self._loaded = loaded
-        self._model = loaded.model
+        model = copy.deepcopy(loaded.model) if clone_model else loaded.model
+        model.to(target)
+        model.eval().requires_grad_(False)
+        devices = {parameter.device for parameter in model.parameters()}
+        devices.update(buffer.device for buffer in model.buffers())
+        if not devices:
+            devices = {target}
+        if len(devices) != 1:
+            raise CheckpointError(
+                "loaded policy model spans multiple devices: "
+                + ", ".join(sorted(str(device) for device in devices))
+            )
+        actual = next(iter(devices))
+        if actual.type != target.type or (
+            target.index is not None and actual.index != target.index
+        ):
+            raise CheckpointError(
+                f"loaded policy model is on {actual}, requested {target}"
+            )
+        self._device = actual
+        self._loaded = replace(loaded, model=model) if clone_model else loaded
+        self._model = model
 
     @property
     def checkpoint(self) -> Path:
