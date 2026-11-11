@@ -39,8 +39,8 @@ CLI options and report fields.
 
 Benchmark throughput on shared CI runners is not a stable performance gate.
 Record revision, build/toolchain, workload, seeds, environment, and independent
-repeat conditions when interpreting results. [Historical studies](../validation.md)
-are evidence for their original revisions, not new measurements.
+repeat conditions when interpreting results. Old benchmark numbers are not a
+performance baseline for the current revision.
 
 The [A/B tests](../../examples/policy_ab/tests.rs) cover placement, records,
 aggregation, and failure artifacts; the

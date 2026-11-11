@@ -162,9 +162,8 @@ python -m pytest online/tests
 Root workspace checks do not cover the extension. Its independent lockfile pins
 `rustc-hash` to 2.1.1 for Rust 1.75. The package requires Python 3.12+
 and NumPy 2+, while supported build/toolchain behavior must be checked against
-the current CI and lockfile. The [historical online validation](../docs/validation.md#python-online-comparison-smoke-validation)
-records exact Windows tool versions, measurements, and platform limits for the
-original acceptance run; those are not current dependency recommendations.
+the current CI and lockfile. Verify the selected platform and dependency combination using current CI
+and local tests rather than older platform measurements.
 
 Checked-in Rust/Python fixtures cover the first decision, all-stage scripted
 replay including continued play after a win, and semantic teacher replay. Rust

@@ -63,7 +63,7 @@ ownership and cache constraints in detail.
 
 These are current **implemented outcomes**, not prospective designs.
 Use [development](../development.md) for setup and CI,
-the [documentation map](../README.md) for runnable workflows, and
-[validation](../validation.md) for historical performance evidence.
-Past Changes or ADRs may explain decisions but are not prerequisites for
+the [documentation map](../README.md) for runnable workflows and
+[research decisions](../research-decisions.md) for supported choices not yet
+incorporated into the project. Past Changes or ADRs are not prerequisites for
 understanding the current system.

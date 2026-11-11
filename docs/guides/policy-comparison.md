@@ -150,15 +150,9 @@ context; retain such runs but do not use them for performance adoption. Failed
 input, execution, or report output makes a run invalid; no partial batch is
 reported as a normal measurement.
 
-Historical benchmark observations, artifact-retention limitations, and the
-cache-adoption results belong in [validation](../validation.md) and the
-[historical validation record](../validation.md#exact-analysis-changes-and-profiling).
-
 ## Related references
 
 - [Experiment architecture](../architecture/experiments.md) explains
   responsibility and replay boundaries.
 - [Rust library guide](../library.md) covers policy construction and
   shared heuristic cache contexts.
-- [Historical validation](../validation.md) records point-in-time outcomes,
-  not current speed or policy-strength guarantees.

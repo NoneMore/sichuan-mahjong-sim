@@ -57,9 +57,7 @@ A zero budget disables only cross-decision memoization; failed allocation
 also falls back to exact analysis without changing choices. Inspect
 `cache.status()` for diagnostics, and use a new context for a different budget
 or independent cold run. See [Policy architecture](architecture/policy.md#cache-and-checkpoint-boundary)
-for the design constraints and the
-[historical cache study](validation.md#exact-analysis-changes-and-profiling)
-for measured trade-offs.
+for the cache and checkpoint design constraints.
 
 ## Runner API
 

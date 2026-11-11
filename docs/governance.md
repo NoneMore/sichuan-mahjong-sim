@@ -36,6 +36,7 @@ Use the [documentation map](README.md) to find task-specific guides. For change 
 | What does the current implementation do? | Relevant `src/`, `crates/`, tests, and executable evidence |
 | What is a proposed change intended to do? | `specs/active/<change>/`, when present |
 | Why was a consequential decision made? | `docs/adr/`, when present |
+| Which experiment-backed decisions remain unimplemented? | [Research decisions](research-decisions.md) |
 
 ## Architecture knowledge
 
@@ -84,10 +85,11 @@ sub-Change. It may span tasks or PRs; trivial work does not need one.
 - For substantial investigations, identify scratch outputs and likely retention
   needs early when useful. When work stops, consider only the process artifacts
   created or modified by that Change: promote durable code, tests, and current
-  knowledge; preserve useful positive and negative findings, limitations, and
-  provenance when not otherwise captured; retain required external evidence
-  with appropriate access, integrity, and retention; and discard disposable
-  outputs only after checking dependencies and obligations. Trivial work needs
+  knowledge; retain only supported, unimplemented decisions and source links
+  when they remain actionable; discard in-tree research summaries whose
+  conclusions have been implemented or do not support a clear decision.
+  Follow any independently required evidence-retention obligations before
+  discarding generated outputs. Trivial work needs
   no special review or additional file.
 
 Do not require one Change per PR, specifications for every PR, or
@@ -125,7 +127,11 @@ do not edit the old ADR to point forward. Older ADRs may move to
   `cargo clippy --workspace --all-targets -- -D warnings`, and
   `cargo test --workspace --all-targets`. Add release, stress, or performance
   checks when warranted.
-- Treat [validation measurements](validation.md) as historical observations,
-  not a current performance guarantee. Record build, environment, seeds,
-  policy, workload, and results for comparisons; measure before claiming
-  performance or strategy quality.
+- Record build, environment, seeds, policy, workload, and results when making
+  new performance or strategy claims; previous-revision measurements do not
+  establish current performance.
+- Keep only supported conclusions involving unimplemented choices in
+  [research decisions](research-decisions.md): state the decision and link to
+  immutable sources, without copying historical measurements or results.
+  Do not retain inconclusive evidence or already-implemented acceptance
+  evidence. Remove entries when they cease to affect development.

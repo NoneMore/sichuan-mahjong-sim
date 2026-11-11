@@ -174,9 +174,4 @@ small real Rust corpus/cache pair bit-for-bit, including candidate order,
 targets, metadata and padded batches. The recovery probe injects a mid-epoch
 CPU failure, compares replay order/steps and model/optimizer states exactly with
 a continuous run, migrates a completed run and evaluates the frozen best model.
-It uses one CPU thread and requires a new output directory. See
-[loader validation](../docs/validation.md#python-dataset-loader-smoke-validation)
-and [training validation](../docs/validation.md#offline-bc-training-smoke-validation)
-for reproducible inputs and observed results. The
-[recovery validation](../docs/validation.md#offline-bc-recovery-validation) records
-the real-cache replay, directory migration and CUDA smoke checks.
+It uses one CPU thread and requires a new output directory.

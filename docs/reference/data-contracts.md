@@ -41,8 +41,6 @@ Implementation, parser validation, and contract tests govern actual behavior;
    [online evaluation tests](../../online/tests/) and validate real handoffs.
 3. Update the owning crate/package README and this navigation table if the
    contract boundary or compatibility policy changed.
-4. Record research reproduction details in [validation](../validation.md)
-   only when there is a concrete dated acceptance result.
 
 For runnable commands use the [BC pipeline](../guides/bc-pipeline.md); for
 implemented component ownership use the [neural architecture](../architecture/neural.md).

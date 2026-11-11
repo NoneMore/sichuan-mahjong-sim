@@ -67,5 +67,3 @@ verifies that specific source revision; it does not establish a performance
 guarantee or replay equivalence to earlier revisions. For behavior-changing
 work, use focused invariant and deterministic-replay tests; for performance
 claims, use paired, controlled measurements outside shared CI runners.
-[Historical validation results](validation.md) document earlier environments
-and observations rather than the present test count.

@@ -67,4 +67,4 @@ and [development](docs/development.md) for workspace verification.
 ## Documentation
 
 Use the [documentation map](docs/README.md) for task-specific guides,
-API references, architecture, validation records, and contributor guidance.
+API references, architecture, verification guidance, and contributor information.
