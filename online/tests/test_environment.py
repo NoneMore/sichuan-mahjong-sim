@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -17,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = REPO_ROOT / "crates" / "python" / "tests" / "fixtures"
 FIRST_DECISION_FIXTURE = FIXTURES / "first_decision_seed_0.json"
 TRACE_FIXTURE = FIXTURES / "environment_trace_seed_61.json"
+TEACHER_FIXTURE = FIXTURES / "teacher_replay_seed_0.json"
 
 # Frozen v1 state layout offsets used only to observe public win flags.
 PLAYERS_OFFSET = 27
@@ -80,6 +83,11 @@ def assert_snapshot(
     )
 
 
+def array_sha256(array: np.ndarray) -> str:
+    values = np.ascontiguousarray(array, dtype="<f4")
+    return hashlib.sha256(values.tobytes()).hexdigest()
+
+
 def trace_states(fixture: dict) -> list[np.ndarray]:
     return [
         f32_array(item["state_le_f32_hex"], (fixture["state_width"],))
@@ -133,6 +141,9 @@ def test_scripted_trace_matches_rust_across_all_stages() -> None:
     states = trace_states(fixture)
     terminal = fixture["terminal"]
     assert len(decisions) == terminal["decisions"]
+    assert any(item["candidate_count"] == 1 for item in decisions), (
+        "the trace must include explicit forced single-candidate choices"
+    )
 
     env = mahjong_eval.Env(decision_limit=fixture["decision_limit"])
     decision = env.reset(fixture["seed"])
@@ -322,7 +333,7 @@ def test_observation_surface_is_isolated_and_hidden_information_free() -> None:
         "state",
     }
     env_names = {name for name in dir(env) if not name.startswith("__")}
-    assert env_names == {"decision_limit", "reset", "step"}
+    assert env_names == {"decision_limit", "reset", "step", "teacher_index"}
 
     # The encoded state has exactly one per-tile own-hand vector; every other
     # seat contributes only the public player group (concealed count, missing
@@ -334,6 +345,253 @@ def test_observation_surface_is_isolated_and_hidden_information_free() -> None:
     assert np.all(state[:27] <= 1.0)
     assert np.all(np.isfinite(state))
     assert np.all(np.isfinite(decision.candidate_features))
+
+
+def _replay_teacher_game(seed: int, cache=None):
+    env = mahjong_eval.Env()
+    decision = env.reset(seed)
+    indices: list[int] = []
+    while True:
+        index = (
+            env.teacher_index(cache=cache)
+            if cache is not None
+            else env.teacher_index()
+        )
+        indices.append(index)
+        outcome = env.step(decision.decision_id, index)
+        if isinstance(outcome, mahjong_eval.Terminal):
+            return indices, outcome
+        assert isinstance(outcome, mahjong_eval.Decision)
+        decision = outcome
+
+
+def test_teacher_replay_matches_rust_fixture_and_native_replay() -> None:
+    fixture = load_fixture(TEACHER_FIXTURE)
+    terminal = fixture["terminal"]
+    decisions = fixture["decisions"]
+
+    env = mahjong_eval.Env(decision_limit=fixture["decision_limit"])
+    decision = env.reset(fixture["seed"])
+    indices = []
+    for position, expected in enumerate(decisions):
+        assert decision.decision_id == expected["decision_id"]
+        assert decision.actor_seat == expected["actor_seat"]
+        assert decision.stage == expected["stage"]
+        assert decision.candidate_count == expected["candidate_count"]
+        assert array_sha256(decision.state) == expected["state_sha256"]
+        assert (
+            array_sha256(decision.candidate_features)
+            == expected["candidate_features_sha256"]
+        )
+
+        # Repeated teacher queries observe the original pending Decision and
+        # never advance it or change the snapshot.
+        for _ in range(3):
+            assert env.teacher_index() == expected["teacher_index"]
+        assert array_sha256(decision.state) == expected["state_sha256"]
+
+        indices.append(expected["teacher_index"])
+        outcome = env.step(decision.decision_id, expected["teacher_index"])
+        if position + 1 < len(decisions):
+            assert isinstance(outcome, mahjong_eval.Decision)
+            decision = outcome
+        else:
+            assert isinstance(outcome, mahjong_eval.Terminal)
+
+    assert outcome.seed == fixture["seed"]
+    assert outcome.decisions == terminal["decisions"] == len(decisions)
+    assert outcome.end_reason == terminal["end_reason"]
+    assert outcome.scores == tuple(terminal["scores"])
+    assert outcome.winners == tuple(terminal["winners"])
+    assert sum(outcome.scores) == 0
+
+    with pytest.raises(native.EnvironmentStateError, match="terminal"):
+        env.teacher_index()
+
+    native_result = native.native_teacher_replay(fixture["seed"])
+    assert native_result["format"] == "mahjong-eval-native-teacher-replay-v1"
+    assert native_result["seed"] == fixture["seed"]
+    assert native_result["decisions"] == len(decisions)
+    assert native_result["scores"] == tuple(terminal["scores"])
+    assert native_result["winners"] == tuple(terminal["winners"])
+    assert native_result["end_reason"] == terminal["end_reason"]
+    trace = native_result["trace"]
+    assert len(trace) == len(decisions)
+    for got, expected, python_index in zip(trace, decisions, indices):
+        assert got["decision_id"] == expected["decision_id"]
+        assert got["actor_seat"] == expected["actor_seat"]
+        assert got["stage"] == expected["stage"]
+        assert got["candidate_count"] == expected["candidate_count"]
+        assert got["teacher_index"] == expected["teacher_index"] == python_index
+        assert got["action"] == expected["action"]
+
+
+def test_teacher_index_rejects_an_unstarted_environment() -> None:
+    env = mahjong_eval.Env()
+    with pytest.raises(native.EnvironmentStateError, match="reset"):
+        env.teacher_index()
+
+
+def test_teacher_cache_is_explicit_shared_and_choice_preserving() -> None:
+    fixture = load_fixture(TEACHER_FIXTURE)
+    expected_indices = [item["teacher_index"] for item in fixture["decisions"]]
+
+    cache = mahjong_eval.TeacherCache()
+    assert cache.budget_bytes == mahjong_eval.DEFAULT_TEACHER_CACHE_BYTES
+    initial = cache.status()
+    assert initial["state"] == "unallocated"
+    assert initial["hits"] == initial["misses"] == 0
+    indices, result = _replay_teacher_game(fixture["seed"], cache=cache)
+    assert indices == expected_indices
+    assert isinstance(result, mahjong_eval.Terminal)
+    status = cache.status()
+    assert status["state"] == "ready"
+    assert status["hits"] + status["misses"] > 0
+    assert status["allocated_bytes"] > 0
+
+    # The same explicit context may be shared by independent handles without
+    # changing either handle's pending choice.
+    first = mahjong_eval.Env()
+    second = mahjong_eval.Env()
+    first.reset(fixture["seed"])
+    second.reset(fixture["seed"])
+    assert first.teacher_index(cache=cache) == expected_indices[0]
+    assert second.teacher_index(cache=cache) == expected_indices[0]
+    assert first.teacher_index(cache=cache) == second.teacher_index(cache=cache)
+    after = cache.status()
+    assert after["hits"] + after["misses"] >= status["hits"] + status["misses"]
+
+    disabled = mahjong_eval.TeacherCache(0)
+    assert disabled.budget_bytes == 0
+    assert disabled.status()["state"] == "disabled"
+    disabled_indices, disabled_result = _replay_teacher_game(
+        fixture["seed"], cache=disabled
+    )
+    assert disabled_indices == expected_indices
+    assert disabled_result.scores == result.scores
+    assert disabled_result.decisions == result.decisions
+
+    warm_cache = mahjong_eval.TeacherCache()
+    cached_native = native.native_teacher_replay(fixture["seed"], cache=warm_cache)
+    uncached_native = native.native_teacher_replay(fixture["seed"])
+    assert cached_native["trace"] == uncached_native["trace"]
+    assert cached_native["decisions"] == uncached_native["decisions"]
+    assert warm_cache.status()["hits"] + warm_cache.status()["misses"] > 0
+
+    with pytest.raises(ValueError):
+        mahjong_eval.TeacherCache(1)
+    with pytest.raises(OverflowError):
+        mahjong_eval.TeacherCache(-1)
+    with pytest.raises(TypeError):
+        mahjong_eval.TeacherCache(1.5)
+
+
+def reference_split_bucket(seed: int) -> int:
+    digest = hashlib.sha256(
+        b"bc-split-v1" + b"\0" + seed.to_bytes(8, "big")
+    ).digest()
+    return int.from_bytes(digest[:8], "big") % 100
+
+
+def test_seed_split_matches_frozen_rust_algorithm() -> None:
+    seeds = [0, 1, 2, 6, 12, 18, 23, 158, 167, 214, (1 << 64) - 1]
+    for seed in seeds:
+        bucket = reference_split_bucket(seed)
+        expected = (
+            "train" if bucket <= 79 else "validation" if bucket <= 89 else "test"
+        )
+        assert native.split_bucket(seed) == bucket
+        assert native.seed_split(seed) == expected
+
+
+def test_compiled_source_identity_is_cwd_independent() -> None:
+    metadata = native.compiled_source()
+    assert metadata["format"] == "mahjong-eval-compiled-source-v1"
+    assert metadata["encoding_version"] == 1
+    extension = metadata["extension"]
+    assert extension["source_complete"] is True
+    assert extension["source_scope"] == ["crates/python", "src", "crates/neural"]
+    assert len(extension["source_sha256"]) == 64
+    assert extension["source_identity"].startswith("sha256-paths-bytes-v1:")
+    assert extension["package_version"] == "0.1.0"
+    assert metadata["neural"]["package_version"] == "0.1.0"
+    assert metadata["environment"]["pointer_width"] in {32, 64}
+
+    files = extension["source_files"]
+    assert files == sorted(files)
+    assert "crates/python/src/lib.rs" in files
+    assert "src/game.rs" in files
+    assert "crates/neural/src/encoding/mod.rs" in files
+    hasher = hashlib.sha256()
+    for relative in files:
+        path = REPO_ROOT / relative
+        assert path.is_file(), f"compiled source file is missing: {path}"
+        data = path.read_bytes()
+        hasher.update(relative.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(len(data).to_bytes(8, "little"))
+        hasher.update(data)
+    assert hasher.hexdigest() == extension["source_sha256"]
+
+    git = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if git.returncode == 0 and extension["git_available"]:
+        assert extension["git_commit"] == git.stdout.strip()
+
+    code = (
+        "import json\n"
+        "import mahjong_eval._native as native\n"
+        "print(json.dumps(native.compiled_source(), sort_keys=True))\n"
+    )
+    with tempfile.TemporaryDirectory() as directory:
+        completed = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=directory,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+        from_other_cwd = json.loads(completed.stdout)
+    assert from_other_cwd == json.loads(json.dumps(metadata))
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_seeded_teacher_smoke(seed: int) -> None:
+    normal = native.native_teacher_replay(seed)
+    assert normal["seed"] == seed
+    assert normal["decisions"] == len(normal["trace"])
+    assert sum(normal["scores"]) == 0
+
+    env = mahjong_eval.Env(decision_limit=normal["decision_limit"])
+    decision = env.reset(seed)
+    for position, entry in enumerate(normal["trace"]):
+        assert decision.decision_id == entry["decision_id"]
+        assert decision.actor_seat == entry["actor_seat"]
+        assert decision.stage == entry["stage"]
+        assert decision.candidate_count == entry["candidate_count"]
+        assert env.teacher_index() == entry["teacher_index"]
+        outcome = env.step(decision.decision_id, entry["teacher_index"])
+        if position + 1 < len(normal["trace"]):
+            assert isinstance(outcome, mahjong_eval.Decision)
+            decision = outcome
+        else:
+            assert isinstance(outcome, mahjong_eval.Terminal)
+
+    assert outcome.decisions == normal["decisions"]
+    assert outcome.scores == tuple(normal["scores"])
+    assert outcome.winners == tuple(normal["winners"])
+    assert outcome.end_reason == normal["end_reason"]
+    assert outcome.seed == seed
+
+
+def test_native_teacher_replay_decision_limit() -> None:
+    with pytest.raises(native.DecisionLimitError, match="decision limit 0"):
+        native.native_teacher_replay(0, decision_limit=0)
+    with pytest.raises(native.DecisionLimitError, match="decision limit 1"):
+        native.native_teacher_replay(0, decision_limit=1)
 
 
 def test_package_import_does_not_require_the_native_extension() -> None:

@@ -44,6 +44,52 @@ The extension exposes complete single-game lifecycle control:
 lazily, so `mahjong_eval.inference` and its numeric fixtures remain usable in an
 installation that does not build or load `mahjong_eval._native`.
 
+## Teacher, split, and compiled identity
+
+`Env.teacher_index(cache=None)` asks the native `HeuristicPolicy` to choose on
+the original Rust pending `Decision`, resolves the semantic choice through the
+encoder's canonical candidate lookup, and returns the local index without
+advancing the game. `step` then commits exactly that index. Repeated queries do
+not change the pending decision or the returned choice.
+
+`TeacherCache(budget_bytes=...)` is an explicit `HeuristicCache` context. Pass
+it as `Env.teacher_index(cache=...)` or `native_teacher_replay(seed, cache=...)`
+to share derived masked-suit tables across handles and calls. Zero disables the
+cache. Caching never changes a teacher action; `status()` reports availability,
+allocation, hit/miss, and eviction counters.
+
+`native_teacher_replay(seed, cache=None, decision_limit=...)` drives one game
+with the native teacher and returns a JSON-compatible mapping. Its `trace`
+entries include the decision identity, actor, stage, candidate count, canonical
+`teacher_index`, and the semantic `action` (`kind`, `kind_id`, and v1 wire
+parameters, not only a local index). The settlement fields are `decisions`,
+`scores`, `winners`, and `end_reason`. Python teacher drivers can compare their
+own trace and settlement against this execution under the same Rust runtime.
+
+`split_bucket(seed)` and `seed_split(seed)` expose the frozen Rust collection
+algorithm `seed-sha256-80-10-10-v1`.
+
+`compiled_source()` reports the executing extension's compiled identity in two
+parts:
+
+- `extension` is the complete extension-scoped identity. It records the full
+  Git commit and dirty flag when Git was available at build time, plus
+  `source_sha256` over the sorted relative paths and bytes of every
+  `crates/python`, `src`, and `crates/neural` source, manifest, and lockfile
+  listed in `source_files`. For each sorted relative path, the hash updates the
+  path bytes, a NUL byte, the file length as little-endian `u64`, and the file
+  content. `source_complete` is false when a source input was missing at build
+  time.
+- `neural` is the neural crate's separate collection build provenance. It does
+  not cover the binding crate and is not a substitute for `extension`.
+
+The content identity is computed by the extension build script from the build
+source tree, never from the caller's working directory. The build script watches
+the three scopes and Git metadata, so a source or commit change refreshes the
+recorded values. Wheels built from a checkout or an sdist contain this compiled
+metadata; pair it with the loaded `mahjong_eval._native.__file__` when recording
+an installation.
+
 ## Layout and independent builds
 
 The PyO3 crate lives in [`crates/python`](../../crates/python/Cargo.toml) as its
@@ -58,8 +104,9 @@ Use the repository `.venv` (Python 3.12 in the verified environment):
 # From the repository root:
 python -m pip install "maturin>=1.16,<2"
 cd online
-python -m maturin build --release --out dist
-python -m pip install --force-reinstall --no-deps dist/mahjong_eval-0.1.0-cp312-abi3-win_amd64.whl
+python -m maturin build --release --locked --out dist
+python -m maturin sdist --out dist
+python -m pip install --force-reinstall --no-deps <produced-wheel>
 cd ..
 python -m pytest online/tests
 ```
@@ -96,8 +143,7 @@ python -m pytest online/tests
 The extension build uses a committed independent lockfile. `rustc-hash` is
 pinned to 2.1.1 there because later releases declare an MSRV above 1.75.
 The verified Python minimum is 3.12, matching the checked-in environment and
-the `abi3-py312` wheel tag; other Python versions are not claimed by this
-slice.
+the `abi3-py312` wheel tag; other Python versions are not claimed.
 
 ## Fixture
 
@@ -113,9 +159,18 @@ terminal settlement. The Python test replays the recorded canonical indices and
 compares every state, candidate row, order, identity, and terminal field. The
 Rust test independently regenerates the same trace.
 
-Regenerate either fixture deliberately with:
+`crates/python/tests/fixtures/teacher_replay_seed_0.json` records the same
+seed-0 teacher game generated directly from the core and teacher APIs. Each
+entry stores the teacher's canonical index and semantic action plus exact
+state/candidate SHA-256 hashes; the terminal block stores scores, winners, and
+reason. The Python test reproduces the trajectory through `Env.teacher_index`
+and `Env.step`, compares the hashes, and separately compares
+`native_teacher_replay`'s semantic trace and settlement.
+
+Regenerate a fixture deliberately with:
 
 ```text
 UPDATE_FIRST_DECISION_FIXTURE=1 cargo test --manifest-path crates/python/Cargo.toml --test first_decision
 UPDATE_ENVIRONMENT_TRACE_FIXTURE=1 cargo test --manifest-path crates/python/Cargo.toml --test environment_trace
+UPDATE_TEACHER_REPLAY_FIXTURE=1 cargo test --manifest-path crates/python/Cargo.toml --test teacher_replay
 ```

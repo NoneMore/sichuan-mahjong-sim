@@ -20,8 +20,14 @@ pyo3 = { version = "=0.23.5", features = ["abi3-py312", "extension-module"] }
 sichuan-mahjong-neural = { path = "../neural" }
 sichuan-mahjong-sim = { path = "../.." }
 
+[build-dependencies]
+# The build script hashes the extension, core, and neural source trees so the
+# compiled identity does not rely on the caller's working directory.
+sha2 = "=0.10.9"
+
 [dev-dependencies]
 serde_json = "=1.0.151"
+sha2 = "=0.10.9"
 
 # The extension is intentionally outside the root workspace: ordinary core,
 # collector, and neural builds never resolve or link Python.

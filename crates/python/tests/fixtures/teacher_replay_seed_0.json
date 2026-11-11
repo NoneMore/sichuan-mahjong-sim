@@ -1,0 +1,925 @@
+{
+  "candidate_width": 39,
+  "decision_limit": 10000,
+  "decisions": [
+    {
+      "action": {
+        "kind": "exchange",
+        "kind_id": 0,
+        "wire": [
+          0,
+          9,
+          11,
+          11
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 30,
+      "candidate_features_sha256": "97422478cc6bef32d1c0562851781bee41dad670a656e0da16450f7cfa738895",
+      "decision_id": 4294967297,
+      "stage": 0,
+      "state_sha256": "b023cc4afad9243691158119578e62e086013f4b4f380bf8425e96887ad783a2",
+      "teacher_index": 4
+    },
+    {
+      "action": {
+        "kind": "exchange",
+        "kind_id": 0,
+        "wire": [
+          0,
+          20,
+          20,
+          23
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 28,
+      "candidate_features_sha256": "8820058aa2b294d1ef3ac9b8ce14916d5559710b22e978b8eba4f3d86631994c",
+      "decision_id": 4294967298,
+      "stage": 0,
+      "state_sha256": "ebf4e5c977a71e1567a8dee038f59ed9b80a0e12e3f8cd28dcbd64aaad2badec",
+      "teacher_index": 25
+    },
+    {
+      "action": {
+        "kind": "exchange",
+        "kind_id": 0,
+        "wire": [
+          0,
+          9,
+          10,
+          17
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 21,
+      "candidate_features_sha256": "fbc3ad96e9afd64f5572d72e74e429a4466a5b26e79bd9b6df5fe44d415ba0c0",
+      "decision_id": 4294967299,
+      "stage": 0,
+      "state_sha256": "d77266c5bc539faf17440d594dc3fa6e4c3d774d5b01fa08d34de847b5dc0f8f",
+      "teacher_index": 18
+    },
+    {
+      "action": {
+        "kind": "exchange",
+        "kind_id": 0,
+        "wire": [
+          0,
+          10,
+          12,
+          13
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 12,
+      "candidate_features_sha256": "ee77d03be809cf95e27108167141856cfecb9863522792915192075e5ec63e7a",
+      "decision_id": 4294967300,
+      "stage": 0,
+      "state_sha256": "63757c5c19facee8465c45dc9ee4f741f3d70f915c10809a078203504dbb50a4",
+      "teacher_index": 4
+    },
+    {
+      "action": {
+        "kind": "choose_missing",
+        "kind_id": 1,
+        "wire": [
+          1,
+          1
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 3,
+      "candidate_features_sha256": "2f7c69381b70c3b0f306b88eb630f245673f996a60aed36649b313d8c83bd7ea",
+      "decision_id": 4294967301,
+      "stage": 1,
+      "state_sha256": "a5ca5cf70eb90f52e49d6a71fc380dcf2dd618387d4b5472302deef4517062c8",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "choose_missing",
+        "kind_id": 1,
+        "wire": [
+          1,
+          2
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 3,
+      "candidate_features_sha256": "2f7c69381b70c3b0f306b88eb630f245673f996a60aed36649b313d8c83bd7ea",
+      "decision_id": 4294967302,
+      "stage": 1,
+      "state_sha256": "efa7f765d9ecc4a7c5933c61b6653aa2a706a5603168b339e18d104d540bc5b8",
+      "teacher_index": 2
+    },
+    {
+      "action": {
+        "kind": "choose_missing",
+        "kind_id": 1,
+        "wire": [
+          1,
+          2
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 3,
+      "candidate_features_sha256": "2f7c69381b70c3b0f306b88eb630f245673f996a60aed36649b313d8c83bd7ea",
+      "decision_id": 4294967303,
+      "stage": 1,
+      "state_sha256": "188c122205ab46dc7afc6c1f47f8da2a4d3c62b4e8d74dd0d3430a0d2395ae19",
+      "teacher_index": 2
+    },
+    {
+      "action": {
+        "kind": "choose_missing",
+        "kind_id": 1,
+        "wire": [
+          1,
+          1
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 3,
+      "candidate_features_sha256": "2f7c69381b70c3b0f306b88eb630f245673f996a60aed36649b313d8c83bd7ea",
+      "decision_id": 4294967304,
+      "stage": 1,
+      "state_sha256": "c07d06a7100bab09d96dbfb7cb74e2d6c9bbf4f22079ca9b9f5432188490c617",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          9
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 3,
+      "candidate_features_sha256": "277448d6cfb17c4a638644059fc88f5ecef67c15ef3dcc73c7cc971a2c68541b",
+      "decision_id": 4294967305,
+      "stage": 2,
+      "state_sha256": "92992ccaa2a1e302d3202fbdabb3158084885ab63295eb89e31465ce8e52a894",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          19
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 2,
+      "candidate_features_sha256": "dda2c89c954f3df4984a76fd96ece89c81b986b0904b92716b4701d5b7e98d7f",
+      "decision_id": 4294967306,
+      "stage": 2,
+      "state_sha256": "a1a37686cb9b8fe8fb8f7c6607e5db7712f5c4e9976ecee123ad0546da6a8ea3",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          20
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 2,
+      "candidate_features_sha256": "f19c5e03184279f4d43623403d813e4511236aadd3abb4c9f6ce67bc5685dd42",
+      "decision_id": 4294967307,
+      "stage": 2,
+      "state_sha256": "cb951faa62d2514bd8bf96b79ce1c65f1052fcee0cff3cee30ef894b3b626996",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "pass",
+        "kind_id": 8,
+        "wire": [
+          8
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 2,
+      "candidate_features_sha256": "69756371bb5ca3a02ec0f727c52bdadc0d68eb712bdfd0f92280476341122712",
+      "decision_id": 4294967308,
+      "stage": 3,
+      "state_sha256": "38376bf7adda88e238f33fcfa27d516c04d022610c268da90881594177e69313",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          14
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 1,
+      "candidate_features_sha256": "c1d858ebcd91ea23666b7963fdeb85770996797e9f5e1a09f2ceaab1801e056f",
+      "decision_id": 4294967309,
+      "stage": 2,
+      "state_sha256": "358c27c1c17cb1866e203357d0e8af4935d6a2e74777df8eb171a5e758c2cffe",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          10
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 2,
+      "candidate_features_sha256": "a6eb8981af0a256a056ace8aeaae4751cbdf04accf2843b64b47605d583e4ec2",
+      "decision_id": 4294967310,
+      "stage": 2,
+      "state_sha256": "282dca8eeeb9b30a14f1cf07736b4dafb595f4328dd5be65d4c8567c3b4632fa",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          25
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 1,
+      "candidate_features_sha256": "5a1c39f42def92eb209443dcf1d29a6e70228a46669c7952d100cf806626bae5",
+      "decision_id": 4294967311,
+      "stage": 2,
+      "state_sha256": "6d7c07dcf2a46beba3890ef939bf20b513ad114f6e02548b29734ed20a852617",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          21
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 1,
+      "candidate_features_sha256": "ea6d9b6e718ec157629fb60e5024c933e3e984f739b89957f2b4c8d61eba06d7",
+      "decision_id": 4294967312,
+      "stage": 2,
+      "state_sha256": "d14afdde3077d7ddc3c5cee837c56e4f20796c4ef5919c05873c1b854c9b02fe",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          20
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 10,
+      "candidate_features_sha256": "8ad5c3881fe43814bdc376125cc889feb9ef7acb45b3ea29a9a9101ddb5c0297",
+      "decision_id": 4294967313,
+      "stage": 2,
+      "state_sha256": "940d2b69cd57a0a519b353ffc3872a3646043ca29c5bfebcb6d07bdeeabb721e",
+      "teacher_index": 4
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          17
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 1,
+      "candidate_features_sha256": "ca63ead64b19f898be76e0f1649e434935627dbbf9b04073f266960935263560",
+      "decision_id": 4294967314,
+      "stage": 2,
+      "state_sha256": "d04152f46725f64bcc4546cb3db45a9e67e73a421556fedc3deef1909bdb9758",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          5
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 9,
+      "candidate_features_sha256": "09420cd64c8de0271c1ff4be27c174b11ee32651f6f068f1a319f7f11fa5774c",
+      "decision_id": 4294967315,
+      "stage": 2,
+      "state_sha256": "2978210147830a8237c84fd7f15b9aac9194499305c2e1a1cefb5037adc2ae15",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "pass",
+        "kind_id": 8,
+        "wire": [
+          8
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 2,
+      "candidate_features_sha256": "69756371bb5ca3a02ec0f727c52bdadc0d68eb712bdfd0f92280476341122712",
+      "decision_id": 4294967316,
+      "stage": 3,
+      "state_sha256": "485fcb7847955f2fda9992ad309ccf3d62195c731eb71c7bcb67bb80f4bfb101",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          18
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 1,
+      "candidate_features_sha256": "134c0a0452837291edb5ef95bfd84d70d384ed4d667b3b555c01a8906101a759",
+      "decision_id": 4294967317,
+      "stage": 2,
+      "state_sha256": "c17e37b9507d0926cfdcfee40d977fc324ce2b9bde35678d5d1aa94bd2d1ba1a",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          13
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 1,
+      "candidate_features_sha256": "2d1cf976112006f14d1227e419660e924ac31dc124e0f937f9d7061acafad621",
+      "decision_id": 4294967318,
+      "stage": 2,
+      "state_sha256": "9fd0e814b3ccdeb41a30f5b39ddd5f90d1a29c48eb0861102c09b3ac64fe28f2",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "peng",
+        "kind_id": 3,
+        "wire": [
+          3
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 2,
+      "candidate_features_sha256": "69756371bb5ca3a02ec0f727c52bdadc0d68eb712bdfd0f92280476341122712",
+      "decision_id": 4294967319,
+      "stage": 3,
+      "state_sha256": "355c31f87a24ab26885528375e52006f349c19b7ce806befa3248a5005812491",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          10
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 7,
+      "candidate_features_sha256": "ba2db71b2889ee26f385e0f888ffc13e173b6ffabfcedc03f2d1fc22f1c3013c",
+      "decision_id": 4294967320,
+      "stage": 2,
+      "state_sha256": "1acd3f8ec9fad59157ebd0f7ba0e01b1cf73d83d3c04609c363edf70c16c3104",
+      "teacher_index": 2
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          0
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 9,
+      "candidate_features_sha256": "843ba59e621a3cb09f5fb1272d69e58c8041e689bf177d7ab6fe83ce72fa0e09",
+      "decision_id": 4294967321,
+      "stage": 2,
+      "state_sha256": "c540f54fd89d599c571fef2adb0ab39b3e193ccac26c01335fe6d76992bbaf35",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          0
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 10,
+      "candidate_features_sha256": "8ad5c3881fe43814bdc376125cc889feb9ef7acb45b3ea29a9a9101ddb5c0297",
+      "decision_id": 4294967322,
+      "stage": 2,
+      "state_sha256": "689abbf76e4c85206843aaf2e6d85302b50f4ec9e5c025c79b4c958cf92ebf40",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          17
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 1,
+      "candidate_features_sha256": "ca63ead64b19f898be76e0f1649e434935627dbbf9b04073f266960935263560",
+      "decision_id": 4294967323,
+      "stage": 2,
+      "state_sha256": "5a8cdfe13bc46951605cab4ea718f72ca8d95a00717a53512388abdc825c4fd3",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          5
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 8,
+      "candidate_features_sha256": "3063e05a77fb42989463417e45e6841b9502204659715598497a9ad350f81dcf",
+      "decision_id": 4294967324,
+      "stage": 2,
+      "state_sha256": "5b001ce5f3cee9ffacfc194bdf0ccbeb65707477e93dfb36c3026075790157b5",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "peng",
+        "kind_id": 3,
+        "wire": [
+          3
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 2,
+      "candidate_features_sha256": "69756371bb5ca3a02ec0f727c52bdadc0d68eb712bdfd0f92280476341122712",
+      "decision_id": 4294967325,
+      "stage": 3,
+      "state_sha256": "15b75337d3288de5862ca6eb8ea426e27ed3b8c9bf9bb9d4cb2d621fee6f32ed",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          17
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 7,
+      "candidate_features_sha256": "782e7db7574681aea47aa1f25befbe56bb63710767905efada3163ecbce52462",
+      "decision_id": 4294967326,
+      "stage": 2,
+      "state_sha256": "68ad89af733830861ca92f60c595a26107ffbdb74ed5a9686871f82a493777d1",
+      "teacher_index": 6
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          1
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 10,
+      "candidate_features_sha256": "b30a37a0d18b3b239581552483bbb54e3b8c1804320ba7f09c9a77a04a7caa14",
+      "decision_id": 4294967327,
+      "stage": 2,
+      "state_sha256": "6a71fe95d399bd1a1829a0de0e62ab85ed3644a91c8e2934d72dc155e9ded428",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "pass",
+        "kind_id": 8,
+        "wire": [
+          8
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 2,
+      "candidate_features_sha256": "69756371bb5ca3a02ec0f727c52bdadc0d68eb712bdfd0f92280476341122712",
+      "decision_id": 4294967328,
+      "stage": 3,
+      "state_sha256": "fbc3de3bb3bb095f3050d508d3ef61f8cdc76b12911b613082342d09a982dec5",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          21
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 12,
+      "candidate_features_sha256": "f132c6b93789dda2b614241439ffd1d1c3884d6176976dd763392275a40e4ede",
+      "decision_id": 4294967329,
+      "stage": 2,
+      "state_sha256": "417d8cc19b5ddd8190ec0ab67f51eee5afcd610aaffd5a82f51b5077990526c5",
+      "teacher_index": 6
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          19
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 1,
+      "candidate_features_sha256": "92e548900ec00e2a36280ddb4fdf0398538285d6c5302df782c222448729f276",
+      "decision_id": 4294967330,
+      "stage": 2,
+      "state_sha256": "807f04704b501e7fc750de15b3f5e5e4231f0b281ef44ed4618cd0c57277cdf0",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          9
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 7,
+      "candidate_features_sha256": "bbc7be2e1e34830ff26c9926f3da111b3946aa683ee5199e856481738ed39a13",
+      "decision_id": 4294967331,
+      "stage": 2,
+      "state_sha256": "d122c4cc1aa7d77dc337f1201844eadb9875dffe7a0ff7499d420238233934b4",
+      "teacher_index": 5
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          6
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 9,
+      "candidate_features_sha256": "e5f1f5e2168a06cf53b71b168c04c6873141fdf598b887b2c72e48cf4efc4e15",
+      "decision_id": 4294967332,
+      "stage": 2,
+      "state_sha256": "009bbe0a34d9c23340f8b2298680f552d21be3308a7cb29962f8f3077128fe05",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          0
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 12,
+      "candidate_features_sha256": "e6e1a110726737607d1f4147978f6ba8cca6b12ed128506c5fbfe87774dc32ec",
+      "decision_id": 4294967333,
+      "stage": 2,
+      "state_sha256": "25cb84ba3830863439f5a66fdf7836ea7bdff01f77f7352004840d5673d65752",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          19
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 1,
+      "candidate_features_sha256": "92e548900ec00e2a36280ddb4fdf0398538285d6c5302df782c222448729f276",
+      "decision_id": 4294967334,
+      "stage": 2,
+      "state_sha256": "33dbf4b7734c114b88ea9a8773d890e1b22c0c469d39daa50284c04abb4c7252",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          18
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 1,
+      "candidate_features_sha256": "134c0a0452837291edb5ef95bfd84d70d384ed4d667b3b555c01a8906101a759",
+      "decision_id": 4294967335,
+      "stage": 2,
+      "state_sha256": "eb366e54aad2ff9a73be646b029cdcadd55e130adbd32d8da533126e8325354c",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "pass",
+        "kind_id": 8,
+        "wire": [
+          8
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 2,
+      "candidate_features_sha256": "69756371bb5ca3a02ec0f727c52bdadc0d68eb712bdfd0f92280476341122712",
+      "decision_id": 4294967336,
+      "stage": 3,
+      "state_sha256": "987ba1f3527955a92576314f9bfd75bd0d324b6bee40cc067a4e489e4bcd5501",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          16
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 1,
+      "candidate_features_sha256": "6ea1399677626d9e28c013a0a4f1382374cfd912509aa0de3104ee984e932856",
+      "decision_id": 4294967337,
+      "stage": 2,
+      "state_sha256": "d40fd2e0fafddecfc690594cdddeb4b8935183cd95d142c070c3408f63590896",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          1
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 12,
+      "candidate_features_sha256": "a0f83ce8d0a85279388bbf863ca8e6152a8b6adc8a18caffe83cbe48f571d895",
+      "decision_id": 4294967338,
+      "stage": 2,
+      "state_sha256": "c532d31157cd90c89c3dedd7ce9faa0ca7d23b51251b7c217912b495ca02e0b0",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "pass",
+        "kind_id": 8,
+        "wire": [
+          8
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 2,
+      "candidate_features_sha256": "69756371bb5ca3a02ec0f727c52bdadc0d68eb712bdfd0f92280476341122712",
+      "decision_id": 4294967339,
+      "stage": 3,
+      "state_sha256": "869d40adc784462ad4956e8ab0b4d3627944145d5d2e20bf215cd34a41b96c9b",
+      "teacher_index": 1
+    },
+    {
+      "action": {
+        "kind": "hu",
+        "kind_id": 7,
+        "wire": [
+          7
+        ]
+      },
+      "actor_seat": 1,
+      "candidate_count": 10,
+      "candidate_features_sha256": "a88053d85e612d6982b9b7b739d2ce3c362e4c9799299636bbe7affbaa77522e",
+      "decision_id": 4294967340,
+      "stage": 2,
+      "state_sha256": "da76579f2d589f4e5344b3a23e4fab210ac297c7c72c4a8ea8645d42a2aeaa5f",
+      "teacher_index": 8
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          25
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 1,
+      "candidate_features_sha256": "5a1c39f42def92eb209443dcf1d29a6e70228a46669c7952d100cf806626bae5",
+      "decision_id": 4294967341,
+      "stage": 2,
+      "state_sha256": "39612762fbf4fe01f96aeb73b734ac7d2a1afd1d708faef5e6fa4a266972a60a",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "hu",
+        "kind_id": 7,
+        "wire": [
+          7
+        ]
+      },
+      "actor_seat": 3,
+      "candidate_count": 2,
+      "candidate_features_sha256": "7b48a6247401f7467571e05120c4923c8996f31a88c2fbe55b8dc8201f3eab37",
+      "decision_id": 4294967342,
+      "stage": 3,
+      "state_sha256": "eefd40ff869286e4b82abd10190e1c6cd8eed9c7e5c349897d236cbfae684db5",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          15
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 1,
+      "candidate_features_sha256": "19818fb1fdd596c653695da45da53c5a3ee2c1f6e5c2d4b1a2253356420f3f62",
+      "decision_id": 4294967343,
+      "stage": 2,
+      "state_sha256": "5f37b7344e66dd0d1690773277066cd73296525050b84d762c660aee74a1b066",
+      "teacher_index": 0
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          14
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 7,
+      "candidate_features_sha256": "c5cc5cd28dd030e8e892f9033a9ff52d530c21c6aa7c9bb91ffb7a2bade454ad",
+      "decision_id": 4294967344,
+      "stage": 2,
+      "state_sha256": "3157b406c67cc8e6233ba9963cd75e66145bb555b5854df05e605db790a45497",
+      "teacher_index": 6
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          4
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 11,
+      "candidate_features_sha256": "4c052297a54aba067578d5c5237da203e4b809804ba8b44df6772f5f226e8b34",
+      "decision_id": 4294967345,
+      "stage": 2,
+      "state_sha256": "ba113394d2a0778cad8811c06a4c69dbf4e739f5c3ad890b5963c9d235da83fe",
+      "teacher_index": 2
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          8
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 6,
+      "candidate_features_sha256": "13ae2f8f6b08462335642d9281f700d612de9f89652844a424f53fcc79bab031",
+      "decision_id": 4294967346,
+      "stage": 2,
+      "state_sha256": "9c1abb4d8d1548a06d1f19a4a72803c16065ee02cc46f355da9b7a376750bd37",
+      "teacher_index": 4
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          22
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 11,
+      "candidate_features_sha256": "4c052297a54aba067578d5c5237da203e4b809804ba8b44df6772f5f226e8b34",
+      "decision_id": 4294967347,
+      "stage": 2,
+      "state_sha256": "f6440a5aef1540e249cc7f63f3ed67c70dd27287dd0a9f22f7dc11a521c90372",
+      "teacher_index": 6
+    },
+    {
+      "action": {
+        "kind": "discard",
+        "kind_id": 2,
+        "wire": [
+          2,
+          12
+        ]
+      },
+      "actor_seat": 2,
+      "candidate_count": 7,
+      "candidate_features_sha256": "05952fad350a9cb3d9ccca4700fe305f645d77e105038019967df1fbb43b6124",
+      "decision_id": 4294967348,
+      "stage": 2,
+      "state_sha256": "ef506abbe111887e5473d5c8fe5c6d3a6bb59ee70d075b3ecae227d270005737",
+      "teacher_index": 6
+    },
+    {
+      "action": {
+        "kind": "hu",
+        "kind_id": 7,
+        "wire": [
+          7
+        ]
+      },
+      "actor_seat": 0,
+      "candidate_count": 14,
+      "candidate_features_sha256": "e6a11d06a2f9f2ee9d45adb48689dea47364b583f21a05ab0881e537dc5c6b42",
+      "decision_id": 4294967349,
+      "stage": 2,
+      "state_sha256": "6e225628ec42a067913cad1cb44192900254a81cfabccdcf447407832f884d89",
+      "teacher_index": 12
+    }
+  ],
+  "encoding_version": 1,
+  "format": "mahjong-eval-teacher-replay-v1",
+  "seed": 0,
+  "state_width": 1013,
+  "terminal": {
+    "decisions": 53,
+    "end_reason": "three_winners",
+    "scores": [
+      0,
+      6,
+      -5,
+      -1
+    ],
+    "winners": [
+      true,
+      true,
+      false,
+      true
+    ]
+  }
+}

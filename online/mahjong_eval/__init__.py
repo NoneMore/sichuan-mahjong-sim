@@ -8,7 +8,9 @@ does not load the extension, so numeric inference fixtures remain usable in an
 offline installation.
 
 Stage codes are the frozen v1 order: 0 exchange, 1 missing suit, 2 turn,
-3 discard response, 4 added-kong response.
+3 discard response, 4 added-kong response. Teacher queries, native teacher
+replay, the frozen seed split, and compiled source identity are also exposed
+without importing the extension until one of their symbols is used.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ _NATIVE_EXPORTS = frozenset(
     {
         "CANDIDATE_WIDTH",
         "DEFAULT_DECISION_LIMIT",
+        "DEFAULT_TEACHER_CACHE_BYTES",
         "ENCODING_VERSION",
         "STATE_WIDTH",
         "CandidateIndexError",
@@ -31,7 +34,12 @@ _NATIVE_EXPORTS = frozenset(
         "GameRuleError",
         "MahjongEvalError",
         "StaleDecisionError",
+        "TeacherCache",
         "Terminal",
+        "compiled_source",
+        "native_teacher_replay",
+        "seed_split",
+        "split_bucket",
     }
 )
 
@@ -39,6 +47,7 @@ if TYPE_CHECKING:  # pragma: no cover - type checkers only
     from ._native import (  # noqa: F401
         CANDIDATE_WIDTH,
         DEFAULT_DECISION_LIMIT,
+        DEFAULT_TEACHER_CACHE_BYTES,
         ENCODING_VERSION,
         STATE_WIDTH,
         CandidateIndexError,
@@ -49,7 +58,12 @@ if TYPE_CHECKING:  # pragma: no cover - type checkers only
         GameRuleError,
         MahjongEvalError,
         StaleDecisionError,
+        TeacherCache,
         Terminal,
+        compiled_source,
+        native_teacher_replay,
+        seed_split,
+        split_bucket,
     )
 
 
@@ -77,6 +91,7 @@ except PackageNotFoundError:  # source checkout without installed metadata
 __all__ = [
     "CANDIDATE_WIDTH",
     "DEFAULT_DECISION_LIMIT",
+    "DEFAULT_TEACHER_CACHE_BYTES",
     "ENCODING_VERSION",
     "STATE_WIDTH",
     "CandidateIndexError",
@@ -87,6 +102,11 @@ __all__ = [
     "GameRuleError",
     "MahjongEvalError",
     "StaleDecisionError",
+    "TeacherCache",
     "Terminal",
     "__version__",
+    "compiled_source",
+    "native_teacher_replay",
+    "seed_split",
+    "split_bucket",
 ]

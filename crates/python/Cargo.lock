@@ -415,6 +415,7 @@ dependencies = [
  "numpy",
  "pyo3",
  "serde_json",
+ "sha2",
  "sichuan-mahjong-neural",
  "sichuan-mahjong-sim",
 ]
