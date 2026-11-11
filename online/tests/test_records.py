@@ -14,15 +14,13 @@ import torch
 
 import mahjong_bc
 from mahjong_bc._source import collect_source_record, hash_source_directory
-from mahjong_bc.checkpoint import TrainingCheckpointState, save_checkpoint
-from mahjong_bc.config import (
-    DatasetIdentity,
-    ModelConfig,
-    TrainingConfig,
-    collect_dependency_versions,
-)
 from mahjong_bc.constants import ROLE_BEST, ROLE_POLICY
-from mahjong_bc.policy import build_policy
+
+from _checkpoint_fixtures import (
+    build_checkpoint,
+    build_model,
+    build_training_state,
+)
 
 # Load this checkout's module directly. An installed ``mahjong_eval`` regular
 # package would otherwise shadow this checkout's namespace package, and its
@@ -133,14 +131,39 @@ def _record_line(record: records.TerminalRecord) -> str:
     ) + "\n"
 
 
+def _with_duplicate_line(lines: list[str], _record) -> str:
+    return "\n".join([lines[0], *lines]) + "\n"
+
+
+def _with_malformed_tail(lines: list[str], _record) -> str:
+    return "\n".join([*lines, "{"]) + "\n"
+
+
+def _with_duplicate_json_key(_lines: list[str], _record) -> str:
+    return (
+        '{"seed":1,"neural_seats":[0,1],"scores":[1,-1,0,0],'
+        '"winners":[0],"end_reason":"wall_exhausted","decisions":10,'
+        '"seed":1}\n'
+    )
+
+
+def _with_nonzero_scores(_lines: list[str], record) -> str:
+    value = record.to_dict()
+    value["scores"] = [3, -1, -1, 0]
+    return json.dumps(value) + "\n"
+
+
 @pytest.fixture(scope="module")
 def policy_identity(tmp_path_factory) -> dict:
     directory = tmp_path_factory.mktemp("policy-checkpoint")
     path = directory / "policy.pt"
-    model = build_policy(
-        ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=5
+    build_checkpoint(
+        path,
+        role=ROLE_POLICY,
+        hidden=4,
+        model_seed=5,
+        metrics={"nll": 0.75},
     )
-    save_checkpoint(path, model, role=ROLE_POLICY, metrics={"nll": 0.75})
     loaded, identity = records.load_checkpoint_with_identity(path)
     assert loaded.role == ROLE_POLICY
     return identity
@@ -310,43 +333,35 @@ def test_missing_record_blocks_summary_and_keeps_completed_records(
     assert len(records.read_records(paths.records, plan)) == len(records_to_write)
 
 
-def test_duplicate_and_corrupt_records_block_summary(tmp_path, policy_identity):
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        pytest.param(_with_duplicate_line, "duplicate", id="duplicate-line"),
+        pytest.param(
+            _with_malformed_tail, "not valid JSON", id="malformed-json"
+        ),
+        pytest.param(
+            _with_duplicate_json_key,
+            "duplicate JSON key",
+            id="duplicate-json-key",
+        ),
+        pytest.param(
+            _with_nonzero_scores, "sum to zero", id="nonzero-score-sum"
+        ),
+    ],
+)
+def test_duplicate_and_corrupt_records_block_summary(
+    tmp_path, policy_identity, mutation, message
+):
     plan = _plan(policy_identity, seeds=(1,))
     directory = tmp_path / "run"
     _append_full_run(directory, plan)
     paths = records.run_paths(directory)
     lines = paths.records.read_text(encoding="utf-8").splitlines()
-
     paths.records.write_text(
-        "\n".join([lines[0], *lines]) + "\n", encoding="utf-8"
+        mutation(lines, _full_records(1)[0]), encoding="utf-8"
     )
-    with pytest.raises(records.RecordError, match="duplicate"):
-        records.finalize_run(directory)
-    assert not paths.summary.exists()
-
-    paths.records.write_text(
-        "\n".join([*lines, "{"]) + "\n", encoding="utf-8"
-    )
-    with pytest.raises(records.RecordError, match="not valid JSON"):
-        records.finalize_run(directory)
-    assert not paths.summary.exists()
-
-    duplicate_key = (
-        '{"seed":1,"neural_seats":[0,1],"scores":[1,-1,0,0],'
-        '"winners":[0],"end_reason":"wall_exhausted","decisions":10,'
-        '"seed":1}\n'
-    )
-    paths.records.write_text(duplicate_key, encoding="utf-8")
-    with pytest.raises(records.RecordError, match="duplicate JSON key"):
-        records.finalize_run(directory)
-    assert not paths.summary.exists()
-
-    record = _full_records(1)[0].to_dict()
-    record["scores"] = [3, -1, -1, 0]
-    paths.records.write_text(
-        json.dumps(record) + "\n", encoding="utf-8"
-    )
-    with pytest.raises(records.RecordError, match="sum to zero"):
+    with pytest.raises(records.RecordError, match=message):
         records.finalize_run(directory)
     assert not paths.summary.exists()
 
@@ -575,12 +590,10 @@ def test_plan_is_published_before_records_open_and_existing_runs_are_refused(
         records.create_run(directory, plan)
 
 
-def test_append_rejects_plan_mismatches_and_poisons_the_run(
-    tmp_path, policy_identity
-):
-    plan = _plan(policy_identity, seeds=(1,), decision_limit=12)
-    bad_records = [
-        (
+@pytest.mark.parametrize(
+    ("case", "bad_record", "message"),
+    [
+        pytest.param(
             "wrong-seed",
             _record(
                 2,
@@ -591,8 +604,9 @@ def test_append_rejects_plan_mismatches_and_poisons_the_run(
                 end_reason="wall_exhausted",
             ),
             "not a planned game seed",
+            id="wrong-seed",
         ),
-        (
+        pytest.param(
             "too-many-decisions",
             _record(
                 1,
@@ -603,22 +617,27 @@ def test_append_rejects_plan_mismatches_and_poisons_the_run(
                 end_reason="wall_exhausted",
             ),
             "exceeds the configured limit",
+            id="too-many-decisions",
         ),
-    ]
-    for name, bad_record, message in bad_records:
-        directory = tmp_path / name
-        writer = records.create_run(directory, plan)
-        with pytest.raises(records.RecordError, match=message):
-            writer.append(bad_record)
-        assert writer.failed is True
-        with pytest.raises(records.RecordError, match="cannot continue"):
-            writer.append(bad_record)
-        paths = records.run_paths(directory)
-        assert paths.records.read_text(encoding="utf-8") == ""
-        writer.close()
-        with pytest.raises(records.RecordError, match="refusing to publish"):
-            writer.finalize()
-        assert not paths.summary.exists()
+    ],
+)
+def test_append_rejects_plan_mismatches_and_poisons_the_run(
+    tmp_path, policy_identity, case, bad_record, message
+):
+    plan = _plan(policy_identity, seeds=(1,), decision_limit=12)
+    directory = tmp_path / case
+    writer = records.create_run(directory, plan)
+    with pytest.raises(records.RecordError, match=message):
+        writer.append(bad_record)
+    assert writer.failed is True
+    with pytest.raises(records.RecordError, match="cannot continue"):
+        writer.append(bad_record)
+    paths = records.run_paths(directory)
+    assert paths.records.read_text(encoding="utf-8") == ""
+    writer.close()
+    with pytest.raises(records.RecordError, match="refusing to publish"):
+        writer.finalize()
+    assert not paths.summary.exists()
 
 
 def test_duplicate_append_poisons_the_run_but_keeps_the_first_line(
@@ -663,23 +682,52 @@ def test_read_records_rejects_unknown_record_keys(tmp_path, policy_identity):
 @pytest.mark.parametrize(
     "changes, message",
     [
-        ({"scores": (1, -1, 0, 1)}, "sum to zero"),
-        ({"scores": (1, -1, 0)}, "4 entries"),
-        ({"scores": (True, -1, 0, 0)}, "score must be an integer"),
-        ({"winners": (0, 0)}, "more than once"),
-        ({"end_reason": "three_winners", "winners": (0,)}, "three winners"),
-        (
+        pytest.param(
+            {"scores": (1, -1, 0, 1)}, "sum to zero", id="scores-nonzero"
+        ),
+        pytest.param(
+            {"scores": (1, -1, 0)}, "4 entries", id="scores-count"
+        ),
+        pytest.param(
+            {"scores": (True, -1, 0, 0)},
+            "score must be an integer",
+            id="scores-bool",
+        ),
+        pytest.param(
+            {"winners": (0, 0)}, "more than once", id="winner-duplicate"
+        ),
+        pytest.param(
+            {"end_reason": "three_winners", "winners": (0,)},
+            "three winners",
+            id="three-winners-count",
+        ),
+        pytest.param(
             {"end_reason": "wall_exhausted", "winners": (0, 1, 2)},
             "fewer than three",
+            id="wall-exhausted-count",
         ),
-        ({"end_reason": "draw"}, "unsupported end_reason"),
-        ({"decisions": 0}, "at least 1"),
-        ({"seed": -1}, "at least 0"),
-        ({"neural_seats": (0, 0)}, "distinct"),
-        ({"neural_seats": (0, 4)}, "at most 3"),
-        ({"neural_seats": (0,)}, "2 seats"),
-        ({"winners": (4,)}, "at most 3"),
-        ({"scores": (2**31, -(2**31), 0, 0)}, "at most"),
+        pytest.param(
+            {"end_reason": "draw"},
+            "unsupported end_reason",
+            id="unsupported-end-reason",
+        ),
+        pytest.param({"decisions": 0}, "at least 1", id="zero-decisions"),
+        pytest.param({"seed": -1}, "at least 0", id="negative-seed"),
+        pytest.param(
+            {"neural_seats": (0, 0)}, "distinct", id="duplicate-neural-seat"
+        ),
+        pytest.param(
+            {"neural_seats": (0, 4)}, "at most 3", id="neural-seat-range"
+        ),
+        pytest.param(
+            {"neural_seats": (0,)}, "2 seats", id="neural-seat-count"
+        ),
+        pytest.param({"winners": (4,)}, "at most 3", id="winner-range"),
+        pytest.param(
+            {"scores": (2**31, -(2**31), 0, 0)},
+            "at most",
+            id="score-range",
+        ),
     ],
 )
 def test_terminal_record_rejects_invalid_shape(changes, message):
@@ -699,23 +747,74 @@ def test_terminal_record_rejects_invalid_shape(changes, message):
 @pytest.mark.parametrize(
     "mutate",
     [
-        lambda metadata: metadata.pop("rust_runtime"),
-        lambda metadata: metadata["checkpoint"].__setitem__("sha256", "0" * 63),
-        lambda metadata: metadata.__setitem__("encoding_version", 2),
-        lambda metadata: metadata["checkpoint"].__setitem__(
-            "has_training_state", "yes"
+        pytest.param(
+            lambda metadata: metadata.pop("rust_runtime"),
+            id="missing-rust-runtime",
         ),
-        lambda metadata: metadata["selection"].pop("device"),
-        lambda metadata: metadata["selection"].__setitem__("batch_size", 0),
-        lambda metadata: metadata["python_source"].pop("online_evaluator"),
-        lambda metadata: metadata.__setitem__("training_provenance", 3),
-        lambda metadata: metadata.__setitem__("dependencies", []),
-        lambda metadata: metadata.__setitem__("split_algorithm", ""),
-        lambda metadata: metadata.__setitem__("rust_runtime", None),
-        lambda metadata: metadata.__setitem__("rust_runtime", {}),
-        lambda metadata: metadata.__setitem__("rust_runtime", []),
-        lambda metadata: metadata.__setitem__("teacher_cache", "shared"),
-        lambda metadata: metadata.__setitem__("teacher_cache", True),
+        pytest.param(
+            lambda metadata: metadata["checkpoint"].__setitem__(
+                "sha256", "0" * 63
+            ),
+            id="short-checkpoint-sha",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("encoding_version", 2),
+            id="encoding-version",
+        ),
+        pytest.param(
+            lambda metadata: metadata["checkpoint"].__setitem__(
+                "has_training_state", "yes"
+            ),
+            id="nonboolean-training-state",
+        ),
+        pytest.param(
+            lambda metadata: metadata["selection"].pop("device"),
+            id="missing-selection-device",
+        ),
+        pytest.param(
+            lambda metadata: metadata["selection"].__setitem__(
+                "batch_size", 0
+            ),
+            id="zero-selection-batch",
+        ),
+        pytest.param(
+            lambda metadata: metadata["python_source"].pop(
+                "online_evaluator"
+            ),
+            id="missing-online-source",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("training_provenance", 3),
+            id="invalid-training-provenance",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("dependencies", []),
+            id="dependencies-array",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("split_algorithm", ""),
+            id="empty-split-algorithm",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("rust_runtime", None),
+            id="null-rust-runtime",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("rust_runtime", {}),
+            id="empty-rust-runtime",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("rust_runtime", []),
+            id="array-rust-runtime",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("teacher_cache", "shared"),
+            id="string-teacher-cache",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("teacher_cache", True),
+            id="boolean-teacher-cache",
+        ),
     ],
 )
 def test_plan_metadata_rejects_inconsistent_required_fields(
@@ -741,11 +840,32 @@ def test_plan_metadata_rejects_inconsistent_required_fields(
 @pytest.mark.parametrize(
     "mutate",
     [
-        lambda metadata: metadata.__setitem__("encoding_version", 2),
-        lambda metadata: metadata["checkpoint"].__setitem__("sha256", "0" * 63),
-        lambda metadata: metadata["selection"].__setitem__("batch_size", 0),
-        lambda metadata: metadata["python_source"].pop("online_evaluator"),
-        lambda metadata: metadata.__setitem__("rust_runtime", None),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("encoding_version", 2),
+            id="encoding-version",
+        ),
+        pytest.param(
+            lambda metadata: metadata["checkpoint"].__setitem__(
+                "sha256", "0" * 63
+            ),
+            id="short-checkpoint-sha",
+        ),
+        pytest.param(
+            lambda metadata: metadata["selection"].__setitem__(
+                "batch_size", 0
+            ),
+            id="zero-selection-batch",
+        ),
+        pytest.param(
+            lambda metadata: metadata["python_source"].pop(
+                "online_evaluator"
+            ),
+            id="missing-online-source",
+        ),
+        pytest.param(
+            lambda metadata: metadata.__setitem__("rust_runtime", None),
+            id="null-rust-runtime",
+        ),
     ],
 )
 def test_write_plan_rejects_metadata_mutated_after_construction(
@@ -787,7 +907,11 @@ def test_create_run_rejects_mutated_plan_before_creating_output(
     assert not directory.exists()
 
 
-@pytest.mark.parametrize("teacher_cache", [0, {"scope": "shared"}])
+@pytest.mark.parametrize(
+    "teacher_cache",
+    [0, {"scope": "shared"}],
+    ids=["disabled", "configured"],
+)
 def test_plan_metadata_accepts_disabled_or_configured_teacher_cache(
     tmp_path, policy_identity, teacher_cache
 ):
@@ -813,14 +937,24 @@ def test_plan_metadata_accepts_disabled_or_configured_teacher_cache(
 @pytest.mark.parametrize(
     "changes, message",
     [
-        ({"seeds": ()}, "at least one"),
-        ({"seeds": (1, 1)}, "unique"),
-        ({"seeds": (-1,)}, "at least 0"),
-        ({"seeds": (2**64,)}, "at most"),
-        ({"decision_limit": 0}, "at least 1"),
-        ({"placements": ((0, 1),)}, "fixed six"),
-        ({"neural_policy": ""}, "nonempty"),
-        ({"heuristic_policy": ""}, "nonempty"),
+        pytest.param({"seeds": ()}, "at least one", id="empty-seeds"),
+        pytest.param({"seeds": (1, 1)}, "unique", id="duplicate-seeds"),
+        pytest.param({"seeds": (-1,)}, "at least 0", id="negative-seed"),
+        pytest.param({"seeds": (2**64,)}, "at most", id="seed-range"),
+        pytest.param(
+            {"decision_limit": 0}, "at least 1", id="zero-decision-limit"
+        ),
+        pytest.param(
+            {"placements": ((0, 1),)}, "fixed six", id="placement-count"
+        ),
+        pytest.param(
+            {"neural_policy": ""}, "nonempty", id="empty-neural-policy"
+        ),
+        pytest.param(
+            {"heuristic_policy": ""},
+            "nonempty",
+            id="empty-heuristic-policy",
+        ),
     ],
 )
 def test_plan_rejects_invalid_structure(policy_identity, changes, message):
@@ -864,12 +998,13 @@ def test_build_plan_metadata_rejects_extra_key_collisions(policy_identity):
 
 def test_checkpoint_identity_matches_exact_loaded_bytes(tmp_path):
     path = tmp_path / "policy.pt"
-    original_model = build_policy(
-        ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=1
-    )
-    save_checkpoint(
-        path, original_model, role=ROLE_POLICY, metrics={"nll": 0.5}
-    )
+    original_model = build_checkpoint(
+        path,
+        role=ROLE_POLICY,
+        hidden=4,
+        model_seed=1,
+        metrics={"nll": 0.5},
+    ).model
     original_bytes = path.read_bytes()
     loaded, identity = records.load_checkpoint_with_identity(path)
     assert identity["sha256"] == hashlib.sha256(original_bytes).hexdigest()
@@ -883,11 +1018,12 @@ def test_checkpoint_identity_matches_exact_loaded_bytes(tmp_path):
 
     # The recorded identity must still describe the weights already loaded,
     # not a replacement checkpoint now at the same path.
-    replacement = build_policy(
-        ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=2
-    )
-    save_checkpoint(
-        path, replacement, role=ROLE_POLICY, metrics={"nll": 9.0}
+    build_checkpoint(
+        path,
+        role=ROLE_POLICY,
+        hidden=4,
+        model_seed=2,
+        metrics={"nll": 9.0},
     )
     assert identity["sha256"] != hashlib.sha256(path.read_bytes()).hexdigest()
     for name, value in original_model.state_dict().items():
@@ -898,10 +1034,13 @@ def test_checkpoint_identity_records_resolved_path_and_content_hash(
     tmp_path, monkeypatch
 ):
     path = tmp_path / "policy.pt"
-    model = build_policy(
-        ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=4
+    build_checkpoint(
+        path,
+        role=ROLE_POLICY,
+        hidden=4,
+        model_seed=4,
+        metrics={"nll": 0.25},
     )
-    save_checkpoint(path, model, role=ROLE_POLICY, metrics={"nll": 0.25})
 
     monkeypatch.chdir(tmp_path)
     loaded, identity = records.load_checkpoint_with_identity("policy.pt")
@@ -912,54 +1051,26 @@ def test_checkpoint_identity_records_resolved_path_and_content_hash(
 
 
 def test_training_provenance_is_separate_from_evaluation_identity(tmp_path):
-    model = build_policy(
-        ModelConfig(state_hidden=(4,), scorer_hidden=(4,)), seed=3
-    )
-    train_identity = DatasetIdentity(
+    model = build_model(hidden=4, seed=3)
+    state = build_training_state(
+        model,
         cache_id="fixture-cache",
-        split="train",
-        encoding_version=1,
-        preparation_format_version=1,
-        source_revision="fixture-revision",
-        decisions=4,
-        eligible_decisions=3,
-    )
-    validation_identity = DatasetIdentity(
-        cache_id="fixture-cache",
-        split="validation",
-        encoding_version=1,
-        preparation_format_version=1,
-        source_revision="fixture-revision",
-        decisions=2,
-        eligible_decisions=1,
-    )
-    state = TrainingCheckpointState(
-        training_config=TrainingConfig(
-            seed=1, epochs=1, batch_size=2, learning_rate=0.01
-        ),
-        train_dataset_identity=train_identity,
-        validation_dataset_identity=validation_identity,
-        dependencies=collect_dependency_versions(),
-        device_type="cpu",
-        completed_epochs=1,
+        train_eligible_decisions=3,
+        training_seed=1,
+        batch_size=2,
         global_step=2,
         samples_seen=4,
         best_validation_nll=0.5,
-        best_epoch=0,
-        history=[{"epoch": 0, "steps": 2, "samples": 4}],
-        optimizer_state={"state": {}, "param_groups": [{"lr": 0.01}]},
-        torch_rng_state=torch.get_rng_state(),
-        torch_cuda_rng_states=None,
-        order_rng_state=torch.Generator().manual_seed(7).get_state(),
-        best_model_state={
-            name: value.detach().cpu().clone()
-            for name, value in model.state_dict().items()
-        },
-        best_metrics={"nll": 0.5},
     )
     path = tmp_path / "best.pt"
-    save_checkpoint(
-        path, model, role=ROLE_BEST, training=state, metrics={"nll": 0.5}
+    build_checkpoint(
+        path,
+        role=ROLE_BEST,
+        hidden=4,
+        model_seed=3,
+        model=model,
+        training=state,
+        metrics={"nll": 0.5},
     )
     loaded, identity = records.load_checkpoint_with_identity(path)
     assert identity["has_training_state"] is True

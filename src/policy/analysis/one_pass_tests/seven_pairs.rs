@@ -2,11 +2,12 @@
 //! seven-pairs wins.
 
 use super::super::test_fixtures::{hand_from_counts, tile};
+use super::super::test_support::targets::merge_route;
 use super::super::DistanceEvaluator;
 use super::bit;
 use super::oracle::{
-    merge_route, reference_hand_mask, reference_seven_pairs_mask,
-    reference_seven_pairs_mask_direct, reference_standard_mask,
+    reference_hand_mask, reference_seven_pairs_mask, reference_seven_pairs_mask_direct,
+    reference_standard_mask,
 };
 use crate::rules;
 use crate::tile::{Suit, Tile, TILE_KINDS};

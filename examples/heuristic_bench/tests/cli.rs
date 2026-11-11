@@ -12,19 +12,14 @@ fn seed_ranges(config: &Config) -> (Vec<u64>, Vec<u64>) {
 #[test]
 fn help_is_standalone_and_ignores_later_arguments() {
     for arguments in [vec!["-h"], vec!["--help"], vec!["--help", "--games", "0"]] {
-        let command = parse_args(arguments.iter().map(|value| (*value).to_owned())).unwrap();
+        let command = parse_args(owned_args(&arguments)).unwrap();
         assert_eq!(command, Command::Help, "{arguments:?}");
     }
 }
 
 #[test]
 fn games_and_seed_are_required_and_defaults_are_explicit() {
-    let parsed = parse_args(
-        ["--games", "2", "--seed", "3"]
-            .iter()
-            .map(|value| (*value).to_owned()),
-    )
-    .unwrap();
+    let parsed = parse_args(owned_args(&["--games", "2", "--seed", "3"])).unwrap();
     assert_eq!(
         parsed,
         Command::Run(Config {
@@ -43,7 +38,7 @@ fn games_and_seed_are_required_and_defaults_are_explicit() {
             .filter(|(option, _)| *option != missing)
             .flat_map(|(option, value)| [option, value])
             .collect();
-        let error = parse_args(others.iter().map(|value| (*value).to_owned())).unwrap_err();
+        let error = parse_args(owned_args(&others)).unwrap_err();
         assert!(error.contains(missing), "{error}");
         assert!(error.contains("required"), "{error}");
     }
@@ -61,25 +56,20 @@ fn missing_duplicate_and_unknown_options_are_rejected() {
         vec!["--games", "1", "--seed", "2", "--warmup", "0", "--extra"],
         vec!["games", "1"],
     ] {
-        let error = parse_args(arguments.iter().map(|value| (*value).to_owned())).unwrap_err();
+        let error = parse_args(owned_args(&arguments)).unwrap_err();
         assert!(!error.is_empty(), "{arguments:?}");
     }
 
-    let duplicate = parse_args(
-        [
-            "--games", "1", "--games", "2", "--seed", "0", "--warmup", "0",
-        ]
-        .iter()
-        .map(|value| (*value).to_owned()),
-    )
+    let duplicate = parse_args(owned_args(&[
+        "--games", "1", "--games", "2", "--seed", "0", "--warmup", "0",
+    ]))
     .unwrap_err();
     assert_eq!(duplicate, "duplicate --games");
 
-    let missing_value =
-        parse_args(["--games"].iter().map(|value| (*value).to_owned())).unwrap_err();
+    let missing_value = parse_args(owned_args(&["--games"])).unwrap_err();
     assert_eq!(missing_value, "--games requires a value");
 
-    let unknown = parse_args(["--extra"].iter().map(|value| (*value).to_owned())).unwrap_err();
+    let unknown = parse_args(owned_args(&["--extra"])).unwrap_err();
     assert_eq!(unknown, "unexpected argument '--extra'");
 }
 
@@ -113,22 +103,18 @@ fn numeric_options_accept_only_decimal_unsigned_64_bit_values() {
 
 #[test]
 fn lifecycle_and_budget_parse_with_explicit_defaults() {
-    let parsed = parse_args(
-        [
-            "--games",
-            "2",
-            "--seed",
-            "3",
-            "--lifecycle",
-            "warm",
-            "--warmup",
-            "4",
-            "--cache-budget-bytes",
-            "0",
-        ]
-        .iter()
-        .map(|value| (*value).to_owned()),
-    )
+    let parsed = parse_args(owned_args(&[
+        "--games",
+        "2",
+        "--seed",
+        "3",
+        "--lifecycle",
+        "warm",
+        "--warmup",
+        "4",
+        "--cache-budget-bytes",
+        "0",
+    ]))
     .unwrap();
     let Command::Run(config) = parsed else {
         panic!("expected a run command");
@@ -141,7 +127,7 @@ fn lifecycle_and_budget_parse_with_explicit_defaults() {
     let invalid = |extra: &[&str]| {
         let mut arguments = vec!["--games", "1", "--seed", "0"];
         arguments.extend_from_slice(extra);
-        parse_args(arguments.iter().map(|value| (*value).to_owned())).unwrap_err()
+        parse_args(owned_args(&arguments)).unwrap_err()
     };
     assert!(invalid(&["--lifecycle", "hot"]).contains("invalid --lifecycle"));
     assert!(
@@ -161,11 +147,14 @@ fn lifecycle_and_budget_parse_with_explicit_defaults() {
 
 #[test]
 fn warm_requires_a_warmup_and_cold_allows_none() {
-    let error = parse_args(
-        ["--games", "1", "--seed", "0", "--lifecycle", "warm"]
-            .iter()
-            .map(|value| (*value).to_owned()),
-    )
+    let error = parse_args(owned_args(&[
+        "--games",
+        "1",
+        "--seed",
+        "0",
+        "--lifecycle",
+        "warm",
+    ]))
     .unwrap_err();
     assert!(error.contains("requires --warmup"), "{error}");
 
@@ -200,11 +189,9 @@ fn warm_requires_a_warmup_and_cold_allows_none() {
 
 #[test]
 fn zero_games_is_rejected_before_play() {
-    let error = parse_args(
-        ["--games", "0", "--seed", "0", "--warmup", "0"]
-            .iter()
-            .map(|value| (*value).to_owned()),
-    )
+    let error = parse_args(owned_args(&[
+        "--games", "0", "--seed", "0", "--warmup", "0",
+    ]))
     .unwrap_err();
     assert!(error.contains("--games must be at least 1"), "{error}");
 }

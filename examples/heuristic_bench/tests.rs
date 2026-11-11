@@ -65,6 +65,14 @@ fn snapshot(state: &'static str, allocated_bytes: usize, entries: usize) -> Cach
     }
 }
 
+/// Owned arguments for `parse_args`, which takes `Vec<String>`.
+///
+/// Kept local to this tool's test root: the two CLI tools have different
+/// option contracts and must not share parser fixtures.
+fn owned_args(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
 #[path = "tests/cli.rs"]
 mod cli;
 #[path = "tests/errors.rs"]

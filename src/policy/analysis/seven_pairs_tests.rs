@@ -13,25 +13,12 @@
 
 use super::*;
 use crate::action::Meld;
-use crate::hand::Hand;
 use crate::seat::Seat;
 use crate::tile::{Suit, Tile};
 
+use super::test_support::{hand_from_counts, tile};
+
 const UNITS: usize = 7;
-
-fn tile(suit: Suit, rank: u8) -> Tile {
-    Tile::from_suit_rank(suit, rank).expect("rank in range")
-}
-
-fn hand_from_counts(counts: &[u8; TILE_KINDS]) -> Hand {
-    let mut hand = Hand::new();
-    for kind in Tile::ALL {
-        for _ in 0..counts[kind.index() as usize] {
-            hand.add(kind).expect("at most four copies per kind");
-        }
-    }
-    hand
-}
 
 /// Cheapest seven-pairs target found by enumerating per-kind target copies.
 fn enumerated_seven_pairs_deficit(counts: &[u8; TILE_KINDS], missing: Suit) -> u8 {

@@ -514,10 +514,12 @@ mod one_pass_reference;
 #[cfg(test)]
 mod one_pass_tests;
 #[cfg(test)]
-mod optimization_a2_tests;
+mod seven_pairs_tests;
 #[cfg(test)]
-mod optimization_b_tests;
+mod suit_pruning_tests;
 #[cfg(test)]
 mod test_fixtures;
+#[cfg(test)]
+mod test_support;
 #[cfg(test)]
 mod tests;

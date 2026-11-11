@@ -44,7 +44,6 @@
 use std::fmt;
 
 use crate::action::{Action, ExchangeDirection, Meld, MeldKind};
-use crate::eval;
 use crate::hand::Hand;
 use crate::rules::{self, WinMethod};
 use crate::seat::{Seat, PLAYER_COUNT};
@@ -806,11 +805,8 @@ impl Game {
             legal_actions.push(Action::Pass);
         }
 
-        let empty = legal_actions.is_empty();
-        debug_assert!(!empty, "an active turn must have at least one legal action");
-        if empty {
-            self.end_hand(EndReason::WallExhausted);
-            return;
+        if legal_actions.is_empty() {
+            unreachable!("an active turn must have at least one legal action");
         }
 
         self.pending = Some(PendingDecision {
@@ -1115,12 +1111,13 @@ impl Game {
         if let Some(discard_index) = discard_index {
             self.discards[discard_index].meld_claim = Some(claimant);
         }
-        self.transfer(source, claimant, rules::OPEN_KONG_POINTS);
+        let payment = rules::kong_payment(MeldKind::OpenKong, self.active_count() - 1);
+        self.transfer(source, claimant, payment.per_payer);
         self.kong_ledger.push(KongRecord {
             declarer: claimant,
             payer: source,
             kind: MeldKind::OpenKong,
-            points: rules::OPEN_KONG_POINTS,
+            points: payment.per_payer,
         });
         if !self.draw_replacement(claimant) {
             self.end_hand(EndReason::WallExhausted);
@@ -1137,11 +1134,7 @@ impl Game {
             .remove_tiles(&[tile, tile, tile, tile])
             .expect("concealed kong declaration holds four matching tiles");
         self.melds[index].push(Meld::concealed_kong(tile));
-        self.pay_kong_opponents(
-            declarer,
-            rules::CONCEALED_KONG_POINTS,
-            MeldKind::ConcealedKong,
-        );
+        self.pay_kong_opponents(declarer, MeldKind::ConcealedKong);
         if !self.draw_replacement(declarer) {
             self.end_hand(EndReason::WallExhausted);
         }
@@ -1164,7 +1157,7 @@ impl Game {
             .remove(tile)
             .expect("added kong tile is in the declarer hand");
         self.melds[index][peng_index] = Meld::added_kong(tile, source);
-        self.pay_kong_opponents(declarer, rules::ADDED_KONG_POINTS, MeldKind::AddedKong);
+        self.pay_kong_opponents(declarer, MeldKind::AddedKong);
         if !self.draw_replacement(declarer) {
             self.end_hand(EndReason::WallExhausted);
         }

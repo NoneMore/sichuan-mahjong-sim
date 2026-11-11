@@ -11,14 +11,11 @@ fn pass_then_lower_claim_is_allowed_and_peng_does_not_draw() {
     submit_specific(&mut game, seat(1), Action::Pass);
     assert!(game.pass_lock[1], "declining Hu locks the next Hu");
     assert!(game.winners.iter().all(|winner| !winner));
-    let follow_up = {
-        let decision = game.next_decision().unwrap();
-        assert_eq!(decision.seat, seat(1));
-        match decision.legal_actions {
-            LegalActions::Actions(actions) => actions.to_vec(),
-            LegalActions::Exchange { .. } => panic!("expected follow-up response"),
-        }
-    };
+    assert_eq!(
+        game.next_decision().expect("follow-up response").seat,
+        seat(1)
+    );
+    let follow_up = pending_actions(&mut game);
     assert!(!follow_up.contains(&Action::Hu));
     assert!(follow_up.contains(&Action::Peng));
     assert!(follow_up.contains(&Action::Pass));
@@ -37,10 +34,7 @@ fn pass_then_lower_claim_is_allowed_and_peng_does_not_draw() {
             kind: ActionKind::AfterPeng
         }
     ));
-    let actions = match game.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected turn actions"),
-    };
+    let actions = pending_actions(&mut game);
     assert!(actions
         .iter()
         .all(|action| matches!(action, Action::Discard(_))));
@@ -55,10 +49,7 @@ fn a_second_pass_completes_a_two_stage_response_without_looping() {
     submit_specific(&mut game, seat(1), Action::Pass);
     assert!(game.pass_lock[1], "the first Pass declines the win");
 
-    let follow_up = match game.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected the staged follow-up"),
-    };
+    let follow_up = pending_actions(&mut game);
     assert!(!follow_up.contains(&Action::Hu));
     assert!(follow_up.contains(&Action::Peng));
     assert!(follow_up.contains(&Action::Pass));
@@ -127,19 +118,13 @@ fn passing_then_open_kong_claims_the_discard_after_declining_hu() {
     ));
     submit_specific(&mut game, seat(0), Action::Discard(w(5)));
 
-    let first = match game.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected response actions"),
-    };
+    let first = pending_actions(&mut game);
     assert!(first.contains(&Action::Hu));
     assert!(first.contains(&Action::OpenKong));
 
     submit_specific(&mut game, seat(1), Action::Pass);
     assert!(game.pass_lock[1], "declining Hu locks the next Hu");
-    let follow_up = match game.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected the staged follow-up"),
-    };
+    let follow_up = pending_actions(&mut game);
     assert!(!follow_up.contains(&Action::Hu));
     assert!(follow_up.contains(&Action::OpenKong));
     assert!(follow_up.contains(&Action::Pass));
@@ -210,10 +195,7 @@ fn passing_a_self_draw_is_cleared_by_a_kong_replacement_draw() {
 
     submit_specific(&mut game, seat(0), Action::Pass);
     assert!(game.pass_lock[0]);
-    let after_pass = match game.next_decision().unwrap().legal_actions {
-        LegalActions::Actions(actions) => actions.to_vec(),
-        LegalActions::Exchange { .. } => panic!("expected turn actions"),
-    };
+    let after_pass = pending_actions(&mut game);
     assert!(!after_pass.contains(&Action::Hu));
     assert!(after_pass.contains(&Action::ConcealedKong(w(1))));
 

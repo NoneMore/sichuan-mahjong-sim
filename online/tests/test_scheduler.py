@@ -348,6 +348,40 @@ def test_concurrent_progress_differences_and_immediate_record_order():
     assert len([event for event in events if event[0] == "terminal"]) == 3
 
 
+def test_terminal_decision_count_mismatch_stops_with_context():
+    log = EnvLog()
+    scripts = [script(7, [(0, 0, 3)])]
+    factory = make_env_factory(log, scripts)
+
+    def mismatched_factory(*, decision_limit):
+        env = factory(decision_limit=decision_limit)
+        step = env.step
+
+        def step_with_wrong_count(decision_id, candidate_index):
+            outcome = step(decision_id, candidate_index)
+            if isinstance(outcome, FakeTerminal):
+                return FakeTerminal(
+                    seed=outcome.seed, decisions=outcome.decisions + 1
+                )
+            return outcome
+
+        env.step = step_with_wrong_count
+        return env
+
+    with pytest.raises(SchedulingError) as raised:
+        run(
+            log,
+            scripts,
+            specs=specs((7, PLACEMENT)),
+            neural=RecordingPolicy(),
+            env_factory=mismatched_factory,
+        )
+    message = str(raised.value)
+    assert "environment terminal decision count 2" in message
+    assert "scheduler decision count 1" in message
+    assert "seed 7" in message and "placement [0, 1]" in message
+
+
 def test_terminal_callback_failure_stops_scheduling_with_context():
     def failing(record):
         raise OSError("disk full while appending")

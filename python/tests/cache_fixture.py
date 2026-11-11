@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -380,6 +381,42 @@ def write_cache(
     )
 
 
+def copy_cache(fixture: CacheFixture, root: Path | str) -> CacheFixture:
+    """Copy a written cache to a private mutable root.
+
+    The session baseline is read-only. A test that changes the manifest or an
+    array must use this copy so later tests continue to see the generated
+    baseline, without paying to regenerate the same captured interval.
+    """
+
+    target = Path(root)
+    shutil.copytree(fixture.root, target)
+    # The on-disk copy is independent, but the source fixture's manifest and
+    # container fields are still mutable Python objects. Rebuild them from the
+    # copy / new containers so a corruption case cannot leak into the session
+    # baseline through in-memory mutation. ``sources`` values are immutable
+    # expected datasets shared for assertions only: never close or rewrite them.
+    return CacheFixture(
+        root=target,
+        seed_start=fixture.seed_start,
+        games=fixture.games,
+        seeds=dict(fixture.seeds),
+        sources=dict(fixture.sources),
+        counts=dict(fixture.counts),
+        manifest=read_manifest(target),
+    )
+
+
+def episode_seeds(dataset) -> tuple[int, ...]:
+    """Distinct episode ids in first-seen order for one loaded split."""
+
+    return tuple(
+        dict.fromkeys(
+            int(dataset[index].episode_id) for index in range(len(dataset))
+        )
+    )
+
+
 def read_manifest(root: Path | str) -> dict[str, Any]:
     return json.loads((Path(root) / "dataset.json").read_text(encoding="utf-8"))
 
@@ -391,13 +428,30 @@ def write_manifest(root: Path | str, manifest: Mapping[str, Any]) -> None:
     )
 
 
-def synthetic_cache(
+def rewrite_cache_array(
     root: Path | str,
+    manifest: dict[str, Any],
     *,
-    seed_start: int = DEFAULT_SEED_START,
-    games: int = DEFAULT_GAMES,
-    **kwargs: Any,
-) -> CacheFixture:
-    """Write the default fixed interval, or a caller-supplied fixed interval."""
+    split: str,
+    shard_index: int,
+    name: str,
+    values: np.ndarray,
+) -> str:
+    """Replace one cache array and update its manifest descriptor.
 
-    return write_cache(root, seed_start=seed_start, games=games, **kwargs)
+    Returns the cache-relative file path so a corruption test can assert that
+    the loader reports the offending file.
+    """
+
+    root_path = Path(root)
+    shard = manifest["splits"][split]["shards"][shard_index]
+    descriptor = shard["arrays"][name]
+    relative = descriptor["file"]
+    path = root_path / relative
+    np.save(path, values, allow_pickle=False)
+    descriptor["dtype"] = values.dtype.name
+    descriptor["shape"] = list(values.shape)
+    descriptor["bytes"] = path.stat().st_size
+    descriptor["sha256"] = _sha256(path)
+    write_manifest(root_path, manifest)
+    return relative

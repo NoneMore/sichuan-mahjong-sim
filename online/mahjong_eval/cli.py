@@ -16,11 +16,6 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-from mahjong_bc.checkpoint import atomic_write_json
-from mahjong_bc.config import collect_dependency_versions
-from mahjong_bc.constants import ROLE_BEST, SPLIT_ALGORITHM
-from mahjong_bc.errors import MahjongBCError
-
 from . import records, scheduler
 
 COSTS_FORMAT = "mahjong-eval-costs"
@@ -32,6 +27,38 @@ _U64_MAX = 2**64 - 1
 
 class CompareError(RuntimeError):
     """An invalid comparison configuration or a failed comparison run."""
+
+
+def _offline_dependency_hint(exc: ImportError) -> str:
+    return (
+        "comparison requires the optional offline dependencies 'mahjong-bc' "
+        "and PyTorch; install the offline package first with "
+        "'python -m pip install -e ./python', then install the online "
+        "package with its 'evaluation' extra "
+        f"({type(exc).__name__}: {exc})"
+    )
+
+
+def _require_offline_evaluation() -> None:
+    try:
+        import mahjong_bc  # noqa: F401
+    except ImportError as exc:
+        raise CompareError(_offline_dependency_hint(exc)) from exc
+
+
+def _handled_errors() -> tuple[type[BaseException], ...]:
+    """Expected failures, including the offline package's error only if loaded."""
+
+    errors: tuple[type[BaseException], ...] = (
+        CompareError,
+        records.RecordError,
+        OSError,
+    )
+    try:
+        from mahjong_bc.errors import MahjongBCError
+    except ImportError:
+        return errors
+    return (*errors, MahjongBCError)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -187,6 +214,8 @@ def _compiled_source() -> dict[str, Any]:
 
 
 def _dependency_record() -> dict[str, Any]:
+    from mahjong_bc.config import collect_dependency_versions
+
     value = collect_dependency_versions().to_dict()
     value["evaluator"] = {
         "package": "mahjong-eval",
@@ -242,6 +271,8 @@ def _costs_document(
 def write_costs(path: Path, document: dict[str, Any]) -> None:
     """Atomically publish measured costs; callers run this before closing."""
 
+    from mahjong_bc.checkpoint import atomic_write_json
+
     try:
         atomic_write_json(path, document)
     except (OSError, TypeError, ValueError) as exc:
@@ -256,9 +287,13 @@ def _cmd_compare(args: argparse.Namespace) -> int:
         _require_positive("decision_limit", args.decision_limit)
     if args.teacher_cache_bytes is not None:
         _require_nonnegative("teacher_cache_bytes", args.teacher_cache_bytes)
+    _require_offline_evaluation()
     buckets = _validate_split_seeds(seeds, args.split)
 
     import mahjong_eval
+    from mahjong_bc.constants import ROLE_BEST, SPLIT_ALGORITHM
+    from mahjong_bc.errors import MahjongBCError
+
     from .inference import FrozenPolicy
 
     decision_limit = (
@@ -425,8 +460,14 @@ def _cmd_version(_args: argparse.Namespace) -> int:
     document: dict[str, Any] = {
         "package": "mahjong-eval",
         "package_version": _online_version(),
-        "dependencies": collect_dependency_versions().to_dict(),
     }
+    try:
+        from mahjong_bc.config import collect_dependency_versions
+
+        document["dependencies"] = collect_dependency_versions().to_dict()
+    except ImportError as exc:
+        document["dependencies"] = None
+        document["dependencies_error"] = f"{type(exc).__name__}: {exc}"
     try:
         import mahjong_eval
 
@@ -445,12 +486,13 @@ def _emit(value: Any) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    expected = _handled_errors()
     try:
         if args.command == "compare":
             return _cmd_compare(args)
         if args.command == "version":
             return _cmd_version(args)
-    except (CompareError, MahjongBCError, records.RecordError, OSError) as exc:
+    except expected as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     parser.error(f"unknown command {args.command!r}")

@@ -9,62 +9,19 @@
 //! Regenerate deliberately with:
 //! `UPDATE_TEACHER_REPLAY_FIXTURE=1 cargo test --manifest-path crates/python/Cargo.toml --test teacher_replay`
 
-use std::fmt::Write as _;
-use std::fs;
-use std::path::PathBuf;
+mod support;
 
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use sichuan_mahjong_neural::collection::{action_kind_id, encode_action, ACTION_KIND_NAMES};
 use sichuan_mahjong_neural::encoding::{
     canonicalize, encode, ACTION_WIDTH, ENCODING_VERSION, STATE_WIDTH,
 };
 use sichuan_mahjong_sim::runner::DEFAULT_DECISION_LIMIT;
-use sichuan_mahjong_sim::{Action, EndReason, Game, HeuristicPolicy, Policy};
+use sichuan_mahjong_sim::{Action, Game, HeuristicPolicy, Policy};
 
 const SEED: u64 = 0;
 const FORMAT: &str = "mahjong-eval-teacher-replay-v1";
 const FIXTURE_NAME: &str = "teacher_replay_seed_0.json";
-
-fn fixture_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(FIXTURE_NAME)
-}
-
-fn stage_code(stage: sichuan_mahjong_sim::DecisionStage) -> u8 {
-    match stage {
-        sichuan_mahjong_sim::DecisionStage::Exchange => 0,
-        sichuan_mahjong_sim::DecisionStage::MissingSuit => 1,
-        sichuan_mahjong_sim::DecisionStage::Turn => 2,
-        sichuan_mahjong_sim::DecisionStage::DiscardResponse => 3,
-        sichuan_mahjong_sim::DecisionStage::AddedKongResponse => 4,
-    }
-}
-
-fn end_reason_name(reason: EndReason) -> &'static str {
-    match reason {
-        EndReason::ThreeWinners => "three_winners",
-        EndReason::WallExhausted => "wall_exhausted",
-    }
-}
-
-fn f32_bytes(values: &[f32]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(values.len() * 4);
-    for value in values {
-        out.extend_from_slice(&value.to_le_bytes());
-    }
-    out
-}
-
-fn hex_sha256(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        write!(&mut out, "{byte:02x}").expect("writing to a string");
-    }
-    out
-}
 
 fn action_json(action: Action) -> Value {
     let kind_id = action_kind_id(&action);
@@ -97,12 +54,12 @@ fn expected_fixture() -> Value {
         decisions.push(json!({
             "decision_id": (1u64 << 32) | (accepted + 1),
             "actor_seat": decision.seat.index(),
-            "stage": stage_code(decision.observation.stage),
+            "stage": support::stage_code(decision.observation.stage),
             "candidate_count": encoded.candidates.len(),
             "teacher_index": teacher_index,
             "action": action_json(encoded.candidates[teacher_index].action),
-            "state_sha256": hex_sha256(&f32_bytes(&state)),
-            "candidate_features_sha256": hex_sha256(&f32_bytes(&candidate_features)),
+            "state_sha256": support::hex_sha256(&support::f32_bytes(&state)),
+            "candidate_features_sha256": support::hex_sha256(&support::f32_bytes(&candidate_features)),
         }));
 
         let seat = decision.seat;
@@ -125,7 +82,7 @@ fn expected_fixture() -> Value {
             "decisions": accepted,
             "scores": result.scores,
             "winners": result.winners,
-            "end_reason": end_reason_name(result.end_reason),
+            "end_reason": support::end_reason_name(result.end_reason),
         },
     })
 }
@@ -157,28 +114,5 @@ fn teacher_fixture_is_a_complete_teacher_game() {
 #[test]
 fn teacher_replay_matches_checked_in_fixture() {
     let expected = expected_fixture();
-    let path = fixture_path();
-
-    if std::env::var_os("UPDATE_TEACHER_REPLAY_FIXTURE").is_some() {
-        let text = format!(
-            "{}\n",
-            serde_json::to_string_pretty(&expected).expect("serialize fixture")
-        );
-        fs::create_dir_all(path.parent().expect("fixture directory"))
-            .expect("create fixture directory");
-        fs::write(&path, text).expect("write fixture");
-    }
-
-    let text = fs::read_to_string(&path).unwrap_or_else(|error| {
-        panic!(
-            "read {}: {error}; regenerate with UPDATE_TEACHER_REPLAY_FIXTURE=1",
-            path.display()
-        )
-    });
-    let actual: Value = serde_json::from_str(&text).expect("parse fixture");
-    assert_eq!(
-        actual, expected,
-        "teacher replay fixture is stale; regenerate deliberately with \
-         UPDATE_TEACHER_REPLAY_FIXTURE=1"
-    );
+    support::check_fixture("UPDATE_TEACHER_REPLAY_FIXTURE", FIXTURE_NAME, &expected);
 }

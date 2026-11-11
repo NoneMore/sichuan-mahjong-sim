@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import hashlib
 import shutil
 import subprocess
 import sys
 import textwrap
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -15,35 +13,13 @@ from mahjong_bc.constants import SPLIT_NAMES
 from mahjong_bc.data import iter_batches
 from mahjong_bc.errors import CacheContractError, DataError
 
-from .cache_fixture import CacheFixture, read_manifest, write_cache, write_manifest
-
-
-def _cache(root: Path, **kwargs) -> CacheFixture:
-    return write_cache(
-        root,
-        decisions_per_episode=2,
-        episodes_per_shard=2,
-        **kwargs,
-    )
-
-
-def _episode_seeds(dataset) -> tuple[int, ...]:
-    return tuple(
-        dict.fromkeys(
-            int(dataset[index].episode_id) for index in range(len(dataset))
-        )
-    )
-
-
-def _rewrite_array(root: Path, manifest: dict, split: str, shard_index: int, name: str, array: np.ndarray) -> None:
-    relative = f"arrays/{split}/{shard_index:05d}.{name}.npy"
-    np.save(root / relative, array, allow_pickle=False)
-    descriptor = manifest["splits"][split]["shards"][shard_index]["arrays"][name]
-    descriptor["dtype"] = array.dtype.name
-    descriptor["shape"] = list(array.shape)
-    descriptor["bytes"] = (root / relative).stat().st_size
-    descriptor["sha256"] = hashlib.sha256((root / relative).read_bytes()).hexdigest()
-    write_manifest(root, manifest)
+from .cache_fixture import (
+    episode_seeds,
+    read_manifest,
+    rewrite_cache_array,
+    write_cache,
+    write_manifest,
+)
 
 
 @pytest.mark.parametrize("seed, expected", [(158, "train"), (167, "validation"), (214, "test")])
@@ -52,8 +28,8 @@ def test_seed_split_matches_frozen_rust_oracles(seed, expected):
     assert _seed_split(seed) == expected
 
 
-def test_close_preserves_outstanding_mmap_views_and_rejects_new_reads(tmp_path):
-    _cache(tmp_path)
+def test_close_preserves_outstanding_mmap_views_and_rejects_new_reads(shared_cache):
+    root = shared_cache.root
     # Isolate the probe so a future dangling-mmap regression reports a failed
     # subprocess instead of taking the entire pytest process down.
     code = textwrap.dedent("""
@@ -84,15 +60,16 @@ def test_close_preserves_outstanding_mmap_views_and_rejects_new_reads(tmp_path):
                 raise AssertionError("closed dataset should reject reads")
     """)
     completed = subprocess.run(
-        [sys.executable, "-c", code, str(tmp_path)], capture_output=True, text=True,
+        [sys.executable, "-c", code, str(root)], capture_output=True, text=True,
         timeout=30,
     )
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
-    fixture = _cache(tmp_path)
-    cache = load_prepared_cache(tmp_path)
+def test_loads_sharded_splits_and_preserves_decisions(shared_cache):
+    root = shared_cache.root
+    fixture = shared_cache
+    cache = load_prepared_cache(root)
     assert cache.cache_id == "synthetic-cache-id"
     assert cache.encoding_version == 1
     assert cache.preparation_format_version == 1
@@ -102,7 +79,7 @@ def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
     assert cache.counts.decisions == sum(
         value.decisions for value in fixture.counts.values()
     )
-    manifest = read_manifest(tmp_path)
+    manifest = read_manifest(root)
 
     for split in SPLIT_NAMES:
         source = fixture.sources[split]
@@ -114,12 +91,12 @@ def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
             assert dataset.identity.split == split
             assert dataset.identity.decisions == len(source)
             assert dataset.identity.eligible_decisions == source.identity.eligible_decisions
-            assert _episode_seeds(dataset) == fixture.seeds[split]
+            assert episode_seeds(dataset) == fixture.seeds[split]
             expected_index = 0
             for shard in manifest["splits"][split]["shards"]:
-                seeds = np.load(tmp_path / shard["arrays"]["episode_seeds"]["file"])
+                seeds = np.load(root / shard["arrays"]["episode_seeds"]["file"])
                 indices = np.load(
-                    tmp_path / shard["arrays"]["decision_indices"]["file"]
+                    root / shard["arrays"]["decision_indices"]["file"]
                 )
                 for position in range(len(seeds)):
                     sample = dataset[expected_index]
@@ -147,7 +124,7 @@ def test_loads_sharded_splits_and_preserves_decisions(tmp_path):
 
 
 def test_empty_split_has_zero_counts_and_no_shards(tmp_path):
-    fixture = _cache(tmp_path, seed_start=0, games=3)
+    fixture = write_cache(tmp_path, seed_start=0, games=3)
     assert fixture.seeds["test"] == ()
     assert fixture.sources["test"] is None
     manifest = read_manifest(tmp_path)
@@ -182,9 +159,8 @@ def test_empty_split_has_zero_counts_and_no_shards(tmp_path):
         cache.load_split("bogus")
 
 
-def test_load_cache_split_returns_validated_metadata(tmp_path):
-    _cache(tmp_path)
-    dataset, cache = load_cache_split(tmp_path, "validation")
+def test_load_cache_split_returns_validated_metadata(shared_cache):
+    dataset, cache = load_cache_split(shared_cache.root, "validation")
     try:
         assert dataset.identity.cache_id == cache.cache_id
         assert dataset.identity.split == "validation"
@@ -194,9 +170,8 @@ def test_load_cache_split_returns_validated_metadata(tmp_path):
         dataset.close()
 
 
-def test_mmap_and_plain_loading_agree(tmp_path):
-    _cache(tmp_path)
-    cache = load_prepared_cache(tmp_path)
+def test_mmap_and_plain_loading_agree(shared_cache):
+    cache = load_prepared_cache(shared_cache.root)
     mmapped = cache.load_split("train", mmap=True)
     plain = cache.load_split("train", mmap=False)
     try:
@@ -209,9 +184,8 @@ def test_mmap_and_plain_loading_agree(tmp_path):
         plain.close()
 
 
-def test_memmap_datasets_reject_worker_processes(tmp_path):
-    _cache(tmp_path)
-    cache = load_prepared_cache(tmp_path)
+def test_memmap_datasets_reject_worker_processes(shared_cache):
+    cache = load_prepared_cache(shared_cache.root)
     dataset = cache.load_split("train", mmap=True)
     try:
         with pytest.raises(DataError, match="memory-mapped"):
@@ -227,16 +201,14 @@ def test_memmap_datasets_reject_worker_processes(tmp_path):
         dataset.close()
 
 
-def test_inventory_is_complete_and_portable(tmp_path):
-    root = tmp_path / "first"
-    fixture = _cache(root)
+def test_inventory_is_complete_and_portable(tmp_path, shared_cache):
     moved = tmp_path / "moved"
-    shutil.copytree(root, moved)
+    shutil.copytree(shared_cache.root, moved)
     cache = load_prepared_cache(moved)
     assert cache.cache_id == "synthetic-cache-id"
     dataset = cache.load_split("test")
     try:
-        assert len(dataset) == fixture.counts["test"].decisions
+        assert len(dataset) == shared_cache.counts["test"].decisions
     finally:
         dataset.close()
 
@@ -257,214 +229,273 @@ def test_inventory_is_complete_and_portable(tmp_path):
         ("corpus_manifest", []),
     ],
 )
-def test_rejects_unsupported_or_malformed_manifest_fields(tmp_path, field, value):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_unsupported_or_malformed_manifest_fields(fresh_cache, field, value):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     manifest[field] = value
-    write_manifest(tmp_path, manifest)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-
-
-def test_rejects_layout_that_differs_from_preparation_format_one(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    manifest["layout"]["state_width"] = 1000
-    write_manifest(tmp_path, manifest)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-
-    other = tmp_path / "layout-array"
-    _cache(other)
-    manifest = read_manifest(other)
-    manifest["layout"]["arrays"]["states"]["dimensions"] = ["decisions"]
-    write_manifest(other, manifest)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(other)
-
-
-def test_layout_scalars_must_be_integers(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    manifest["layout"]["candidate_width"] = float(manifest["layout"]["candidate_width"])
-    write_manifest(tmp_path, manifest)
-    with pytest.raises(CacheContractError, match="candidate_width"):
-        load_prepared_cache(tmp_path)
-
-
-def test_rejects_unknown_and_missing_manifest_keys(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    manifest["unexpected"] = 1
-    write_manifest(tmp_path, manifest)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    del manifest["unexpected"]
-    del manifest["counts"]
-    write_manifest(tmp_path, manifest)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-
-
-def test_rejects_missing_extra_and_duplicate_inventory(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    (tmp_path / "extra.txt").write_text("extra", encoding="utf-8")
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-    (tmp_path / "extra.txt").unlink()
-
-    first = tmp_path / manifest["splits"]["train"]["shards"][0]["arrays"]["states"]["file"]
-    first.unlink()
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-
-    other = tmp_path / "duplicate"
-    _cache(other)
-    text = (other / "dataset.json").read_text(encoding="utf-8")
-    text = text.replace(
-        '"format": "mahjong-bc-dataset",',
-        '"format": "mahjong-bc-dataset",\n  "format": "mahjong-bc-dataset",',
-        1,
-    )
-    (other / "dataset.json").write_text(text, encoding="utf-8")
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(other)
-
-
-def test_checksum_verification_and_optional_skip(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    relative = manifest["splits"]["train"]["shards"][0]["arrays"]["states"]["file"]
-    path = tmp_path / relative
-    data = bytearray(path.read_bytes())
-    data[-1] ^= 0xFF
-    path.write_bytes(bytes(data))
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-    cache = load_prepared_cache(tmp_path, verify_checksums=False)
-    assert cache.cache_id == "synthetic-cache-id"
-
-
-def test_rejects_array_layout_and_target_errors(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    shard = manifest["splits"]["train"]["shards"][0]
-    states = np.load(tmp_path / shard["arrays"]["states"]["file"])
-    _rewrite_array(tmp_path, manifest, "train", 0, "states", states.astype(np.float64))
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
-
-    root = tmp_path / "target-out-of-range"
-    _cache(root)
-    manifest = read_manifest(root)
-    shard = manifest["splits"]["train"]["shards"][0]
-    targets = np.load(root / shard["arrays"]["targets"]["file"])
-    targets[0] = 999
-    _rewrite_array(root, manifest, "train", 0, "targets", targets)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(root)
-
-    root = tmp_path / "empty-offset"
-    _cache(root)
-    manifest = read_manifest(root)
-    shard = manifest["splits"]["train"]["shards"][0]
-    offsets = np.load(root / shard["arrays"]["candidate_offsets"]["file"])
-    offsets[1] = offsets[0]
-    _rewrite_array(root, manifest, "train", 0, "candidate_offsets", offsets)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(root)
-
-    root = tmp_path / "kind-mismatch"
-    _cache(root)
-    manifest = read_manifest(root)
-    shard = manifest["splits"]["train"]["shards"][0]
-    kinds = np.load(root / shard["arrays"]["target_kinds"]["file"])
-    kinds[0] = (int(kinds[0]) + 1) % 9
-    _rewrite_array(root, manifest, "train", 0, "target_kinds", kinds)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(root)
-
-    root = tmp_path / "fortran-order"
-    _cache(root)
-    manifest = read_manifest(root)
-    shard = manifest["splits"]["train"]["shards"][0]
-    states = np.load(root / shard["arrays"]["states"]["file"])
-    relative = shard["arrays"]["states"]["file"]
-    np.save(root / relative, np.asfortranarray(states), allow_pickle=False)
-    descriptor = manifest["splits"]["train"]["shards"][0]["arrays"]["states"]
-    descriptor["bytes"] = (root / relative).stat().st_size
-    descriptor["sha256"] = hashlib.sha256((root / relative).read_bytes()).hexdigest()
     write_manifest(root, manifest)
     with pytest.raises(CacheContractError):
         load_prepared_cache(root)
 
 
-def test_rejects_bad_counts_and_episode_metadata(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
-    manifest["splits"]["train"]["counts"]["decisions"] += 1
-    write_manifest(tmp_path, manifest)
-    with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
+def _state_width_layout(root, manifest):
+    manifest["layout"]["state_width"] = 1000
+    write_manifest(root, manifest)
 
-    root = tmp_path / "duplicate-episode"
-    _cache(root)
+
+def _array_dimensions_layout(root, manifest):
+    manifest["layout"]["arrays"]["states"]["dimensions"] = ["decisions"]
+    write_manifest(root, manifest)
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [_state_width_layout, _array_dimensions_layout],
+    ids=["state-width", "array-dimensions"],
+)
+def test_rejects_layout_that_differs_from_preparation_format_one(
+    fresh_cache, mutate
+):
+    root = fresh_cache.root
+    mutate(root, read_manifest(root))
+    with pytest.raises(CacheContractError):
+        load_prepared_cache(root)
+
+
+def test_layout_scalars_must_be_integers(fresh_cache):
+    root = fresh_cache.root
     manifest = read_manifest(root)
+    manifest["layout"]["candidate_width"] = float(manifest["layout"]["candidate_width"])
+    write_manifest(root, manifest)
+    with pytest.raises(CacheContractError, match="candidate_width"):
+        load_prepared_cache(root)
+
+
+def test_rejects_unknown_and_missing_manifest_keys(fresh_cache):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
+    manifest["unexpected"] = 1
+    write_manifest(root, manifest)
+    with pytest.raises(CacheContractError):
+        load_prepared_cache(root)
+    manifest = read_manifest(root)
+    del manifest["unexpected"]
+    del manifest["counts"]
+    write_manifest(root, manifest)
+    with pytest.raises(CacheContractError):
+        load_prepared_cache(root)
+
+
+def _extra_inventory_file(root, manifest):
+    (root / "extra.txt").write_text("extra", encoding="utf-8")
+
+
+def _missing_array_file(root, manifest):
+    first = root / manifest["splits"]["train"]["shards"][0]["arrays"]["states"]["file"]
+    first.unlink()
+
+
+def _duplicate_manifest_key(root, manifest):
+    text = (root / "dataset.json").read_text(encoding="utf-8")
+    text = text.replace(
+        '"format": "mahjong-bc-dataset",',
+        '"format": "mahjong-bc-dataset",\n  "format": "mahjong-bc-dataset",',
+        1,
+    )
+    (root / "dataset.json").write_text(text, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [_extra_inventory_file, _missing_array_file, _duplicate_manifest_key],
+    ids=["extra-file", "missing-array", "duplicate-key"],
+)
+def test_rejects_missing_extra_and_duplicate_inventory(fresh_cache, mutate):
+    root = fresh_cache.root
+    mutate(root, read_manifest(root))
+    with pytest.raises(CacheContractError):
+        load_prepared_cache(root)
+
+
+def test_checksum_verification_and_optional_skip(fresh_cache):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
+    relative = manifest["splits"]["train"]["shards"][0]["arrays"]["states"]["file"]
+    path = root / relative
+    data = bytearray(path.read_bytes())
+    data[-1] ^= 0xFF
+    path.write_bytes(bytes(data))
+    with pytest.raises(CacheContractError):
+        load_prepared_cache(root)
+    cache = load_prepared_cache(root, verify_checksums=False)
+    assert cache.cache_id == "synthetic-cache-id"
+
+
+def _states_float64(root, manifest):
+    shard = manifest["splits"]["train"]["shards"][0]
+    states = np.load(root / shard["arrays"]["states"]["file"])
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name="states",
+        values=states.astype(np.float64),
+    )
+
+
+def _target_out_of_range(root, manifest):
+    shard = manifest["splits"]["train"]["shards"][0]
+    targets = np.load(root / shard["arrays"]["targets"]["file"])
+    targets[0] = 999
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name="targets",
+        values=targets,
+    )
+
+
+def _empty_offset_span(root, manifest):
+    shard = manifest["splits"]["train"]["shards"][0]
+    offsets = np.load(root / shard["arrays"]["candidate_offsets"]["file"])
+    offsets[1] = offsets[0]
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name="candidate_offsets",
+        values=offsets,
+    )
+
+
+def _kind_mismatch(root, manifest):
+    shard = manifest["splits"]["train"]["shards"][0]
+    kinds = np.load(root / shard["arrays"]["target_kinds"]["file"])
+    kinds[0] = (int(kinds[0]) + 1) % 9
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name="target_kinds",
+        values=kinds,
+    )
+
+
+def _fortran_state_array(root, manifest):
+    shard = manifest["splits"]["train"]["shards"][0]
+    states = np.load(root / shard["arrays"]["states"]["file"])
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name="states",
+        values=np.asfortranarray(states),
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        _states_float64,
+        _target_out_of_range,
+        _empty_offset_span,
+        _kind_mismatch,
+        _fortran_state_array,
+    ],
+    ids=[
+        "states-dtype",
+        "target-range",
+        "empty-offset",
+        "kind-mismatch",
+        "fortran-order",
+    ],
+)
+def test_rejects_array_layout_and_target_errors(fresh_cache, mutate):
+    root = fresh_cache.root
+    mutate(root, read_manifest(root))
+    with pytest.raises(CacheContractError):
+        load_prepared_cache(root)
+
+
+def _bump_split_decisions(root, manifest):
+    manifest["splits"]["train"]["counts"]["decisions"] += 1
+    write_manifest(root, manifest)
+
+
+def _duplicate_episode_seed(root, manifest):
     first_seed = np.load(
         root / manifest["splits"]["train"]["shards"][0]["arrays"]["episode_seeds"]["file"]
     )[0]
     second = manifest["splits"]["train"]["shards"][1]
     seeds = np.load(root / second["arrays"]["episode_seeds"]["file"])
     seeds[0] = first_seed
-    _rewrite_array(root, manifest, "train", 1, "episode_seeds", seeds)
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=1,
+        name="episode_seeds",
+        values=seeds,
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [_bump_split_decisions, _duplicate_episode_seed],
+    ids=["split-decisions", "duplicate-episode"],
+)
+def test_rejects_bad_counts_and_episode_metadata(fresh_cache, mutate):
+    root = fresh_cache.root
+    mutate(root, read_manifest(root))
     with pytest.raises(CacheContractError):
         load_prepared_cache(root)
 
 
-def test_rejects_non_contiguous_episode_seed_blocks(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_non_contiguous_episode_seed_blocks(fresh_cache):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     shard = manifest["splits"]["train"]["shards"][0]
-    seeds = np.load(tmp_path / shard["arrays"]["episode_seeds"]["file"])
+    seeds = np.load(root / shard["arrays"]["episode_seeds"]["file"])
     assert seeds[0] == seeds[1] and seeds[2] == seeds[3]
     first, second = seeds[0], seeds[2]
     seeds[1], seeds[2] = second, first
-    _rewrite_array(tmp_path, manifest, "train", 0, "episode_seeds", seeds)
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name="episode_seeds",
+        values=seeds,
+    )
     with pytest.raises(CacheContractError, match="non-contiguous"):
-        load_prepared_cache(tmp_path)
-
-
-def test_rejects_out_of_range_metadata_values(tmp_path):
-    root = tmp_path / "stage-range"
-    _cache(root)
-    manifest = read_manifest(root)
-    shard = manifest["splits"]["train"]["shards"][0]
-    stages = np.load(root / shard["arrays"]["stages"]["file"])
-    stages[0] = 5
-    _rewrite_array(root, manifest, "train", 0, "stages", stages)
-    with pytest.raises(CacheContractError, match="stages"):
         load_prepared_cache(root)
 
-    root = tmp_path / "seat-range"
-    _cache(root)
-    manifest = read_manifest(root)
-    shard = manifest["splits"]["train"]["shards"][0]
-    seats = np.load(root / shard["arrays"]["actor_seats"]["file"])
-    seats[0] = 4
-    _rewrite_array(root, manifest, "train", 0, "actor_seats", seats)
-    with pytest.raises(CacheContractError, match="actor_seats"):
-        load_prepared_cache(root)
 
-    root = tmp_path / "kind-range"
-    _cache(root)
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [("stages", 5), ("actor_seats", 4), ("target_kinds", 9)],
+)
+def test_rejects_out_of_range_metadata_values(fresh_cache, name, value):
+    root = fresh_cache.root
     manifest = read_manifest(root)
     shard = manifest["splits"]["train"]["shards"][0]
-    kinds = np.load(root / shard["arrays"]["target_kinds"]["file"])
-    kinds[0] = 9
-    _rewrite_array(root, manifest, "train", 0, "target_kinds", kinds)
-    with pytest.raises(CacheContractError, match="target_kinds"):
+    values = np.load(root / shard["arrays"][name]["file"])
+    values[0] = value
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name=name,
+        values=values,
+    )
+    with pytest.raises(CacheContractError, match=name):
         load_prepared_cache(root)
 
 
@@ -481,13 +512,13 @@ def test_root_manifest_must_be_a_json_object(tmp_path, payload):
     ["preparation_format_version", "preparation_version", "encoding_version"],
 )
 @pytest.mark.parametrize("value", [True, 1.0])
-def test_dataset_versions_reject_booleans_and_floats(tmp_path, field, value):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_dataset_versions_reject_booleans_and_floats(fresh_cache, field, value):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     manifest[field] = value
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError, match=field):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
 @pytest.mark.parametrize(
@@ -502,14 +533,14 @@ def test_dataset_versions_reject_booleans_and_floats(tmp_path, field, value):
         "target_kinds",
     ],
 )
-def test_rejects_metadata_descriptor_shape_mismatch(tmp_path, name):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_metadata_descriptor_shape_mismatch(fresh_cache, name):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     descriptor = manifest["splits"]["train"]["shards"][0]["arrays"][name]
     descriptor["shape"] = [int(descriptor["shape"][0]) + 1]
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError, match="declares shape"):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
 @pytest.mark.parametrize(
@@ -529,48 +560,73 @@ def test_rejects_metadata_descriptor_shape_mismatch(tmp_path, name):
         ("unexpected", 1),
     ],
 )
-def test_rejects_invalid_captured_corpus_manifest(tmp_path, field, value):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_invalid_captured_corpus_manifest(fresh_cache, field, value):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     manifest["corpus_manifest"][field] = value
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
 @pytest.mark.parametrize(
     "field",
     ["format_version", "source_revision", "seed_start", "decision_limit", "shards"],
 )
-def test_rejects_missing_captured_corpus_keys(tmp_path, field):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_missing_captured_corpus_keys(fresh_cache, field):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     del manifest["corpus_manifest"][field]
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError, match="invalid keys"):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
-def test_rejects_captured_corpus_shard_protocol_errors(tmp_path):
-    cases = [
-        lambda corpus: corpus["shards"][1].__setitem__(
-            "first_seed", f"{int(corpus['shards'][1]['first_seed'], 16) + 1:016x}"
-        ),
-        lambda corpus: corpus["shards"][0].__setitem__(
-            "games", corpus["shard_games"] + 1
-        ),
-        lambda corpus: corpus["shards"][0].__setitem__("decisions", 0),
-        lambda corpus: corpus["shards"][0].__setitem__("sha256", "not-a-hash"),
-        lambda corpus: corpus["shards"][0].__setitem__("unexpected", 1),
-    ]
-    for index, mutate in enumerate(cases):
-        root = tmp_path / f"case-{index}"
-        _cache(root)
-        manifest = read_manifest(root)
-        mutate(manifest["corpus_manifest"])
-        write_manifest(root, manifest)
-        with pytest.raises(CacheContractError):
-            load_prepared_cache(root)
+def _shift_second_corpus_shard(corpus):
+    shard = corpus["shards"][1]
+    shard["first_seed"] = f"{int(shard['first_seed'], 16) + 1:016x}"
+
+
+def _corpus_shard_games(corpus):
+    corpus["shards"][0]["games"] = corpus["shard_games"] + 1
+
+
+def _corpus_shard_decisions(corpus):
+    corpus["shards"][0]["decisions"] = 0
+
+
+def _corpus_shard_hash(corpus):
+    corpus["shards"][0]["sha256"] = "not-a-hash"
+
+
+def _corpus_shard_extra_key(corpus):
+    corpus["shards"][0]["unexpected"] = 1
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        _shift_second_corpus_shard,
+        _corpus_shard_games,
+        _corpus_shard_decisions,
+        _corpus_shard_hash,
+        _corpus_shard_extra_key,
+    ],
+    ids=[
+        "shard-order",
+        "shard-games",
+        "shard-decisions",
+        "shard-hash",
+        "shard-extra-key",
+    ],
+)
+def test_rejects_captured_corpus_shard_protocol_errors(fresh_cache, mutate):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
+    mutate(manifest["corpus_manifest"])
+    write_manifest(root, manifest)
+    with pytest.raises(CacheContractError):
+        load_prepared_cache(root)
 
 
 @pytest.mark.parametrize(
@@ -586,46 +642,54 @@ def test_rejects_captured_corpus_shard_protocol_errors(tmp_path):
             }
         ),
     ],
+    ids=["episodes", "decisions-and-eligible"],
 )
 def test_rejects_dataset_counts_that_disagree_with_captured_totals(
-    tmp_path, mutate
+    fresh_cache, mutate
 ):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     mutate(manifest)
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError, match="captured"):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
-def test_rejects_episode_seeds_outside_captured_range(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_episode_seeds_outside_captured_range(fresh_cache):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     corpus = manifest["corpus_manifest"]
     shift = 1_000_000
     corpus["seed_start"] = f"{int(corpus['seed_start'], 16) + shift:016x}"
     for shard in corpus["shards"]:
         shard["first_seed"] = f"{int(shard['first_seed'], 16) + shift:016x}"
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError, match="outside the captured"):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
-def test_rejects_episode_seeds_assigned_to_the_wrong_split(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_episode_seeds_assigned_to_the_wrong_split(fresh_cache):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     validation_shard = manifest["splits"]["validation"]["shards"][0]
     validation_seed = int(
-        np.load(tmp_path / validation_shard["arrays"]["episode_seeds"]["file"])[0]
+        np.load(root / validation_shard["arrays"]["episode_seeds"]["file"])[0]
     )
     seeds = np.load(
-        tmp_path
+        root
         / manifest["splits"]["train"]["shards"][0]["arrays"]["episode_seeds"]["file"]
     )
     seeds[:2] = np.uint64(validation_seed)
-    _rewrite_array(tmp_path, manifest, "train", 0, "episode_seeds", seeds)
+    rewrite_cache_array(
+        root,
+        manifest,
+        split="train",
+        shard_index=0,
+        name="episode_seeds",
+        values=seeds,
+    )
     with pytest.raises(CacheContractError, match="belongs to validation"):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
 @pytest.mark.parametrize(
@@ -636,19 +700,21 @@ def test_rejects_episode_seeds_assigned_to_the_wrong_split(tmp_path):
         ("split_algorithm", "other-split"),
     ],
 )
-def test_rejects_collection_provenance_identity_mismatch(tmp_path, field, value):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_collection_provenance_identity_mismatch(
+    fresh_cache, field, value
+):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     manifest["provenance"]["collection"][field] = value
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError, match="collection provenance"):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)
 
 
-def test_rejects_provenance_without_required_sections(tmp_path):
-    _cache(tmp_path)
-    manifest = read_manifest(tmp_path)
+def test_rejects_provenance_without_required_sections(fresh_cache):
+    root = fresh_cache.root
+    manifest = read_manifest(root)
     del manifest["provenance"]["preparation"]
-    write_manifest(tmp_path, manifest)
+    write_manifest(root, manifest)
     with pytest.raises(CacheContractError, match="provenance"):
-        load_prepared_cache(tmp_path)
+        load_prepared_cache(root)

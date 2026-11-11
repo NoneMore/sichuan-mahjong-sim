@@ -29,124 +29,8 @@ use crate::policy::cache::{
 use crate::seat::Seat;
 use crate::tile::{Suit, Tile, TILE_KINDS};
 
-const RANKS: usize = 9;
-
-/// Nine triplets followed by seven sequences, in a fixed order.
-fn set_candidates() -> Vec<[u8; RANKS]> {
-    let mut sets = Vec::new();
-    for rank in 0..RANKS {
-        let mut triplet = [0u8; RANKS];
-        triplet[rank] = 3;
-        sets.push(triplet);
-    }
-    for start in 0..=6 {
-        let mut sequence = [0u8; RANKS];
-        sequence[start..start + 3].fill(1);
-        sets.push(sequence);
-    }
-    sets
-}
-
-/// Visits every concrete multiset of at most `target_sets` sets.
-fn walk_targets(
-    start: usize,
-    placed: usize,
-    target_sets: usize,
-    sets: &[[u8; RANKS]],
-    capacity: &[u8; RANKS],
-    target: &mut [u8; RANKS],
-    visit: &mut impl FnMut(&[u8; RANKS], usize),
-) {
-    visit(target, placed);
-    if placed == target_sets {
-        return;
-    }
-    for index in start..sets.len() {
-        let candidate = &sets[index];
-        if (0..RANKS).any(|rank| target[rank] + candidate[rank] > capacity[rank]) {
-            continue;
-        }
-        for rank in 0..RANKS {
-            target[rank] += candidate[rank];
-        }
-        walk_targets(
-            index,
-            placed + 1,
-            target_sets,
-            sets,
-            capacity,
-            target,
-            visit,
-        );
-        for rank in 0..RANKS {
-            target[rank] -= candidate[rank];
-        }
-    }
-}
-
-fn merge(slot: &mut (u8, u32), cost: u8, mask: u32) {
-    if cost < slot.0 {
-        *slot = (cost, mask);
-    } else if cost == slot.0 {
-        slot.1 |= mask;
-    }
-}
-
-/// Definition-level cost, needed mask, and surplus mask of one target.
-fn score_target(hand: &[u8; RANKS], target: &[u8; RANKS]) -> (u8, u32, u32) {
-    let mut cost = 0u8;
-    let mut needed = 0u32;
-    let mut surplus = 0u32;
-    for rank in 0..RANKS {
-        let held = hand[rank];
-        let want = target[rank];
-        cost = cost.saturating_add(want.saturating_sub(held));
-        if want > held {
-            needed |= 1 << rank;
-        }
-        if want < held {
-            surplus |= 1 << rank;
-        }
-    }
-    (cost, needed, surplus)
-}
-
-/// Concrete-target `(needed, surplus)` tables for one suit.
-fn reference_suit_masks(
-    hand: &[u8; RANKS],
-    capacity: &[u8; RANKS],
-    target_sets: usize,
-) -> (MaskTable, MaskTable) {
-    let sets = set_candidates();
-    let mut needed = [[(INF, 0u32); 2]; 5];
-    let mut surplus = [[(INF, 0u32); 2]; 5];
-    let mut target = [0u8; RANKS];
-    walk_targets(
-        0,
-        0,
-        target_sets,
-        &sets,
-        capacity,
-        &mut target,
-        &mut |target, placed| {
-            for pair_rank in 0..=RANKS {
-                let mut counted = *target;
-                let mut pair = 0;
-                if pair_rank < RANKS {
-                    if counted[pair_rank] + 2 > capacity[pair_rank] {
-                        continue;
-                    }
-                    counted[pair_rank] += 2;
-                    pair = 1;
-                }
-                let (cost, needed_mask, surplus_mask) = score_target(hand, &counted);
-                merge(&mut needed[placed][pair], cost, needed_mask);
-                merge(&mut surplus[placed][pair], cost, surplus_mask);
-            }
-        },
-    );
-    (needed, surplus)
-}
+use super::test_support::targets::{reference_mask_tables, RANKS};
+use super::test_support::{suit_hand as hand_with, tile};
 
 /// One per-suit cache key with a readable label.
 struct SuitCase {
@@ -266,7 +150,7 @@ fn cached_tables_match_the_uncached_dp_and_the_concrete_oracle() {
     let cache = HeuristicCache::new(64 * MINIMUM_BUDGET_BYTES).expect("valid budget");
     for case in suit_cases() {
         let (expected_needed, expected_surplus) =
-            reference_suit_masks(&case.hand, &case.capacity, case.target_sets);
+            reference_mask_tables(&case.hand, &case.capacity, case.target_sets);
         assert_well_formed(&expected_needed, case.label);
         assert_well_formed(&expected_surplus, case.label);
         for (sets, row) in expected_needed.iter().enumerate() {
@@ -452,20 +336,6 @@ fn a_full_single_group_stays_exact_under_collisions_and_eviction() {
         let table = lookup(&cache, case, MaskKind::Needed, COMPLETE_BOUND);
         assert_eq!(&table, expected, "{}: exact after eviction", case.label);
     }
-}
-
-fn tile(suit: Suit, rank: u8) -> Tile {
-    Tile::from_suit_rank(suit, rank).expect("rank in range")
-}
-
-fn hand_with(wan: &[u8], tong: &[u8], tiao: &[u8]) -> Hand {
-    let mut hand = Hand::new();
-    for (suit, ranks) in [(Suit::Wan, wan), (Suit::Tong, tong), (Suit::Tiao, tiao)] {
-        for &rank in ranks {
-            hand.add(tile(suit, rank)).expect("at most four copies");
-        }
-    }
-    hand
 }
 
 /// One analysis fixture: a full concealed hand, fixed melds, and a miss suit.

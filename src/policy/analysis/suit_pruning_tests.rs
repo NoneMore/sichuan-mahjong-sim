@@ -13,7 +13,7 @@
 //! - [`original_suit_table`] is the exact pre-change form: every candidate
 //!   `(sequences, triplets, pair)` inside the set budget is enumerated first and
 //!   then rejected by the `pair_used` and per-rank capacity checks.
-//! - [`enumerated_suit_table`] ignores the decomposition dynamic program
+//! - [`reference_cost_table`] ignores the decomposition dynamic program
 //!   entirely and enumerates concrete per-suit targets (multisets of triplets
 //!   and sequences plus an optional pair) whose rank counts fit the capacity.
 //!
@@ -24,7 +24,8 @@
 
 use super::*;
 
-const RANKS: usize = 9;
+use super::test_support::targets::{reference_cost_table, RANKS};
+use super::test_support::Lcg;
 
 /// Capacity patterns for one suit.
 ///
@@ -152,101 +153,16 @@ fn original_suit_table(
     table
 }
 
-/// All concrete per-suit sets: nine triplets and seven sequences.
-fn candidate_sets() -> Vec<[u8; RANKS]> {
-    let mut sets = Vec::new();
-    for rank in 0..RANKS {
-        let mut triplet = [0u8; RANKS];
-        triplet[rank] = 3;
-        sets.push(triplet);
-    }
-    for start in 0..=6 {
-        let mut sequence = [0u8; RANKS];
-        sequence[start..start + 3].fill(1);
-        sets.push(sequence);
-    }
-    sets
-}
-
-/// Enumerates legal set multisets of exactly `remaining` sets.
-fn walk_targets(
-    start: usize,
-    remaining: usize,
-    sets: &[[u8; RANKS]],
-    capacity: &[u8; RANKS],
-    target: &mut [u8; RANKS],
-    visit: &mut impl FnMut(&[u8; RANKS]),
-) {
-    if remaining == 0 {
-        visit(target);
-        return;
-    }
-    for index in start..sets.len() {
-        let candidate = &sets[index];
-        if (0..RANKS).any(|rank| target[rank] + candidate[rank] > capacity[rank]) {
-            continue;
-        }
-        for rank in 0..RANKS {
-            target[rank] += candidate[rank];
-        }
-        walk_targets(index, remaining - 1, sets, capacity, target, visit);
-        for rank in 0..RANKS {
-            target[rank] -= candidate[rank];
-        }
-    }
-}
-
-fn target_cost(hand: &[u8; RANKS], target: &[u8; RANKS]) -> u8 {
-    let mut cost = 0u8;
-    for rank in 0..RANKS {
-        cost += target[rank].saturating_sub(hand[rank]);
-    }
-    cost
-}
-
-/// Independent reference: enumerate concrete per-suit targets directly.
-///
-/// Entry `[sets][pair]` is the cheapest deficit over targets with exactly
-/// `sets` sets and `pair` pairs, which is exactly what `suit_table` returns.
-fn enumerated_suit_table(
-    hand: &[u8; RANKS],
-    capacity: &[u8; RANKS],
-    target_sets: usize,
-) -> SuitTable {
-    let sets = candidate_sets();
-    let mut table = [[INF; 2]; 5];
-    let mut target = [0u8; RANKS];
-
-    for (chosen, entry) in table.iter_mut().enumerate().take(target_sets + 1) {
-        walk_targets(0, chosen, &sets, capacity, &mut target, &mut |target| {
-            entry[0] = entry[0].min(target_cost(hand, target));
-            for rank in 0..RANKS {
-                if target[rank] + 2 > capacity[rank] {
-                    continue;
-                }
-                let mut paired = *target;
-                paired[rank] += 2;
-                entry[1] = entry[1].min(target_cost(hand, &paired));
-            }
-        });
-    }
-
-    table
-}
-
 /// Deterministic pseudo-random hands (LCG, no test-only dependencies).
 ///
 /// Each hand holds at most thirteen tiles with at most four copies per rank.
 fn generated_hands(count: usize) -> Vec<[u8; RANKS]> {
-    let mut state = 0x2545_F491_4F6C_DD1Du64;
+    let mut rng = Lcg::new(0x2545_F491_4F6C_DD1D);
     let mut hands = Vec::new();
     for _ in 0..count {
         let mut hand = [0u8; RANKS];
         for _ in 0..13 {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            let rank = ((state >> 33) % RANKS as u64) as usize;
+            let rank = rng.below(RANKS);
             if hand[rank] < 4 {
                 hand[rank] += 1;
             }
@@ -298,21 +214,15 @@ fn generated_hands_match_the_original_enumeration() {
 /// values (2 and 3) that no single baseline Peng or Kong can leave, as a
 /// robustness sweep beyond the physically reachable fixed patterns.
 fn generated_capacity_cases(count: usize) -> Vec<([u8; RANKS], [u8; RANKS])> {
-    let mut state = 0x0BAD_5EED_D15E_A5E5u64;
-    let mut next = |bound: u64| -> u64 {
-        state = state
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        (state >> 33) % bound
-    };
+    let mut rng = Lcg::new(0x0BAD_5EED_D15E_A5E5);
 
     let mut cases = Vec::new();
     for _ in 0..count {
         let mut hand = [0u8; RANKS];
         let mut capacity = [0u8; RANKS];
         for (held, cap) in hand.iter_mut().zip(capacity.iter_mut()) {
-            *held = next(5) as u8;
-            *cap = next(5) as u8;
+            *held = rng.below(5) as u8;
+            *cap = rng.below(5) as u8;
         }
         // Keep at most fourteen concealed tiles, as a real suit can hold.
         let mut total: usize = hand.iter().map(|&held| held as usize).sum();
@@ -332,7 +242,7 @@ fn generated_capacity_cases_match_both_references() {
     for (hand, capacity) in generated_capacity_cases(40) {
         for target_sets in 0..=4 {
             let original = original_suit_table(&hand, &capacity, target_sets);
-            let enumerated = enumerated_suit_table(&hand, &capacity, target_sets);
+            let enumerated = reference_cost_table(&hand, &capacity, target_sets);
             assert_eq!(
                 enumerated,
                 original,
@@ -362,7 +272,7 @@ fn every_table_entry_matches_enumerated_targets() {
     for (hand_name, hand) in representative_hands() {
         for (capacity_name, capacity) in capacity_patterns() {
             for target_sets in 0..=4 {
-                let expected = enumerated_suit_table(&hand, &capacity, target_sets);
+                let expected = reference_cost_table(&hand, &capacity, target_sets);
                 let actual = suit_table(&hand, &capacity, target_sets);
                 assert_eq!(
                     actual,
@@ -381,7 +291,7 @@ fn generated_hands_match_enumerated_targets() {
     for hand in generated_hands(24) {
         for (capacity_name, capacity) in capacity_patterns() {
             for target_sets in 0..=4 {
-                let expected = enumerated_suit_table(&hand, &capacity, target_sets);
+                let expected = reference_cost_table(&hand, &capacity, target_sets);
                 let actual = suit_table(&hand, &capacity, target_sets);
                 assert_eq!(
                     actual,
@@ -448,7 +358,7 @@ fn pair_and_triplet_bounds_agree_at_the_same_rank() {
     assert_eq!(table[0][1], 2, "a pair needs two copies");
     assert_eq!(
         table,
-        enumerated_suit_table(&hand, &capacity, 2),
+        reference_cost_table(&hand, &capacity, 2),
         "the triplet break must not hide the pair transitions"
     );
 }
@@ -464,20 +374,20 @@ fn sequence_edges_follow_the_rank_window() {
     let low_blocked = [0u8, 4, 4, 4, 4, 4, 4, 4, 4];
     let table = suit_table(&hand, &low_blocked, 1);
     assert_eq!(table[1][0], 3);
-    assert_eq!(table, enumerated_suit_table(&hand, &low_blocked, 1));
+    assert_eq!(table, reference_cost_table(&hand, &low_blocked, 1));
 
     // Ranks 7..=9 exhausted: a sequence of three consecutive ranks may only
     // start at 1..=4.
     let high_blocked = [4, 4, 4, 4, 4, 4, 0, 0, 0];
     let table = suit_table(&hand, &high_blocked, 1);
     assert_eq!(table[1][0], 3);
-    assert_eq!(table, enumerated_suit_table(&hand, &high_blocked, 1));
+    assert_eq!(table, reference_cost_table(&hand, &high_blocked, 1));
 
     // Isolated high-rank capacity cannot start a sequence, so only triplets fit.
     let only_rank_nine = [0u8, 0, 0, 0, 0, 0, 0, 0, 4];
     let table = suit_table(&hand, &only_rank_nine, 1);
     assert_eq!(table[1][0], 3);
-    assert_eq!(table, enumerated_suit_table(&hand, &only_rank_nine, 1));
+    assert_eq!(table, reference_cost_table(&hand, &only_rank_nine, 1));
 
     // A pung leaves one copy at rank 5. That still admits a single sequence
     // through the rank, but no pair and no triplet there. The hand holds two
@@ -490,7 +400,7 @@ fn sequence_edges_follow_the_rank_window() {
     assert_eq!(table[0][1], 2, "the pung blocks the rank-5 pair");
     assert_eq!(
         table,
-        enumerated_suit_table(&two_rank_fives, &pung_rank_five, 1)
+        reference_cost_table(&two_rank_fives, &pung_rank_five, 1)
     );
 
     // Restoring capacity admits the pair for free and the triplet for one tile.

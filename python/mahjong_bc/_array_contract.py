@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ._array_spec import ARRAY_SPECS
 from .constants import (
     ACTION_KIND_COUNT,
     CANDIDATE_WIDTH,
@@ -57,17 +58,7 @@ class PackedArrayLayout:
 def expected_shapes(decisions: int, candidates: int) -> dict[str, tuple[int, ...]]:
     """Return the wire-array shapes implied by decision and candidate counts."""
 
-    return {
-        "states": (decisions, STATE_WIDTH),
-        "candidate_features": (candidates, CANDIDATE_WIDTH),
-        "candidate_offsets": (decisions + 1,),
-        "targets": (decisions,),
-        "episode_seeds": (decisions,),
-        "decision_indices": (decisions,),
-        "actor_seats": (decisions,),
-        "stages": (decisions,),
-        "target_kinds": (decisions,),
-    }
+    return {spec.name: spec.shape(decisions, candidates) for spec in ARRAY_SPECS}
 
 
 def _require_array(value: object, name: str) -> np.ndarray:

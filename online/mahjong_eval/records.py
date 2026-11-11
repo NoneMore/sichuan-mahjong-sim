@@ -1331,35 +1331,64 @@ def _sample_sd(values: Sequence[float]) -> float | None:
     return statistics.stdev(values)
 
 
-def _seed_block_summary(
-    seed: int, records: Sequence[TerminalRecord]
-) -> dict[str, Any]:
-    neural_scores = [
-        record.scores[seat]
-        for record in records
-        for seat in record.neural_seats
-    ]
-    game_neural_means = [
-        statistics.fmean(record.scores[seat] for seat in record.neural_seats)
-        for record in records
-    ]
-    game_deltas = [
-        statistics.fmean(record.scores[seat] for seat in record.neural_seats)
-        - statistics.fmean(
+@dataclass(frozen=True)
+class _BlockScores:
+    """Per-seat and per-game scores in deterministic record order."""
+
+    neural_scores: tuple[int, ...]
+    heuristic_scores: tuple[int, ...]
+    neural_game_means: tuple[float, ...]
+    game_deltas: tuple[float, ...]
+
+
+def _score_block(records: Sequence[TerminalRecord]) -> _BlockScores:
+    """Compute the score values shared by block and overall summaries.
+
+    Keep this comprehension order stable: the published summary depends on the
+    resulting floating-point aggregation order.
+    """
+
+    return _BlockScores(
+        neural_scores=tuple(
             record.scores[seat]
+            for record in records
+            for seat in record.neural_seats
+        ),
+        heuristic_scores=tuple(
+            record.scores[seat]
+            for record in records
             for seat in range(SEAT_COUNT)
             if seat not in record.neural_seats
-        )
-        for record in records
-    ]
+        ),
+        neural_game_means=tuple(
+            statistics.fmean(record.scores[seat] for seat in record.neural_seats)
+            for record in records
+        ),
+        game_deltas=tuple(
+            statistics.fmean(record.scores[seat] for seat in record.neural_seats)
+            - statistics.fmean(
+                record.scores[seat]
+                for seat in range(SEAT_COUNT)
+                if seat not in record.neural_seats
+            )
+            for record in records
+        ),
+    )
+
+
+def _seed_block_summary(
+    seed: int,
+    records: Sequence[TerminalRecord],
+    scores: _BlockScores,
+) -> dict[str, Any]:
     return {
         "seed": seed,
         "games": len(records),
-        "neural_mean": statistics.fmean(neural_scores),
-        "delta": statistics.fmean(game_deltas),
+        "neural_mean": statistics.fmean(scores.neural_scores),
+        "delta": statistics.fmean(scores.game_deltas),
         "spread": {
-            "neural_seat_score_sd": _sample_sd(neural_scores),
-            "neural_game_mean_sd": _sample_sd(game_neural_means),
+            "neural_seat_score_sd": _sample_sd(scores.neural_scores),
+            "neural_game_mean_sd": _sample_sd(scores.neural_game_means),
         },
         "finish_reasons": _finish_counts(records),
         "decision_counts": _decision_counts(records),
@@ -1392,37 +1421,14 @@ def compute_summary(
 
     for seed in plan.seeds:
         block = by_seed[seed]
-        block_neural = [
-            record.scores[seat]
-            for record in block
-            for seat in record.neural_seats
-        ]
-        block_heuristic = [
-            record.scores[seat]
-            for record in block
-            for seat in range(SEAT_COUNT)
-            if seat not in record.neural_seats
-        ]
-        block_neural_means = [
-            statistics.fmean(record.scores[seat] for seat in record.neural_seats)
-            for record in block
-        ]
-        block_deltas = [
-            statistics.fmean(record.scores[seat] for seat in record.neural_seats)
-            - statistics.fmean(
-                record.scores[seat]
-                for seat in range(SEAT_COUNT)
-                if seat not in record.neural_seats
-            )
-            for record in block
-        ]
-        neural_scores.extend(block_neural)
-        heuristic_scores.extend(block_heuristic)
-        game_neural_means.extend(block_neural_means)
-        game_deltas.extend(block_deltas)
-        seed_neural_means.append(statistics.fmean(block_neural))
-        seed_deltas.append(statistics.fmean(block_deltas))
-        seed_blocks.append(_seed_block_summary(seed, block))
+        block_scores = _score_block(block)
+        neural_scores.extend(block_scores.neural_scores)
+        heuristic_scores.extend(block_scores.heuristic_scores)
+        game_neural_means.extend(block_scores.neural_game_means)
+        game_deltas.extend(block_scores.game_deltas)
+        seed_neural_means.append(statistics.fmean(block_scores.neural_scores))
+        seed_deltas.append(statistics.fmean(block_scores.game_deltas))
+        seed_blocks.append(_seed_block_summary(seed, block, block_scores))
 
     neural_mean = statistics.fmean(neural_scores)
     heuristic_mean = statistics.fmean(heuristic_scores)

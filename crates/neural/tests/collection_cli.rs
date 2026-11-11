@@ -3,9 +3,13 @@ mod support;
 
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::process::{Command, Stdio};
+use std::path::Path;
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
-use support::{collect, revision, root, REV_A};
+use support::{collect, collect_one, revision, root, REV_A};
 
 use sichuan_mahjong_neural::collection::{
     build_info, manifest_path, read_corpus, shard_path, CollectionError, Corpus, Seed,
@@ -13,6 +17,68 @@ use sichuan_mahjong_neural::collection::{
 };
 
 const EXE: &str = env!("CARGO_BIN_EXE_bc-collect");
+
+struct LockProcess(Child);
+
+impl LockProcess {
+    fn acquire(root: &Path) -> Self {
+        let mut process = Self(
+            Command::new(EXE)
+                .args(["lock", "--root"])
+                .arg(root)
+                .args(["--hold-ms", "60000"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("start the real CLI lock holder"),
+        );
+        let stdout = process.0.stdout.take().expect("piped lock-holder stdout");
+        let (ready, observed) = mpsc::channel();
+        thread::spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            let mut line = String::new();
+            let result = reader.read_line(&mut line).map(|_| line);
+            let _ = ready.send(result);
+        });
+        let line = observed
+            .recv_timeout(Duration::from_secs(10))
+            .expect("CLI lock holder did not signal readiness within 10 seconds")
+            .expect("read the lock-holder readiness message");
+        assert_eq!(line.trim(), "locked", "CLI did not acquire the lock");
+        process
+    }
+
+    fn terminate(&mut self) {
+        self.0.kill().expect("terminate the live CLI lock holder");
+        let status = self.0.wait().expect("reap the terminated CLI lock holder");
+        assert!(
+            !status.success(),
+            "killed CLI unexpectedly succeeded: {status}"
+        );
+    }
+}
+
+impl Drop for LockProcess {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn assert_released_and_appendable(root: &Path, source: &SourceRevision) {
+    let mut corpus = Corpus::open_append(root, source).unwrap();
+    corpus.append_with_cache(1, 0).unwrap();
+    assert_eq!(corpus.manifest().total_games(), 2);
+    assert_eq!(
+        read_corpus(root)
+            .unwrap()
+            .episodes
+            .iter()
+            .map(|episode| episode.id.seed)
+            .collect::<Vec<_>>(),
+        vec![Seed::from_u64(0), Seed::from_u64(1)]
+    );
+}
 
 #[test]
 fn report_and_verify_validate_a_corpus() {
@@ -106,25 +172,31 @@ fn compiled_provenance_is_enforced_or_clean_collection_works() {
 }
 
 #[test]
-fn subprocess_lock_blocks_second_committer_and_releases_on_exit() {
+fn subprocess_lock_releases_on_normal_exit() {
     let temp = root();
     let source = revision(REV_A);
-    collect(temp.path(), &source, 0, 1, 1, 10_000);
+    collect_one(temp.path(), &source);
     let before = fs::read(manifest_path(temp.path())).unwrap();
 
-    let mut child = Command::new(EXE)
+    let output = Command::new(EXE)
         .args(["lock", "--root"])
         .arg(temp.path())
-        .args(["--hold-ms", "3000"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
+        .args(["--hold-ms", "0"])
+        .output()
         .unwrap();
-    let stdout = child.stdout.take().unwrap();
-    let mut reader = BufReader::new(stdout);
-    let mut line = String::new();
-    reader.read_line(&mut line).unwrap();
-    assert_eq!(line.trim(), "locked", "child did not acquire the lock");
+    assert!(output.status.success(), "{output:?}");
+    assert_eq!(String::from_utf8(output.stdout).unwrap().trim(), "locked");
+    assert_eq!(fs::read(manifest_path(temp.path())).unwrap(), before);
+    assert_released_and_appendable(temp.path(), &source);
+}
+
+#[test]
+fn subprocess_lock_blocks_second_committer_and_releases_on_kill() {
+    let temp = root();
+    let source = revision(REV_A);
+    collect_one(temp.path(), &source);
+    let before = fs::read(manifest_path(temp.path())).unwrap();
+    let mut child = LockProcess::acquire(temp.path());
 
     let error = match Corpus::open_append(temp.path(), &source) {
         Ok(_) => panic!("second committer acquired a held lock"),
@@ -133,28 +205,16 @@ fn subprocess_lock_blocks_second_committer_and_releases_on_exit() {
     assert!(matches!(error, CollectionError::CorpusBusy { .. }));
     assert_eq!(fs::read(manifest_path(temp.path())).unwrap(), before);
 
-    let status = child.wait().unwrap();
-    assert!(status.success(), "{status:?}");
-
-    let mut corpus = Corpus::open_append(temp.path(), &source).unwrap();
-    corpus.append_with_cache(1, 0).unwrap();
-    assert_eq!(corpus.manifest().total_games(), 2);
-    assert_eq!(
-        read_corpus(temp.path())
-            .unwrap()
-            .episodes
-            .iter()
-            .map(|episode| episode.id.seed)
-            .collect::<Vec<_>>(),
-        vec![Seed::from_u64(0), Seed::from_u64(1)]
-    );
+    child.terminate();
+    assert_eq!(fs::read(manifest_path(temp.path())).unwrap(), before);
+    assert_released_and_appendable(temp.path(), &source);
 }
 
 #[test]
 fn command_errors_are_nonzero_and_do_not_touch_inputs() {
     let temp = root();
     let source = revision(REV_A);
-    collect(temp.path(), &source, 0, 1, 1, 10_000);
+    collect_one(temp.path(), &source);
     let before = fs::read(manifest_path(temp.path())).unwrap();
 
     let output = Command::new(EXE)

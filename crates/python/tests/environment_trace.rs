@@ -9,16 +9,14 @@
 //! Regenerate deliberately with:
 //! `UPDATE_ENVIRONMENT_TRACE_FIXTURE=1 cargo test --manifest-path crates/python/Cargo.toml --test environment_trace`
 
-use std::fmt::Write as _;
-use std::fs;
-use std::path::PathBuf;
+mod support;
 
 use serde_json::{json, Value};
 use sichuan_mahjong_neural::encoding::{
     canonicalize, encode, ACTION_WIDTH, ENCODING_VERSION, STATE_WIDTH,
 };
 use sichuan_mahjong_sim::runner::DEFAULT_DECISION_LIMIT;
-use sichuan_mahjong_sim::{Action, Decision, DecisionStage, EndReason, Game, LegalActions, Suit};
+use sichuan_mahjong_sim::{Action, Decision, DecisionStage, Game, LegalActions, Suit};
 
 /// Aggressive claim/kong script whose fixed trajectory reaches an
 /// `AddedKongResponse` at decision 45. The seed is the long-term regression
@@ -26,40 +24,6 @@ use sichuan_mahjong_sim::{Action, Decision, DecisionStage, EndReason, Game, Lega
 const SEED: u64 = 61;
 const FORMAT: &str = "mahjong-eval-environment-trace-v1";
 const FIXTURE_NAME: &str = "environment_trace_seed_61.json";
-
-fn fixture_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("fixtures")
-        .join(FIXTURE_NAME)
-}
-
-fn hex_f32(values: &[f32]) -> String {
-    let mut out = String::with_capacity(values.len() * 8);
-    for value in values {
-        for byte in value.to_le_bytes() {
-            write!(&mut out, "{byte:02x}").expect("writing to a string");
-        }
-    }
-    out
-}
-
-fn stage_code(stage: DecisionStage) -> u8 {
-    match stage {
-        DecisionStage::Exchange => 0,
-        DecisionStage::MissingSuit => 1,
-        DecisionStage::Turn => 2,
-        DecisionStage::DiscardResponse => 3,
-        DecisionStage::AddedKongResponse => 4,
-    }
-}
-
-fn end_reason_name(reason: EndReason) -> &'static str {
-    match reason {
-        EndReason::ThreeWinners => "three_winners",
-        EndReason::WallExhausted => "wall_exhausted",
-    }
-}
 
 /// Deterministic scripted choice. Hu wins immediately, then kongs and claims
 /// are preferred so the trajectory reaches response and added-kong stages.
@@ -131,7 +95,7 @@ fn build_trace() -> Trace {
     let _ = game.next_decision();
     while let Some(decision) = game.next_decision() {
         let stage = decision.observation.stage;
-        stages[usize::from(stage_code(stage))] = true;
+        stages[usize::from(support::stage_code(stage))] = true;
         let encoded = encode(&decision);
         let chosen = canonicalize(script_choice(&decision));
         let chosen_index = encoded
@@ -146,11 +110,11 @@ fn build_trace() -> Trace {
         decisions.push(json!({
             "decision_id": (1u64 << 32) | (decisions.len() as u64 + 1),
             "actor_seat": decision.seat.index(),
-            "stage": stage_code(stage),
+            "stage": support::stage_code(stage),
             "candidate_count": encoded.candidates.len(),
             "chosen_index": chosen_index,
-            "state_le_f32_hex": hex_f32(&encoded.state.flatten()),
-            "candidate_features_le_f32_hex": hex_f32(&candidate_features),
+            "state_le_f32_hex": support::hex_f32(&encoded.state.flatten()),
+            "candidate_features_le_f32_hex": support::hex_f32(&candidate_features),
         }));
 
         let seat = decision.seat;
@@ -183,7 +147,7 @@ fn build_trace() -> Trace {
                 "decisions": decision_count,
                 "scores": result.scores,
                 "winners": result.winners,
-                "end_reason": end_reason_name(result.end_reason),
+                "end_reason": support::end_reason_name(result.end_reason),
             },
         }),
     }
@@ -202,28 +166,5 @@ fn environment_trace_covers_every_stage_and_plays_past_a_winner() {
 #[test]
 fn environment_trace_matches_checked_in_fixture() {
     let expected = build_trace().value;
-    let path = fixture_path();
-
-    if std::env::var_os("UPDATE_ENVIRONMENT_TRACE_FIXTURE").is_some() {
-        let text = format!(
-            "{}\n",
-            serde_json::to_string_pretty(&expected).expect("serialize fixture")
-        );
-        fs::create_dir_all(path.parent().expect("fixture directory"))
-            .expect("create fixture directory");
-        fs::write(&path, text).expect("write fixture");
-    }
-
-    let text = fs::read_to_string(&path).unwrap_or_else(|error| {
-        panic!(
-            "read {}: {error}; regenerate with UPDATE_ENVIRONMENT_TRACE_FIXTURE=1",
-            path.display()
-        )
-    });
-    let actual: Value = serde_json::from_str(&text).expect("parse fixture");
-    assert_eq!(
-        actual, expected,
-        "environment trace fixture is stale; regenerate deliberately with \
-         UPDATE_ENVIRONMENT_TRACE_FIXTURE=1"
-    );
+    support::check_fixture("UPDATE_ENVIRONMENT_TRACE_FIXTURE", FIXTURE_NAME, &expected);
 }
