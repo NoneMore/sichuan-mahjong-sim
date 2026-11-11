@@ -388,6 +388,56 @@ def test_plan_and_completed_records_survive_an_inference_failure(
     assert not paths.summary.exists()
 
 
+def test_game_failure_after_a_completed_game_keeps_records_and_blocks_summary(
+    checkpoints, validation_seed, tmp_path, capsys, monkeypatch
+):
+    out = tmp_path / "run"
+    state = {"envs": 0, "fail": False}
+
+    class FlakyEnv:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def reset(self, seed):
+            return self.inner.reset(seed)
+
+        def teacher_index(self, cache=None):
+            return self.inner.teacher_index(cache=cache)
+
+        def step(self, decision_id, candidate_index):
+            if state["fail"]:
+                raise RuntimeError("synthetic game failure")
+            return self.inner.step(decision_id, candidate_index)
+
+    def factory(*, decision_limit):
+        state["envs"] += 1
+        if state["envs"] > 1:
+            state["fail"] = True
+        return FlakyEnv(mahjong_eval.Env(decision_limit=decision_limit))
+
+    monkeypatch.setattr(scheduler, "_default_env", lambda: factory)
+    code = _run_compare(
+        checkpoints[ROLE_BEST],
+        out,
+        split="validation",
+        seeds=[validation_seed],
+        extra=["--concurrent-games", "1"],
+    )
+    assert code == 2
+    message = capsys.readouterr().err
+    assert "synthetic game failure" in message
+    assert f"seed {validation_seed}" in message
+    assert "placement [0, 2]" in message
+
+    paths = records.run_paths(out)
+    assert json.loads(paths.state.read_text(encoding="utf-8"))["status"] == "incomplete"
+    assert not paths.summary.exists()
+    assert not (out / cli.COSTS_FILENAME).exists()
+    plan = records.read_plan(paths.plan)
+    persisted = records.read_records(paths.records, plan)
+    assert 1 <= len(persisted) < 6 * len(plan.seeds)
+
+
 def test_costs_failure_keeps_completed_records_and_blocks_summary(
     checkpoints, validation_seed, tmp_path, capsys, monkeypatch
 ):

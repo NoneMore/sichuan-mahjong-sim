@@ -474,13 +474,14 @@ teacher queries, and call counts).
 
 ### Failure containment
 
-The online test suite injects mid-run inference and costs-output failures while
-using real record writing: completed `games.jsonl` lines remain, `plan.json`
-remains, `state.json` stays `incomplete`, no `costs.json` or `summary.json` is
-published, and the public `records.finalize_run` refuses the run. Scheduler
+The online test suite injects mid-run game-step, inference, and costs-output
+failures while using real record writing: completed `games.jsonl` lines remain,
+`plan.json` remains, `state.json` stays `incomplete`, no `costs.json` or
+`summary.json` is published, and the public `records.finalize_run` refuses the
+run. Scheduler
 tests separately cover game-step failure, callback failure, partial batches,
 concurrent progress differences, same decision ids across handles, forced
 bypass, invalid inference indices, and recomputable counts. With
 `MAHJONG_EVAL_ACCEPTANCE_CORPUS` pointing at the read-only corpus above, the
-complete online suite passed **150 tests**, including the full-trajectory
+complete online suite passed **151 tests**, including the full-trajectory
 environment/teacher handoff and exception pickling checks.
