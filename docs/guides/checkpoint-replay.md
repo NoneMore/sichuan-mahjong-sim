@@ -57,11 +57,9 @@ assert_eq!(forward.scores, resumed.scores);
 assert_eq!(forward.trace, resumed.trace);
 ```
 
-`RandomPolicy` is `Clone`, so no additional API is needed to checkpoint a
-random run: clone the game and every seat policy, then build a runner from the
-cloned policies. `Runner::random(seed)` is *not* a checkpoint restore; it
-starts each stream at its seeded position, exactly like a fresh runner at the
-start of a batch.
+`RandomPolicy` is `Clone`, so the complete random-run checkpoint includes
+the game **and all four policies after they have consumed decisions**. Restoring
+a new `Runner::random(seed)` instead would restart the policy streams.
 
 ```rust
 use sichuan_mahjong_sim::policy::{random_seat_seed, Policy, RandomPolicy};
@@ -74,16 +72,41 @@ let mut policies: [RandomPolicy; 4] = std::array::from_fn(|index| {
     RandomPolicy::new(random_seat_seed(0xC0FF_EE00, seat))
 });
 
-// Drive the opening decisions with the public surface, as above.
-// ...
+// Consume real decisions before taking the checkpoint: the policy RNG streams
+// have now advanced and cannot be restored by reseeding a fresh runner.
+let mut applied = 0;
+for _ in 0..24 {
+    let (seat, action) = match game.next_decision() {
+        Some(decision) => {
+            let seat = decision.seat;
+            let action = policies[seat.index()].choose(&decision);
+            (seat, action)
+        }
+        None => break,
+    };
+    game.submit(seat, action)?;
+    applied += 1;
+}
+assert!(applied > 0);
 
 let mut checkpoint = game.clone();
 let checkpoint_policies = policies.clone();
 
-let policies = checkpoint_policies.map(|policy| Box::new(policy) as Box<dyn Policy>);
-let resumed = Runner::new(policies).run_game(&mut checkpoint)?;
+let into_runner = |policies: [RandomPolicy; 4]| {
+    Runner::new(policies.map(|p| Box::new(p) as Box<dyn Policy>))
+};
+
+let mut first_runner = into_runner(policies);
+let forward = first_runner.run_game(&mut game)?;
+
+let mut second_runner = into_runner(checkpoint_policies);
+let resumed = second_runner.run_game(&mut checkpoint)?;
+
+assert_eq!(forward.scores, resumed.scores);
+assert_eq!(forward.trace, resumed.trace);
 ```
 
-Policy RNG state continues across games in the same runner; a fresh runner
-starts from its initial seeds. Separate game and policy RNG state does not
-establish statistical independence between their seed-derived sequences.
+This is an in-memory, same-build continuation check, not a serialized
+cross-version checkpoint guarantee. The game seed and policy seed have
+different roles; both stateful policy positions must be preserved for an
+exact continuation.
