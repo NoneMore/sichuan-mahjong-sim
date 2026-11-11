@@ -39,21 +39,25 @@ Hashes identify actual bytes, including checkout line endings, not just commits.
 
 ### Recreate the workload
 
-From a clean checkout with the packages installed, generate fresh inputs:
+From a clean checkout with the packages installed, generate fresh inputs.
+Keep generated data and run artifacts in sibling directories rather than in the
+checkout: untracked outputs can make a subsequent collector build dirty, while
+collection requires clean, committed build provenance. These paths are safe
+reproduction destinations, not the original retained artifacts:
 
 ```text
 cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
-  --root corpus --games 24 --seed-start 0 --shard-games 6
+  --root ../online-repro-corpus --games 24 --seed-start 0 --shard-games 6
 cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- prepare \
-  --corpus corpus --out cache
-python -m mahjong_bc train --dataset cache --output training --device cpu \
+  --corpus ../online-repro-corpus --out ../online-repro-cache
+python -m mahjong_bc train --dataset ../online-repro-cache --output ../online-repro-training --device cpu \
   --seed 31 --epochs 1 --batch-size 64 --learning-rate 0.001 \
   --state-hidden 16 --scorer-hidden 8
-mahjong-eval compare --checkpoint training/best.pt --split validation \
-  --seeds 2,10 --out validation-run --batch-size 12 --concurrent-games 12 \
+mahjong-eval compare --checkpoint ../online-repro-training/best.pt --split validation \
+  --seeds 2,10 --out ../online-repro-validation --batch-size 12 --concurrent-games 12 \
   --decision-limit 10000 --teacher-cache-bytes 27787264 --device cpu
-mahjong-eval compare --checkpoint training/best.pt --split test \
-  --seeds 12 --out test-run --batch-size 6 --concurrent-games 6 \
+mahjong-eval compare --checkpoint ../online-repro-training/best.pt --split test \
+  --seeds 12 --out ../online-repro-test --batch-size 6 --concurrent-games 6 \
   --decision-limit 10000 --teacher-cache-bytes 27787264 --device cpu
 ```
 
