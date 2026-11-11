@@ -1,58 +1,29 @@
 # Execution subsystem
 
-[`Runner`](../../src/runner.rs) drives exactly four policies against a
-[`Game`](game.md), but it does not implement Mahjong rules. The
-[`main.rs` CLI](../../src/main.rs) is a thin batch-execution entry point.
-For CLI self-play use the [self-play guide](../guides/self-play.md);
-for public API examples use the [library guide](../library.md).
+[Runner](../../src/runner.rs) drives four policies against one
+[Game](game.md). It asks Game for the current Decision, requests an action
+from the acting policy, and submits that action to Game. Invalid actions
+return an error; Game retains all rule and transition authority.
 
-## Component composition
+## Run lifecycle
 
-Runner owns four seat-policy objects and a decision limit; Game separately
-owns hand state. This separation lets research tools decide when to construct
-fresh runners or retain policy state without giving Runner rule authority.
-The [CLI](../../src/main.rs) provides basic batch self-play.
+Runner supports fresh games, existing positions and batches. A batch
+creates new Games while retaining its policies and their RNG state.
+The per-drive decision limit leaves already accepted actions intact.
+Single-game reports include traces; batches aggregate scores and
+policy/rules timings without storing every trace.
 
-## Run boundary
+The root [CLI](../../src/main.rs) offers first-legal and random self-play.
+Heuristic comparisons use [research tools](experiments.md).
 
-At each step, Runner obtains the next pending `Decision` from Game, calls the
-acting seat's `Policy::choose`, and submits that action to Game. An invalid
-choice is returned as an error: Runner does not silently replace it with a
-different move. It neither inspects concealed opponent information nor
-reconstructs legality.
+## Replay and checkpoints
 
-One drive loop supports new games, existing checkpoints and batches.
-A batch creates fresh Games while retaining the Runner's policies, including
-their RNG positions. The decision limit applies independently to each drive;
-already accepted actions remain after a limit error. The
-[library Runner API](../library.md#runner-api) documents the public methods
-and limit controls.
+Game seeds control the wall and initial state; policies own their own RNG
+streams. A cloned Game can resume a stateless strategy immediately.
+For RandomPolicy, resume from the cloned Game **and** each policy's
+advanced RNG state. Shared heuristic caches are optional memoization and
+can be rebuilt without changing actions.
 
-## Reports and measurement
-
-Single-game runs keep a replay trace; batches aggregate results without
-retaining one trace per game. Timing separates policy choice from Game work,
-but neither alone accounts for the full batch duration. Report fields and
-usage examples are in the [library guide](../library.md#runner-api).
-
-The main CLI exposes first-legal and random legal self-play. Heuristic
-comparisons and benchmarks live in the distinct
-[experiment subsystem](experiments.md), not in a larger Runner that knows
-about their research protocols.
-
-## Continuation and seeds
-
-Game and policy RNG state are separately seeded and owned. Cloning Game
-alone cannot restore a stateful policy run: the policies' RNG positions must
-also be preserved. Stateless policies need no separate logical checkpoint;
-heuristic caches are disposable. See the
-[checkpoint continuation examples](../guides/checkpoint-replay.md).
-
-## Verification boundary
-
-Use [execution integration tests](../../tests/execution.rs) for runner and
-CLI behavior, seeded replay and continuation, and
-[decision contract tests](../../tests/decision_contract.rs) for the
-Game-facing boundary. The [CI workflow](../../.github/workflows/rust-ci.yml)
-runs tests for all targets in Debug and Release, but does not certify
-cross-version replay or statistical performance.
+[Checkpoint example](../guides/checkpoint-replay.md) ·
+[Runner API](../library.md#runner-api) ·
+[Execution tests](../../tests/execution.rs)

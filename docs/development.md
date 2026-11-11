@@ -34,18 +34,6 @@ In Git Bash on Windows, activate it with `source .venv/Scripts/activate`, or inv
 `source .venv/bin/activate`. Install dependencies into this environment, not the
 global Python or user site-packages.
 
-## Policy experiments
-
-### Policy A/B comparison example
-
-See [balanced policy comparison](guides/policy-comparison.md#policy-ab-comparison-example)
-for commands, placements, and statistical interpretation.
-
-### Heuristic benchmark example
-
-See [heuristic benchmark](guides/policy-comparison.md#heuristic-benchmark-example)
-for commands, cache lifecycle, and measurement boundaries.
-
 ## Continuous integration
 
 Markdown links, anchors, and fenced-code balance are checked by the
@@ -67,5 +55,3 @@ verifies that specific source revision; it does not establish a performance
 guarantee or replay equivalence to earlier revisions. For behavior-changing
 work, use focused invariant and deterministic-replay tests; for performance
 claims, use paired, controlled measurements outside shared CI runners.
-[Historical validation results](validation.md) document earlier environments
-and observations rather than the present test count.

@@ -52,16 +52,13 @@ Reusable collection requires a **clean, committed build**. The binary embeds
 build-time Git provenance and rejects dirty or unavailable source identity.
 Keep corpus and report outputs outside the source tree, or in an ignored directory.
 
-```text
-cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
-  --root ../bc-data --games 4 --seed-start 10 --shard-games 2 \
-  --cache-bytes 0 --report ../bc-outcome.json
+Create a corpus with the [BC pipeline collection step](../../docs/guides/bc-pipeline.md#1-collect-teacher-episodes-in-rust).
+To append four games and inspect the corpus:
 
-# Append four additional games using the existing corpus settings.
+```text
 cargo run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
   --root ../bc-data --games 4
 
-cargo run --locked -p sichuan-mahjong-neural --bin bc-collect -- verify --root ../bc-data
 cargo run --locked -p sichuan-mahjong-neural --bin bc-collect -- report --root ../bc-data --json
 ```
 
@@ -116,12 +113,8 @@ revision directly checks text form only and leaves source attestation to the cal
 through the collection validator into a self-contained, split-specific NumPy
 cache. Later appends do not change the captured membership.
 
-```text
-cargo run --release --locked -p sichuan-mahjong-neural --bin bc-prepare -- prepare \
-  --corpus ../bc-data --out ../bc-cache
-
-cargo run --locked -p sichuan-mahjong-neural --bin bc-prepare -- verify --cache ../bc-cache
-```
+Run [preparation and verification](../../docs/guides/bc-pipeline.md#2-prepare-and-verify-the-numpy-cache)
+using the BC pipeline commands.
 
 Preparation prints `dataset.json`; verification prints an `ok:` summary and
 never opens the source corpus. To keep a separate manifest copy, copy

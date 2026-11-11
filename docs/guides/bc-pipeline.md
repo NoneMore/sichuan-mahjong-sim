@@ -114,4 +114,3 @@ and [records and provenance](../../online/README.md#records-and-provenance)
 for the full command contract and incomplete-run behavior.
 
 For component ownership, see the [neural architecture guide](../architecture/neural.md).
-For dated measurements and reproduction limits, see [historical validation](../validation.md).

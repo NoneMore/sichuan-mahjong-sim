@@ -2,7 +2,7 @@
 
 Start with the [project overview and quick start](../README.md). The references
 below distinguish intended game rules, current implementation, operational
-workflows, and historical measurements.
+workflows, and research decisions still relevant to future work.
 
 ## Find the right document
 
@@ -20,8 +20,8 @@ workflows, and historical measurements.
 | Check teacher collection or cache format details | [Neural crate guide](../crates/neural/README.md) |
 | Load datasets and train an offline BC policy | [Python BC guide](../python/README.md) |
 | Run frozen neural-vs-teacher comparisons | [Online evaluation guide](../online/README.md) |
-| Inspect historical validations or measurements | [Historical validation index](validation.md) |
+| Review unimplemented research choices and how they were tested | [Experimental methods and decisions](research-decisions.md) |
 | Change the project or consult past decisions | [Governance](governance.md) and [archived changes](../specs/archive/) |
 
 For evidence precedence, documentation responsibilities, and how to resolve
-disagreements, follow [project governance](governance.md#evidence-and-intent).
+disagreements, follow [project governance](governance.md).

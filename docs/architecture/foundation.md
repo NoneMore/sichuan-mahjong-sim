@@ -1,53 +1,28 @@
-# Rule foundation: implementation architecture
+# Rule foundation
 
-The [fixed gameplay rules](../baseline-rules.md) define **intended** gameplay.
-This page describes the *implemented* tile model and pure rule computation,
-which [Game](game.md) uses to enact those rules. Neither document replaces
-evidence from code and tests when checking actual behavior.
+The [fixed rules](../baseline-rules.md) define intended gameplay. Foundation
+types and pure computations implement those facts for [Game](game.md).
 
-## Components and dependencies
+[Tile and Hand](../../src/tile.rs) represent 27 tile kinds with four
+physical copies each. [Seat](../../src/seat.rs) and
+[Action](../../src/action.rs) are shared identities and move types;
+[hand.rs](../../src/hand.rs) re-exports Hand.
+[eval.rs](../../src/eval.rs) checks winning shapes and waits;
+[rules.rs](../../src/rules.rs) computes eligibility, fan and payments.
 
-| Component | Responsibility |
-| --- | --- |
-| [`tile.rs`](../../src/tile.rs) | `Tile`, `Suit`, the fixed 27 kinds/four copies each, and the counted `Hand` implementation |
-| [`hand.rs`](../../src/hand.rs) | Stable re-export of `Hand` and `HandError` from `tile.rs`; not a separate hand implementation |
-| [`seat.rs`](../../src/seat.rs) | Four seat identities and relative table positions |
-| [`action.rs`](../../src/action.rs) | Shared action, exchange direction and meld representations |
-| [`eval.rs`](../../src/eval.rs) | Pure winning shapes, waits and tenpai queries |
-| [`rules.rs`](../../src/rules.rs) | Pure legality facts, fan breakdowns, payments and wall-exhaustion transfers |
+## Authority boundary
 
-Shared types are used by both pure helpers and `Game`. See the
-[architecture map](overview.md#interactions-and-architectural-outcomes) for
-the cross-subsystem flow. Public exports are in [`lib.rs`](../../src/lib.rs).
+Shape and scoring functions operate on supplied values. Game alone decides
+when a result applies, advances turns, commits transfers and manages tile
+ownership. [Policy analysis](policy.md#analysis-structure) solves a separate
+problem: target deficits and improving tiles for selecting actions.
 
-## Pure facts versus stateful authority
-
-`eval` computes winning shapes and waits for supplied hands and melds,
-respecting the owner's physical-copy limits. It has no turn state or payment
-authority.
-
-`rules` supplies eligibility, fan and payment facts, but cannot commit a win
-or a transfer. `Game` determines when those facts apply, which seats are
-active, and what state changes. The foundation has no separate turn scheduler
-or mutable Game state.
-
-The [Policy evaluator](policy.md#analysis-structure) computes target deficits
-and improving-tile counts for strategy. It is deliberately separate from
-authoritative legal winning-shape and settlement checks.
-
-## Implemented architectural outcomes
-
-- Shape evaluation, pure scoring facts and state transitions have distinct
-  owners. A pure result alone never advances a hand.
-- The crate implements one fixed ruleset, not a pluggable runtime rule
-  configuration. A new variant needs an explicit rule-contract and design
-  decision rather than a Policy/Runner override.
+The ruleset is fixed. Introducing a game variant requires a revised
+[rules contract](../baseline-rules.md), corresponding pure computations and
+Game transitions.
 
 ## Verification
 
-Use the unit tests in [`tile.rs`](../../src/tile.rs),
-[`eval.rs`](../../src/eval.rs), and [`rules.rs`](../../src/rules.rs)
-for representation, shape, legality, fan and payment facts. The
-[Game settlement tests](../../src/game/tests/settlement.rs) and
-[payment matrix](../../tests/settlement_matrix.rs) check that the stateful
-engine applies those facts correctly.
+[Foundation tests](../../src/rules.rs) check pure facts;
+[settlement tests](../../tests/settlement_matrix.rs) check how Game applies
+those facts.
