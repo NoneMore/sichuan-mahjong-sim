@@ -15,4 +15,7 @@ path = "src/lib.rs"
 [workspace]
 members = [".", "crates/neural"]
 default-members = [".", "crates/neural"]
+# The PyO3 extension is its own workspace: normal core/collector builds must
+# neither resolve nor link Python. See online/README.md.
+exclude = ["crates/python"]
 resolver = "2"

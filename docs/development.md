@@ -113,6 +113,28 @@ wheel installation, training, checkpoint reload and frozen test evaluation. The
 [recovery validation](validation.md#offline-bc-recovery-validation) adds real-cache
 epoch replay, output migration and CUDA training/reload checks.
 
+### Python online evaluation
+
+Install the repository-local offline package before the online extension:
+
+```text
+python -m pip install -e "./python[dev]"
+python -m pip install -e "./online[evaluation]"
+python -m mahjong_eval version
+python -m pytest online/tests
+```
+
+The [online guide](../online/README.md) covers environment/teacher APIs, frozen
+comparison commands, records, wheel/sdist builds and standalone Rust checks.
+The binding lives outside the root workspace; root Cargo checks do not cover it.
+The [online CI job](../.github/workflows/python-ci.yml) checks stable/MSRV,
+installs the wheel, runs corpus handoff and online tests, then verifies an sdist
+build cannot borrow an outer checkout's Git identity. The offline job remains
+independent of the binding.
+
+[Online validation](validation.md#python-online-comparison-smoke-validation)
+records checkpoint inputs, device/batching costs and verification limits.
+
 ### Policy A/B comparison example
 
 `examples/policy_ab.rs` runs a balanced 2A2B comparison. By default A is

@@ -119,6 +119,37 @@ for in-repository source installs.
 See the [package guide](../../python/README.md#training-metrics-and-checkpoints)
 for policy, checkpoint-format and CLI contracts.
 
+## Online environment binding and comparison
+
+[`crates/python`](../../crates/python/) is a standalone Cargo workspace exposing
+`mahjong_eval._native`. Excluding it from the root workspace keeps core,
+collector and offline builds independent of Python. Each `Env` owns one Game
+and its canonical action cache. Reset/step return owned encoded snapshots;
+identities include reset generation, and invalid requests are rejected before
+mutation. Rules, automatic transitions and terminal settlement stay in Game.
+
+Teacher queries choose on the original Rust Decision, map semantic actions to
+canonical indices and leave progression to step. Explicit cache sharing preserves
+choices. Native semantic replay checks the binding path; split queries reuse the
+corpus contract. Build-time provenance covers binding/core/neural source bytes,
+separate from neural collection provenance and the caller's working directory.
+
+The [online Python package](../../online/README.md) separates execution concerns:
+
+| Module | Responsibility |
+|---|---|
+| `inference` | Frozen checkpoint weights, shared label-free padding/masks, greedy selection and forced bypass |
+| `scheduler` | Bounded concurrent handles, per-policy batches, handle-local routing, shared teacher cache and execution costs |
+| `records` | Planned placements, exact checkpoint/imported-source identity, flushed terminal records and seed-blocked summaries |
+| `cli` | Selected-best checkpoint and Rust-split validation, comparison setup and persisted-result checks |
+
+Concurrent handles can reuse decision ids, so routing also retains the originating
+handle. Every stage and forced choice remains explicit, including continued play
+after a win. Failures stop execution without substitute actions. The writer stays
+incomplete until records and costs succeed; only a clean close permits summary
+publication from persisted files. Training provenance is recorded separately from
+the executing Python packages and compiled Rust runtime.
+
 ## Verification
 
 [Feature fixtures](../../crates/neural/tests/encoding_features.rs) freeze v1

@@ -54,12 +54,14 @@ from .constants import (
 from .data import (
     DecisionBatch,
     DecisionDataset,
+    DecisionInputs,
     DecisionSample,
     PackedDecisionDataset,
     ShardedDecisionDataset,
     collate_decisions,
     contains_memory_mapped_arrays,
     iter_batches,
+    pad_decision_inputs,
 )
 from .errors import (
     CacheContractError,
@@ -107,6 +109,7 @@ __all__ = [
     "DatasetIdentity",
     "DecisionBatch",
     "DecisionDataset",
+    "DecisionInputs",
     "DecisionSample",
     "DependencyVersions",
     "ENCODING_VERSION",
@@ -148,6 +151,7 @@ __all__ = [
     "load_policy_checkpoint",
     "load_prepared_cache",
     "masked_cross_entropy",
+    "pad_decision_inputs",
     "resolve_device",
     "sample_indices",
     "save_checkpoint",
