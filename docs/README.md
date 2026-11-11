@@ -24,4 +24,4 @@ workflows, and research decisions still relevant to future work.
 | Change the project or consult past decisions | [Governance](governance.md) and [archived changes](../specs/archive/) |
 
 For evidence precedence, documentation responsibilities, and how to resolve
-disagreements, follow [project governance](governance.md#evidence-and-intent).
+disagreements, follow [project governance](governance.md).
