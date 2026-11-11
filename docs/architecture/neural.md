@@ -24,7 +24,6 @@ canonical enumeration and action features. Schema changes require contract
 tests and a deliberate compatibility decision even if tensor widths stay fixed.
 
 ## Teacher collection
-## Teacher collection
 
 The neural-side collector drives `Game`, `HeuristicPolicy`, and the encoder
 without extending Runner. It labels the original decision once and records the
@@ -36,7 +35,7 @@ validation, immutable shard storage, and manifest publication. The
 [collection module](../../crates/neural/src/collection/mod.rs) owns their
 protocol; callers should not reconstruct it from this architecture map.
 
-A corpus fixes source and encoding versions.A corpus fixes source and encoding versions. Complete episodes form immutable
+A corpus fixes source and encoding versions. Complete episodes form immutable
 JSONL shards; per-shard manifest entries keep inventory proportional to shard
 count. The seed-only split remains stable across growth and source revisions.
 An OS-locked writer validates and publishes each shard before atomically
@@ -61,7 +60,7 @@ and verification; its [manifest contract](../../crates/neural/src/prepare/manife
 owns dataset identity and array inventory. This architecture guide intentionally
 does not duplicate their field-level schemas.
 
-Each split retains one bounded output bufferEach split retains one bounded output buffer (or one oversized episode), plus
+Each split retains one bounded output buffer (or one oversized episode), plus
 one input episode in the reader. Shards rotate at episode boundaries; a staging
 directory is published only after validation. `dataset.json` binds the array
 inventory, versions, checksums, counts, and separate collection/preparation
@@ -135,7 +134,7 @@ records. The [inference](../../online/mahjong_eval/inference.py),
 [records](../../online/mahjong_eval/records.py) modules are the implementation
 entry points; field formats and commands belong in its package guide.
 
-Concurrent handles can reuse decision idsConcurrent handles can reuse decision ids, so routing also retains the originating
+Concurrent handles can reuse decision ids, so routing also retains the originating
 handle. Every stage and forced choice remains explicit, including continued play
 after a win. Failures stop execution without substitute actions. The writer stays
 incomplete until records and costs succeed; only a clean close permits summary
