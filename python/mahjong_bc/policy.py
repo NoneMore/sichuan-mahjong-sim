@@ -12,8 +12,10 @@ from typing import Callable
 
 import torch
 from torch import Tensor, nn
+from torch.nn.modules import module as _torch_modules
 
 from .config import ModelConfig
+from .data import _PackedCandidateBatch
 from .errors import ConfigurationError, DataError
 
 _ACTIVATION_FACTORIES: dict[str, Callable[[], nn.Module]] = {
@@ -111,6 +113,98 @@ class CandidatePolicy(nn.Module):
 
     def forward(self, states: Tensor, candidates: Tensor, mask: Tensor) -> Tensor:
         return self.score(states, candidates, mask)
+
+
+#: The one ``forward``/``score`` implementation packed scoring may replace.
+_BUILTIN_FORWARD = CandidatePolicy.forward
+_BUILTIN_SCORE = CandidatePolicy.score
+
+#: Hook registries that only the public ``model(...)`` call would run.
+_MODEL_HOOK_ATTRS = (
+    "_forward_hooks",
+    "_forward_hooks_with_kwargs",
+    "_forward_pre_hooks",
+    "_forward_pre_hooks_with_kwargs",
+    "_backward_hooks",
+    "_backward_pre_hooks",
+)
+_GLOBAL_HOOK_ATTRS = (
+    "_global_forward_hooks",
+    "_global_forward_hooks_with_kwargs",
+    "_global_forward_pre_hooks",
+    "_global_backward_hooks",
+    "_global_backward_pre_hooks",
+)
+
+
+def _supports_packed_candidate_scoring(model: object) -> bool:
+    """Whether ``model`` is the untouched built-in candidate scorer.
+
+    Packed scoring calls the built-in state encoder and candidate scorer
+    directly over valid candidate rows, so anything that the public
+    ``model(...)`` call would add must keep the padded path: a subclass, an
+    instance or class ``forward``/``score`` override, a module hook on the
+    policy itself, or a global module hook, which would otherwise see the
+    policy's public call. Hooks on the encoder and scorer submodules still run
+    in both layouts.
+    """
+
+    if type(model) is not CandidatePolicy:
+        return False
+    if type(model).forward is not _BUILTIN_FORWARD:
+        return False
+    if type(model).score is not _BUILTIN_SCORE:
+        return False
+    if "forward" in model.__dict__ or "score" in model.__dict__:
+        return False
+    if getattr(model, "_compiled_call_impl", None) is not None:
+        return False
+    if any(getattr(model, name, None) for name in _MODEL_HOOK_ATTRS):
+        return False
+    return not any(getattr(_torch_modules, name, None) for name in _GLOBAL_HOOK_ATTRS)
+
+
+def _packed_candidate_logits(
+    model: CandidatePolicy,
+    states: Tensor,
+    candidates: Tensor,
+    candidate_counts: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    """Score flat valid candidates and rebuild the padded logit layout.
+
+    Callers pass the flat ``[N, candidate_width]`` block and the ``[B, C]``
+    valid-candidate mask from one internal batch, so ``mask``'s row-major true
+    entries are exactly the flat block's rows. Only valid candidates reach the
+    scorer; padded logit slots are zeros, which is equivalent because every
+    consumer masks them before use. ``candidate_counts`` remains part of the
+    batch contract even though the mask alone determines placement.
+
+    Hidden rows are selected by expanding the per-decision state over the mask
+    columns and gathering the true entries. Its autograd restores the dense
+    ``[B, C, H]`` gradient and sums the candidate axis. The former
+    ``repeat_interleave`` backward scatter-adds duplicate valid rows and is not
+    deterministic on CUDA.
+    """
+
+    hidden = model.state_representation(states)
+    expanded = hidden.unsqueeze(1).expand(-1, mask.shape[1], -1)[mask]
+    flat = model.candidate_scorer(
+        torch.cat((expanded, candidates), dim=-1)
+    ).squeeze(-1)
+    logits = flat.new_zeros(mask.shape)
+    logits[mask] = flat
+    return logits
+
+
+def _batch_logits(model: CandidatePolicy, batch: object) -> Tensor:
+    """Padded logits for a public, pruned or flat-candidate internal batch."""
+
+    if not isinstance(batch, _PackedCandidateBatch):
+        return model(batch.states, batch.candidates, batch.mask)
+    return _packed_candidate_logits(
+        model, batch.states, batch.candidates, batch.candidate_counts, batch.mask
+    )
 
 
 def build_policy(config: ModelConfig | None = None, *, seed: int | None = None) -> CandidatePolicy:

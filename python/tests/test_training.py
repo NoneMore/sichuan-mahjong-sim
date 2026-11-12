@@ -11,6 +11,7 @@ import pytest
 import torch
 
 import mahjong_bc
+import mahjong_bc.metrics as metrics_module
 import mahjong_bc.train as train_module
 from mahjong_bc.checkpoint import (
     atomic_torch_save,
@@ -1507,6 +1508,12 @@ def test_training_checks_target_legality_before_forced_rejection(tmp_path):
 def test_pruned_training_matches_full_batch_baseline_exactly(
     tmp_path, monkeypatch
 ):
+    """The padded internal batches stay bitwise identical to public collation.
+
+    Packed candidate scoring changes the scorer row layout, so both arms pin
+    the padded scoring path here; packed arithmetic is compared separately
+    with the frozen numerical tolerances.
+    """
     train = make_dataset(
         split="train", counts=[2, 1, 3, 4, 2, 3, 2, 4],
         seed=141, cache_id="pruned-baseline"
@@ -1517,8 +1524,10 @@ def test_pruned_training_matches_full_batch_baseline_exactly(
     )
     config = _config(epochs=3, batch_size=3, learning_rate=0.03)
     model_config = _small_model()
+    padding_only = staticmethod(lambda model: False)
 
     def reference_batches(dataset, indices, *, training, **kwargs):
+        kwargs.pop("packed_candidates", None)
         return iter_batches(dataset, indices, **kwargs)
 
     summaries = []
@@ -1538,6 +1547,10 @@ def test_pruned_training_matches_full_batch_baseline_exactly(
             device="cpu",
         )
         with monkeypatch.context() as patch:
+            for module in (train_module, metrics_module):
+                patch.setattr(
+                    module, "_supports_packed_candidate_scoring", padding_only
+                )
             if reference:
                 patch.setattr(
                     train_module,
