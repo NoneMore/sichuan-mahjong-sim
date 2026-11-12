@@ -15,8 +15,9 @@ import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping, Sequence
 
+import numpy as np
 import torch
 
 from ._device import resolve_device
@@ -39,10 +40,17 @@ from .config import (
     TrainingConfig,
     collect_dependency_versions,
 )
-from .constants import PACKAGE_VERSION, ROLE_BEST, ROLE_LAST
+from .constants import (
+    FORCED_CANDIDATE_COUNT,
+    PACKAGE_VERSION,
+    ROLE_BEST,
+    ROLE_LAST,
+)
 from .data import (
     DecisionBatch,
     DecisionDataset,
+    _PrunedDecisionBatch,
+    _iter_pruned_batches,
     contains_memory_mapped_arrays,
     iter_batches,
     require_dataset_identity,
@@ -51,7 +59,7 @@ from .errors import ConfigurationError, DataError, ResumeError
 from .metrics import MetricsReport, evaluate_dataset
 from .policy import (
     CandidatePolicy,
-    _masked_cross_entropy_validated,
+    _mean_nll_all_validated,
     _require_finite_valid,
     _validate_logits_mask_structure,
     _validate_mask_structure,
@@ -139,6 +147,40 @@ class _TrainingProgress:
         )
 
 
+def _require_pruned_padded_training_fields(
+    states: torch.Tensor,
+    candidates: torch.Tensor,
+    mask: torch.Tensor,
+    targets: torch.Tensor,
+) -> int:
+    """Check structure and target legality for a narrow training batch.
+
+    Target values are checked before eligibility is rejected, so a corrupted
+    batch reports the data error rather than a forced-row traversal.
+    """
+
+    if states.dim() != 2 or candidates.dim() != 3:
+        raise DataError(
+            "collated batches must carry states [B, state_width] and "
+            f"candidates [B, C, candidate_width], got {tuple(states.shape)} "
+            f"and {tuple(candidates.shape)}"
+        )
+    batch_size = int(states.shape[0])
+    if batch_size == 0:
+        raise DataError("at least one eligible decision is required")
+    _validate_mask_structure(
+        mask, (batch_size, candidates.shape[1]), states.device
+    )
+    _validate_targets_structure(targets, batch_size, states.device)
+    if not bool(mask.any(dim=1).all()):
+        raise DataError("every decision must have at least one valid candidate")
+    if int(targets.min()) < 0 or int(targets.max()) >= candidates.shape[1]:
+        raise DataError("target index is outside the padded candidate range")
+    if not bool(mask.gather(1, targets.long().unsqueeze(1)).all()):
+        raise DataError("target index does not reference a valid candidate")
+    return batch_size
+
+
 def _require_host_training_batch(batch: DecisionBatch) -> None:
     """Check a collated training batch before it is copied to the device.
 
@@ -185,6 +227,74 @@ def _require_host_training_batch(batch: DecisionBatch) -> None:
         raise DataError("target index is outside the padded candidate range")
     if not bool(batch.mask.gather(1, batch.targets.long().unsqueeze(1)).all()):
         raise DataError("target index does not reference a valid candidate")
+
+
+def _require_pruned_training_batch(batch: _PrunedDecisionBatch) -> None:
+    """Confirm every row of a narrow training batch is currently eligible.
+
+    The candidate counts were read from the current offsets while gathering,
+    so an in-place layout edit cannot hide a traversal index that became
+    forced after the dataset cached its eligible indices.
+    """
+
+    batch_size = _require_pruned_padded_training_fields(
+        batch.states, batch.candidates, batch.mask, batch.targets
+    )
+    counts = batch.candidate_counts
+    if not isinstance(counts, np.ndarray) or counts.shape != (batch_size,):
+        raise DataError(
+            f"candidate counts must have shape ({batch_size},), "
+            f"got {getattr(counts, 'shape', None)}"
+        )
+    if np.any(counts.astype(np.int64, copy=False) <= FORCED_CANDIDATE_COUNT):
+        raise DataError("training traversal included a forced decision")
+
+
+def _require_training_batch(
+    batch: DecisionBatch | _PrunedDecisionBatch,
+) -> None:
+    """Dispatch host validation for a public or narrow training batch."""
+
+    if isinstance(batch, _PrunedDecisionBatch):
+        _require_pruned_training_batch(batch)
+        return
+    if isinstance(batch, DecisionBatch):
+        _require_host_training_batch(batch)
+        return
+    raise DataError("training batches must be DecisionBatch instances")
+
+
+def _iter_training_batches(
+    dataset: DecisionDataset,
+    indices: Sequence[int] | np.ndarray,
+    *,
+    batch_size: int,
+    num_workers: int,
+) -> Iterator[DecisionBatch | _PrunedDecisionBatch]:
+    """Yield training batches with only the fields training consumes.
+
+    Exact built-in packed datasets with target-kind metadata and in-process
+    loading use the narrow gatherer. Custom datasets, subclasses, missing
+    target-kind metadata and worker processes keep the public
+    :func:`iter_batches` path.
+    """
+
+    if num_workers == 0:
+        pruned = _iter_pruned_batches(
+            dataset,
+            indices,
+            batch_size=batch_size,
+            include_stages=False,
+            include_target_kinds=False,
+        )
+        if pruned is not None:
+            return pruned
+    return iter_batches(
+        dataset,
+        indices,
+        batch_size=batch_size,
+        num_workers=num_workers,
+    )
 
 
 class _EpochLossTotals:
@@ -730,23 +840,22 @@ class Trainer:
             epoch_indices = eligible_indices[permutation]
             epoch_losses = _EpochLossTotals()
             epoch_steps = 0
-            for batch in iter_batches(
+            for batch in _iter_training_batches(
                 self.train_dataset,
                 epoch_indices,
                 batch_size=batch_size,
                 num_workers=self.training_config.num_workers,
             ):
-                _require_host_training_batch(batch)
+                _require_training_batch(batch)
                 moved = batch.to(self.device)
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(moved.states, moved.candidates, moved.mask)
                 _validate_logits_mask_structure(logits, moved.mask)
                 _require_finite_valid(logits, moved.mask)
-                loss = _masked_cross_entropy_validated(
+                loss = _mean_nll_all_validated(
                     logits,
                     moved.mask,
                     moved.targets,
-                    moved.eligible,
                 )
                 loss.backward()
                 optimizer.step()

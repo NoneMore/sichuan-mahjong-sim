@@ -151,6 +151,53 @@ class DecisionBatch:
         )
 
 
+@dataclass(frozen=True)
+class _PrunedDecisionBatch:
+    """Internal batch containing only the fields one consumer reads.
+
+    Training uses the four model/supervision tensors and leaves ``stages`` and
+    ``target_kinds`` unset. Evaluation adds those two metadata tensors. The
+    provenance arrays and a derived batch ``eligible`` tensor never exist on
+    this path. ``candidate_counts`` stays on the host because it records the
+    candidate range implied by the current offsets: training uses it to reject
+    a traversal index that became forced after the dataset was constructed.
+    """
+
+    states: Tensor
+    candidates: Tensor
+    mask: Tensor
+    targets: Tensor
+    candidate_counts: np.ndarray
+    stages: Tensor | None = None
+    target_kinds: Tensor | None = None
+
+    @property
+    def batch_size(self) -> int:
+        return int(self.states.shape[0])
+
+    def to(
+        self, device: torch.device | str, *, non_blocking: bool = False
+    ) -> _PrunedDecisionBatch:
+        target = torch.device(device)
+        return _PrunedDecisionBatch(
+            states=self.states.to(target, non_blocking=non_blocking),
+            candidates=self.candidates.to(target, non_blocking=non_blocking),
+            mask=self.mask.to(target, non_blocking=non_blocking),
+            targets=self.targets.to(target, non_blocking=non_blocking),
+            candidate_counts=self.candidate_counts,
+            stages=(
+                None
+                if self.stages is None
+                else self.stages.to(target, non_blocking=non_blocking)
+            ),
+            target_kinds=(
+                None
+                if self.target_kinds is None
+                else self.target_kinds.to(target, non_blocking=non_blocking)
+            ),
+        )
+
+
 def _read_only(array: np.ndarray) -> np.ndarray:
     array.setflags(write=False)
     return array
@@ -395,11 +442,30 @@ class PackedDecisionDataset(DecisionDataset):
         if self._closed:
             raise DataError("dataset is closed")
         _check_batch_positions(positions, len(self))
-        rows = np.arange(positions.size, dtype=np.int64)
-        segments = ((rows, self, positions),)
+        segments = ((np.arange(positions.size, dtype=np.int64), self, positions),)
         if _unsigned_metadata_overflows(segments):
             return _reference_batch(self, positions)
         return _gather_segments(positions.size, segments)
+
+    def _gather_pruned_batch(
+        self,
+        positions: np.ndarray,
+        *,
+        include_stages: bool,
+        include_target_kinds: bool,
+    ) -> _PrunedDecisionBatch:
+        """Gather only the fields a training or evaluation consumer reads."""
+
+        if self._closed:
+            raise DataError("dataset is closed")
+        _check_batch_positions(positions, len(self))
+        rows = np.arange(positions.size, dtype=np.int64)
+        return _gather_pruned_segments(
+            positions.size,
+            ((rows, self, positions),),
+            include_stages=include_stages,
+            include_target_kinds=include_target_kinds,
+        )
 
 
 class ShardedDecisionDataset(DecisionDataset):
@@ -518,19 +584,47 @@ class ShardedDecisionDataset(DecisionDataset):
         if self._closed:
             raise DataError("dataset is closed")
         _check_batch_positions(positions, len(self))
-        if positions.size == 0:
-            raise DataError("cannot collate an empty batch")
-        shard_of_row = np.searchsorted(self._starts, positions, side="right") - 1
-        segments: list[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]] = []
-        for index in np.unique(shard_of_row):
-            rows = np.flatnonzero(shard_of_row == index)
-            shard = self.shards[int(index)]
-            if shard._closed:
-                raise DataError("dataset is closed")
-            segments.append((rows, shard, positions[rows] - self._starts[int(index)]))
+        segments = _shard_segments(self, positions)
         if _unsigned_metadata_overflows(segments):
             return _reference_batch(self, positions)
-        return _gather_segments(positions.size, tuple(segments))
+        return _gather_segments(positions.size, segments)
+
+    def _gather_pruned_batch(
+        self,
+        positions: np.ndarray,
+        *,
+        include_stages: bool,
+        include_target_kinds: bool,
+    ) -> _PrunedDecisionBatch:
+        """Gather only the fields a training or evaluation consumer reads."""
+
+        if self._closed:
+            raise DataError("dataset is closed")
+        _check_batch_positions(positions, len(self))
+        return _gather_pruned_segments(
+            positions.size,
+            _shard_segments(self, positions),
+            include_stages=include_stages,
+            include_target_kinds=include_target_kinds,
+        )
+
+
+def _shard_segments(
+    dataset: ShardedDecisionDataset, positions: np.ndarray
+) -> tuple[tuple[np.ndarray, PackedDecisionDataset, np.ndarray], ...]:
+    """Split ascending batch rows into the shard that owns each run."""
+
+    if positions.size == 0:
+        raise DataError("cannot collate an empty batch")
+    shard_of_row = np.searchsorted(dataset._starts, positions, side="right") - 1
+    segments: list[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]] = []
+    for index in np.unique(shard_of_row):
+        rows = np.flatnonzero(shard_of_row == index)
+        shard = dataset.shards[int(index)]
+        if shard._closed:
+            raise DataError("dataset is closed")
+        segments.append((rows, shard, positions[rows] - dataset._starts[int(index)]))
+    return tuple(segments)
 
 
 def _check_batch_positions(positions: np.ndarray, limit: int) -> None:
@@ -595,16 +689,15 @@ def _unsigned_metadata_overflows(
     return False
 
 
-def _gather_segments(
+def _gather_base_columns(
     batch_size: int,
     segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
-) -> DecisionBatch:
-    """Gather one batch from packed shards with vectorized array reads.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Gather states and targets with the current offsets' candidate spans.
 
-    Each segment pairs ascending batch rows with the shard that owns them and
-    their shard-local decision positions. Values, order, dtypes, padding and
-    metadata presence match :func:`collate_decisions` over the same decisions;
-    only the per-sample copies are replaced by column-wise gathers.
+    Counts come from the current offsets, not the cached construction layout:
+    an in-place offsets edit stays visible to batching, as it is to
+    ``__getitem__``.
     """
 
     if batch_size < 1:
@@ -613,23 +706,7 @@ def _gather_segments(
     counts = np.empty(batch_size, dtype=np.int64)
     starts = np.empty(batch_size, dtype=np.int64)
     targets = np.empty(batch_size, dtype=np.int64)
-    stages = np.empty(batch_size, dtype=np.int64)
-    target_kinds = np.empty(batch_size, dtype=np.int64)
-    have_actor_seats = all(shard.actor_seats is not None for _, shard, _ in segments)
-    have_decision_indices = all(
-        shard.decision_indices is not None for _, shard, _ in segments
-    )
-    have_episode_ids = all(shard.episode_ids is not None for _, shard, _ in segments)
-    actor_seats = np.empty(batch_size, dtype=np.int64) if have_actor_seats else None
-    decision_indices = (
-        np.empty(batch_size, dtype=np.int64) if have_decision_indices else None
-    )
-    episode_values: list[object] = [None] * batch_size
-
     for rows, shard, local in segments:
-        # Counts come from the current offsets, not the cached layout: an in
-        # place offsets edit stays visible to batching, as it is to
-        # ``__getitem__``.
         segment_starts = np.asarray(shard.offsets[local], dtype=np.int64)
         counts[rows] = (
             np.asarray(shard.offsets[local + 1], dtype=np.int64) - segment_starts
@@ -637,21 +714,23 @@ def _gather_segments(
         starts[rows] = segment_starts
         states[rows] = shard.states[local]
         targets[rows] = shard.targets[local]
-        stages[rows] = shard.stages[local]
-        target_kinds[rows] = shard.target_kinds[local]
-        if actor_seats is not None:
-            actor_seats[rows] = shard.actor_seats[local]
-        if decision_indices is not None:
-            decision_indices[rows] = shard.decision_indices[local]
-        if have_episode_ids:
-            for row, value in zip(
-                rows.tolist(), _episode_values(shard.episode_ids, local)
-            ):
-                episode_values[row] = value
-    # Packed layouts validate targets at construction; recheck the gathered
-    # rows so an array mutated afterwards still fails like collate_decisions.
+    return states, counts, starts, targets
+
+
+def _require_gathered_targets(targets: np.ndarray, counts: np.ndarray) -> None:
+    """Recheck mutated targets against the spans batching will actually use."""
+
     if np.any((targets < 0) | (targets >= counts)):
         raise DataError("sample target is outside its candidate range")
+
+
+def _pad_candidate_rows(
+    batch_size: int,
+    segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
+    counts: np.ndarray,
+    starts: np.ndarray,
+) -> np.ndarray:
+    """Copy each decision's current candidate span into padded batch rows."""
 
     max_count = int(counts.max())
     candidates = np.zeros((batch_size, max_count, CANDIDATE_WIDTH), dtype=np.float32)
@@ -673,7 +752,95 @@ def _gather_segments(
             total
         )
         candidates[flat_rows, flat_columns] = shard.candidate_features[source_rows]
+    return candidates
 
+
+def _gather_pruned_segments(
+    batch_size: int,
+    segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
+    *,
+    include_stages: bool,
+    include_target_kinds: bool,
+) -> _PrunedDecisionBatch:
+    """Gather only the tensors selected by an internal consumer.
+
+    Unrequested fields are never read, converted or allocated. In particular
+    the provenance arrays and the derived ``eligible`` tensor that
+    :func:`collate_decisions` produces for a public batch do not exist here.
+    """
+
+    states, counts, starts, targets = _gather_base_columns(batch_size, segments)
+    _require_gathered_targets(targets, counts)
+    stages = None
+    if include_stages:
+        stages = np.empty(batch_size, dtype=np.int64)
+        for rows, shard, local in segments:
+            stages[rows] = shard.stages[local]
+    target_kinds = None
+    if include_target_kinds:
+        target_kinds = np.empty(batch_size, dtype=np.int64)
+        for rows, shard, local in segments:
+            target_kinds[rows] = shard.target_kinds[local]
+    candidates = _pad_candidate_rows(batch_size, segments, counts, starts)
+    max_count = int(counts.max())
+    mask = np.arange(max_count)[None, :] < counts[:, None]
+    return _PrunedDecisionBatch(
+        states=torch.from_numpy(states),
+        candidates=torch.from_numpy(candidates),
+        mask=torch.from_numpy(mask),
+        targets=torch.from_numpy(targets),
+        candidate_counts=counts,
+        stages=None if stages is None else torch.from_numpy(stages),
+        target_kinds=(
+            None if target_kinds is None else torch.from_numpy(target_kinds)
+        ),
+    )
+
+
+def _gather_segments(
+    batch_size: int,
+    segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
+) -> DecisionBatch:
+    """Gather one batch from packed shards with vectorized array reads.
+
+    Each segment pairs ascending batch rows with the shard that owns them and
+    their shard-local decision positions. Values, order, dtypes, padding and
+    metadata presence match :func:`collate_decisions` over the same decisions;
+    only the per-sample copies are replaced by column-wise gathers.
+    """
+
+    states, counts, starts, targets = _gather_base_columns(batch_size, segments)
+    stages = np.empty(batch_size, dtype=np.int64)
+    target_kinds = np.empty(batch_size, dtype=np.int64)
+    have_actor_seats = all(shard.actor_seats is not None for _, shard, _ in segments)
+    have_decision_indices = all(
+        shard.decision_indices is not None for _, shard, _ in segments
+    )
+    have_episode_ids = all(shard.episode_ids is not None for _, shard, _ in segments)
+    actor_seats = np.empty(batch_size, dtype=np.int64) if have_actor_seats else None
+    decision_indices = (
+        np.empty(batch_size, dtype=np.int64) if have_decision_indices else None
+    )
+    episode_values: list[object] = [None] * batch_size
+
+    for rows, shard, local in segments:
+        stages[rows] = shard.stages[local]
+        target_kinds[rows] = shard.target_kinds[local]
+        if actor_seats is not None:
+            actor_seats[rows] = shard.actor_seats[local]
+        if decision_indices is not None:
+            decision_indices[rows] = shard.decision_indices[local]
+        if have_episode_ids:
+            for row, value in zip(
+                rows.tolist(), _episode_values(shard.episode_ids, local)
+            ):
+                episode_values[row] = value
+    # Packed layouts validate targets at construction; recheck the gathered
+    # rows so an array mutated afterwards still fails like collate_decisions.
+    _require_gathered_targets(targets, counts)
+
+    candidates = _pad_candidate_rows(batch_size, segments, counts, starts)
+    max_count = int(counts.max())
     mask = np.arange(max_count)[None, :] < counts[:, None]
     return DecisionBatch(
         states=torch.from_numpy(states),
@@ -716,6 +883,63 @@ def _packed_batch_gatherer(
                 return None
         return dataset._gather_batch
     return None
+
+
+def _pruned_batch_gatherer(
+    dataset: DecisionDataset,
+) -> Callable[..., _PrunedDecisionBatch] | None:
+    """Return the narrow-field gatherer for built-in packed datasets.
+
+    The same exact-class and target-kind gates as the public vectorized path
+    apply: a subclass may override ``__getitem__`` and a shard without
+    ``target_kinds`` must keep per-sample target-kind derivation. Only the
+    attribute is inspected here; no metadata window is read.
+    """
+
+    if type(dataset) is PackedDecisionDataset:
+        if dataset.target_kinds is None:
+            return None
+        return dataset._gather_pruned_batch
+    if type(dataset) is ShardedDecisionDataset:
+        for shard in dataset.shards:
+            if type(shard) is not PackedDecisionDataset or shard.target_kinds is None:
+                return None
+        return dataset._gather_pruned_batch
+    return None
+
+
+def _iter_pruned_batches(
+    dataset: DecisionDataset,
+    indices: Sequence[int] | np.ndarray,
+    *,
+    batch_size: int,
+    include_stages: bool,
+    include_target_kinds: bool,
+) -> Iterator[_PrunedDecisionBatch] | None:
+    """Iterate narrow internal batches, or ``None`` when the caller must fall back.
+
+    No fallback batch is produced here: a caller that receives ``None`` keeps
+    its existing :func:`iter_batches` path and semantics.
+    """
+
+    gather = _pruned_batch_gatherer(dataset)
+    if gather is None:
+        return None
+    if batch_size < 1:
+        raise DataError("batch_size must be positive")
+    ordered = np.asarray(indices, dtype=np.int64)
+    if ordered.ndim != 1:
+        raise DataError("indices must be a one-dimensional sequence")
+
+    def batches() -> Iterator[_PrunedDecisionBatch]:
+        for start in range(0, ordered.size, batch_size):
+            yield gather(
+                ordered[start : start + batch_size],
+                include_stages=include_stages,
+                include_target_kinds=include_target_kinds,
+            )
+
+    return batches()
 
 
 def _as_float32_tensor(value: object) -> Tensor:

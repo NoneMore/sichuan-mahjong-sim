@@ -19,6 +19,7 @@ from .data import (
     DecisionDataset,
     PackedDecisionDataset,
     ShardedDecisionDataset,
+    _iter_pruned_batches,
     iter_batches,
     require_dataset_identity,
 )
@@ -400,6 +401,40 @@ def _builtin_eligible_layout(
     return dataset.eligible_indices(), dataset.forced_by_stage()
 
 
+def _iter_evaluation_batches(
+    dataset: DecisionDataset,
+    indices: np.ndarray,
+    *,
+    batch_size: int,
+    num_workers: int,
+):
+    """Yield eligible-only evaluation batches with only consumed fields.
+
+    Used only after :func:`_builtin_eligible_layout` established the existing
+    eligible-only optimization. Exact built-in packed datasets with target-kind
+    metadata and in-process loading add ``stages`` and ``target_kinds`` to the
+    four model/supervision tensors; every other case keeps the public full
+    :class:`DecisionBatch` path.
+    """
+
+    if num_workers == 0:
+        pruned = _iter_pruned_batches(
+            dataset,
+            indices,
+            batch_size=batch_size,
+            include_stages=True,
+            include_target_kinds=True,
+        )
+        if pruned is not None:
+            return pruned
+    return iter_batches(
+        dataset,
+        indices,
+        batch_size=batch_size,
+        num_workers=num_workers,
+    )
+
+
 def evaluate_dataset(
     model: CandidatePolicy,
     dataset: DecisionDataset,
@@ -428,6 +463,12 @@ def evaluate_dataset(
     builtin_layout = _builtin_eligible_layout(dataset)
     if builtin_layout is None:
         indices = np.arange(len(dataset), dtype=np.int64)
+        batches = iter_batches(
+            dataset,
+            indices,
+            batch_size=batch_size,
+            num_workers=num_workers,
+        )
     else:
         indices, forced_by_stage = builtin_layout
         accumulator._add_forced_split(
@@ -435,16 +476,17 @@ def evaluate_dataset(
             eligible=int(indices.size),
             forced_by_stage=forced_by_stage,
         )
+        batches = _iter_evaluation_batches(
+            dataset,
+            indices,
+            batch_size=batch_size,
+            num_workers=num_workers,
+        )
     was_training = model.training
     model.eval()
     try:
         with torch.no_grad():
-            for batch in iter_batches(
-                dataset,
-                indices,
-                batch_size=batch_size,
-                num_workers=num_workers,
-            ):
+            for batch in batches:
                 moved = batch.to(target_device)
                 logits = model(moved.states, moved.candidates, moved.mask)
                 accumulator.add(
