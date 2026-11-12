@@ -52,7 +52,7 @@ def verify(dataset_root: Path, output: Path) -> dict:
     test = cache.load_split("test")
     config = TrainingConfig(seed=7, epochs=3, batch_size=17, learning_rate=0.01)
     model_config = ModelConfig(state_hidden=(16,), scorer_hidden=(16,))
-    original_batches = training._iter_training_batches
+    original_batches = training._iter_model_batches
 
     def trainer(name):
         return Trainer(
@@ -80,12 +80,12 @@ def verify(dataset_root: Path, output: Path) -> dict:
     try:
         continuous_order, interrupted_order, resumed_order = [], [], []
         continuous = trainer("continuous")
-        with patch.object(training, "_iter_training_batches", batches(continuous_order)):
+        with patch.object(training, "_iter_model_batches", batches(continuous_order)):
             expected = continuous.train()
         interrupted = trainer("interrupted")
         try:
             with patch.object(
-                training, "_iter_training_batches", batches(interrupted_order, interrupt=True)
+                training, "_iter_model_batches", batches(interrupted_order, interrupt=True)
             ):
                 interrupted.train()
         except InterruptedEpoch:
@@ -96,7 +96,7 @@ def verify(dataset_root: Path, output: Path) -> dict:
         boundary = load_checkpoint(source, require_training=True)
         assert boundary.training.completed_epochs == 1
         resumed = trainer("resumed")
-        with patch.object(training, "_iter_training_batches", batches(resumed_order)):
+        with patch.object(training, "_iter_model_batches", batches(resumed_order)):
             actual = resumed.train(resume_from=source)
         assert continuous_order[:2] == interrupted_order
         assert continuous_order[1:] == resumed_order

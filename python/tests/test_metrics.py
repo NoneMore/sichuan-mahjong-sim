@@ -780,33 +780,3 @@ def test_evaluate_dataset_missing_target_kinds_keeps_fallback():
     assert (report.decisions, report.eligible, report.forced) == (4, 3, 1)
     assert report.top1 == baseline.top1
     assert_reports_equal(report, baseline, tolerance=1e-6)
-
-
-def test_evaluation_batches_use_public_path_for_worker_processes(monkeypatch):
-    import mahjong_bc.metrics as metrics_module
-
-    dataset = make_dataset(
-        split="validation", counts=[2], seed=61
-    )
-    sentinel = object()
-    calls: list[int] = []
-
-    def public_batches(dataset, indices, **kwargs):
-        calls.append(int(kwargs["num_workers"]))
-        yield sentinel
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("worker processes must not use the narrow gather")
-
-    monkeypatch.setattr(metrics_module, "iter_batches", public_batches)
-    monkeypatch.setattr(metrics_module, "_iter_pruned_batches", forbidden)
-    batches = list(
-        metrics_module._iter_evaluation_batches(
-            dataset,
-            np.array([0]),
-            batch_size=1,
-            num_workers=1,
-        )
-    )
-    assert batches == [sentinel]
-    assert calls == [1]

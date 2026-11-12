@@ -348,21 +348,6 @@ def _masked_cross_entropy_validated(
     return nll.masked_select(eligible).mean()
 
 
-def _mean_nll_all_validated(
-    logits: Tensor,
-    mask: Tensor,
-    targets: Tensor,
-) -> Tensor:
-    """Mean NLL for an eligible-only batch a caller has already validated.
-
-    Training visits only eligible decisions and checks every row on the host,
-    so the loss weights all rows equally without materializing an ``eligible``
-    tensor for the batch.
-    """
-
-    return _decision_nll_validated(logits, mask, targets).mean()
-
-
 def greedy_indices(logits: Tensor, mask: Tensor, *, check_finite: bool = True) -> Tensor:
     """Return the highest-logit valid candidate per decision.
 

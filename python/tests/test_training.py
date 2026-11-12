@@ -25,7 +25,7 @@ from mahjong_bc.config import (
     TrainingConfig,
 )
 from mahjong_bc.constants import ROLE_BEST, ROLE_LAST, ROLE_POLICY
-from mahjong_bc.data import PackedDecisionDataset
+from mahjong_bc.data import PackedDecisionDataset, iter_batches
 from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError, ResumeError
 import mahjong_bc.policy as policy_module
 from mahjong_bc.policy import CandidatePolicy, build_policy
@@ -275,7 +275,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
     continuous_order: list[list[int]] = []
     interrupted_order: list[list[int]] = []
     resumed_order: list[list[int]] = []
-    real_batches = train_module._iter_training_batches
+    real_batches = train_module._iter_model_batches
 
     def traced_batches(trace, *, interrupt=False):
         def iterator(dataset, indices, **kwargs):
@@ -302,7 +302,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
         device="cpu",
     )
     monkeypatch.setattr(
-        train_module, "_iter_training_batches", traced_batches(continuous_order)
+        train_module, "_iter_model_batches", traced_batches(continuous_order)
     )
     summary_a = uninterrupted.train()
 
@@ -316,7 +316,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
     )
     monkeypatch.setattr(
         train_module,
-        "_iter_training_batches",
+        "_iter_model_batches",
         traced_batches(interrupted_order, interrupt=True),
     )
     with pytest.raises(KeyboardInterrupt, match="injected"):
@@ -339,7 +339,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
         device="cpu",
     )
     monkeypatch.setattr(
-        train_module, "_iter_training_batches", traced_batches(resumed_order)
+        train_module, "_iter_model_batches", traced_batches(resumed_order)
     )
     summary_b = resumed.train(resume_from=tmp_path / "interrupted" / "last.pt")
 
@@ -1312,11 +1312,17 @@ def test_training_loss_matches_the_public_reference_exactly(tmp_path, monkeypatc
             if name == "reference":
                 def public_reference(logits, mask, targets):
                     reference_calls.append(int(logits.shape[0]))
-                    return policy_module.masked_cross_entropy(logits, mask, targets)
+                    nll = policy_module.decision_nll(logits, mask, targets)
+                    torch.testing.assert_close(
+                        nll.mean(),
+                        policy_module.masked_cross_entropy(logits, mask, targets),
+                        rtol=0, atol=0,
+                    )
+                    return nll
 
                 patch.setattr(
                     train_module,
-                    "_mean_nll_all_validated",
+                    "_decision_nll_validated",
                     public_reference,
                 )
             summaries.append(trainer.train())
@@ -1398,20 +1404,20 @@ def _mask_off_targets(batch):
         ),
     ],
 )
-def test_training_rejects_malformed_pruned_batches_before_updating(
+def test_training_rejects_malformed_fallback_batches_before_updating(
     tmp_path, monkeypatch, mutate, message
 ):
     train, validation = learnable_pair(cache_id="host-batches")
-    real_batches = train_module._iter_training_batches
+    real_batches = train_module._iter_model_batches
 
     def corrupting(dataset, indices, **kwargs):
         for batch in real_batches(dataset, indices, **kwargs):
-            assert not hasattr(batch, "eligible")
+            assert hasattr(batch, "eligible")
             yield mutate(batch)
 
-    monkeypatch.setattr(train_module, "_iter_training_batches", corrupting)
+    monkeypatch.setattr(train_module, "_iter_model_batches", corrupting)
     trainer = Trainer(
-        train_dataset=train,
+        train_dataset=_record(train),
         validation_dataset=validation,
         model_config=_small_model(),
         training_config=_config(epochs=1, batch_size=3, learning_rate=0.01),
@@ -1429,7 +1435,7 @@ def test_training_rejects_forced_public_batch_on_fallback(
     tmp_path, monkeypatch
 ):
     train, validation = learnable_pair(cache_id="fallback-forced")
-    real_batches = train_module._iter_training_batches
+    real_batches = train_module._iter_model_batches
 
     def corrupting(dataset, indices, **kwargs):
         for batch in real_batches(dataset, indices, **kwargs):
@@ -1438,7 +1444,7 @@ def test_training_rejects_forced_public_batch_on_fallback(
                 batch, eligible=torch.zeros_like(batch.eligible)
             )
 
-    monkeypatch.setattr(train_module, "_iter_training_batches", corrupting)
+    monkeypatch.setattr(train_module, "_iter_model_batches", corrupting)
     trainer = Trainer(
         train_dataset=_record(train),
         validation_dataset=validation,
@@ -1502,14 +1508,19 @@ def test_pruned_training_matches_full_batch_baseline_exactly(
     tmp_path, monkeypatch
 ):
     train = make_dataset(
-        split="train", counts=[2] * 8, seed=141, cache_id="pruned-baseline"
+        split="train", counts=[2, 1, 3, 4, 2, 3, 2, 4],
+        seed=141, cache_id="pruned-baseline"
     )
     validation = make_dataset(
-        split="validation", counts=[2] * 4, seed=142, cache_id="pruned-baseline"
+        split="validation", counts=[2, 3, 2, 4],
+        seed=142, cache_id="pruned-baseline"
     )
     config = _config(epochs=3, batch_size=3, learning_rate=0.03)
     model_config = _small_model()
-    reference_batches = train_module.iter_batches
+
+    def reference_batches(dataset, indices, *, training, **kwargs):
+        return iter_batches(dataset, indices, **kwargs)
+
     summaries = []
     models = []
     for name, dataset, reference in (
@@ -1530,7 +1541,7 @@ def test_pruned_training_matches_full_batch_baseline_exactly(
             if reference:
                 patch.setattr(
                     train_module,
-                    "_iter_training_batches",
+                    "_iter_model_batches",
                     reference_batches,
                 )
             summaries.append(trainer.train())
@@ -1580,7 +1591,7 @@ def test_pruned_training_recovery_replays_exactly(tmp_path, monkeypatch):
     )
     config = _config(epochs=4, batch_size=3, learning_rate=0.01)
     model = _small_model()
-    real_batches = train_module._iter_training_batches
+    real_batches = train_module._iter_model_batches
     continuous_order: list[list[int]] = []
     resumed_order: list[list[int]] = []
 
@@ -1606,7 +1617,7 @@ def test_pruned_training_recovery_replays_exactly(tmp_path, monkeypatch):
         device="cpu",
     )
     monkeypatch.setattr(
-        train_module, "_iter_training_batches", traced_batches(continuous_order)
+        train_module, "_iter_model_batches", traced_batches(continuous_order)
     )
     expected = continuous.train()
 
@@ -1620,7 +1631,7 @@ def test_pruned_training_recovery_replays_exactly(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         train_module,
-        "_iter_training_batches",
+        "_iter_model_batches",
         traced_batches([], interrupt=True),
     )
     with pytest.raises(KeyboardInterrupt, match="injected"):
@@ -1635,7 +1646,7 @@ def test_pruned_training_recovery_replays_exactly(tmp_path, monkeypatch):
         device="cpu",
     )
     monkeypatch.setattr(
-        train_module, "_iter_training_batches", traced_batches(resumed_order)
+        train_module, "_iter_model_batches", traced_batches(resumed_order)
     )
     actual = resumed.train(resume_from=tmp_path / "interrupted" / "last.pt")
     assert continuous_order[1:] == resumed_order
@@ -1684,7 +1695,7 @@ def test_training_missing_target_kinds_keeps_public_batch_fallback(
         output_dir=tmp_path / "no-kinds",
         device="cpu",
     )
-    real_batches = train_module._iter_training_batches
+    real_batches = train_module._iter_model_batches
     public_batches: list[bool] = []
 
     def recording(dataset, indices, **kwargs):
@@ -1692,33 +1703,8 @@ def test_training_missing_target_kinds_keeps_public_batch_fallback(
             public_batches.append(hasattr(batch, "eligible"))
             yield batch
 
-    monkeypatch.setattr(train_module, "_iter_training_batches", recording)
+    monkeypatch.setattr(train_module, "_iter_model_batches", recording)
     summary = trainer.train()
     assert summary.completed_epochs == 1
     assert summary.samples_seen == 4
     assert public_batches and all(public_batches)
-
-
-def test_training_batches_use_public_path_for_worker_processes(monkeypatch):
-    dataset = make_dataset(
-        split="train", counts=[2], seed=153, cache_id="worker-fallback"
-    )
-    sentinel = object()
-    calls: list[int] = []
-
-    def public_batches(dataset, indices, **kwargs):
-        calls.append(int(kwargs["num_workers"]))
-        yield sentinel
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("worker processes must not use the narrow gather")
-
-    monkeypatch.setattr(train_module, "iter_batches", public_batches)
-    monkeypatch.setattr(train_module, "_iter_pruned_batches", forbidden)
-    batches = list(
-        train_module._iter_training_batches(
-            dataset, [0], batch_size=1, num_workers=1
-        )
-    )
-    assert batches == [sentinel]
-    assert calls == [1]

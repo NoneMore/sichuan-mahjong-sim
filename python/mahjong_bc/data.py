@@ -15,7 +15,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from bisect import bisect_right
 from dataclasses import dataclass
-from typing import Callable, Iterator, Sequence
+from typing import Iterator, Sequence
 
 import numpy as np
 import torch
@@ -153,21 +153,12 @@ class DecisionBatch:
 
 @dataclass(frozen=True)
 class _PrunedDecisionBatch:
-    """Internal batch containing only the fields one consumer reads.
-
-    Training uses the four model/supervision tensors and leaves ``stages`` and
-    ``target_kinds`` unset. Evaluation adds those two metadata tensors. The
-    provenance arrays and a derived batch ``eligible`` tensor never exist on
-    this path. ``candidate_counts`` stays on the host because it records the
-    candidate range implied by the current offsets: training uses it to reject
-    a traversal index that became forced after the dataset was constructed.
-    """
+    """Internal model batch; evaluation also carries stage and target kind."""
 
     states: Tensor
     candidates: Tensor
     mask: Tensor
     targets: Tensor
-    candidate_counts: np.ndarray
     stages: Tensor | None = None
     target_kinds: Tensor | None = None
 
@@ -184,7 +175,6 @@ class _PrunedDecisionBatch:
             candidates=self.candidates.to(target, non_blocking=non_blocking),
             mask=self.mask.to(target, non_blocking=non_blocking),
             targets=self.targets.to(target, non_blocking=non_blocking),
-            candidate_counts=self.candidate_counts,
             stages=(
                 None
                 if self.stages is None
@@ -447,26 +437,6 @@ class PackedDecisionDataset(DecisionDataset):
             return _reference_batch(self, positions)
         return _gather_segments(positions.size, segments)
 
-    def _gather_pruned_batch(
-        self,
-        positions: np.ndarray,
-        *,
-        include_stages: bool,
-        include_target_kinds: bool,
-    ) -> _PrunedDecisionBatch:
-        """Gather only the fields a training or evaluation consumer reads."""
-
-        if self._closed:
-            raise DataError("dataset is closed")
-        _check_batch_positions(positions, len(self))
-        rows = np.arange(positions.size, dtype=np.int64)
-        return _gather_pruned_segments(
-            positions.size,
-            ((rows, self, positions),),
-            include_stages=include_stages,
-            include_target_kinds=include_target_kinds,
-        )
-
 
 class ShardedDecisionDataset(DecisionDataset):
     """A complete split backed by multiple independently memory-mapped shards.
@@ -588,25 +558,6 @@ class ShardedDecisionDataset(DecisionDataset):
         if _unsigned_metadata_overflows(segments):
             return _reference_batch(self, positions)
         return _gather_segments(positions.size, segments)
-
-    def _gather_pruned_batch(
-        self,
-        positions: np.ndarray,
-        *,
-        include_stages: bool,
-        include_target_kinds: bool,
-    ) -> _PrunedDecisionBatch:
-        """Gather only the fields a training or evaluation consumer reads."""
-
-        if self._closed:
-            raise DataError("dataset is closed")
-        _check_batch_positions(positions, len(self))
-        return _gather_pruned_segments(
-            positions.size,
-            _shard_segments(self, positions),
-            include_stages=include_stages,
-            include_target_kinds=include_target_kinds,
-        )
 
 
 def _shard_segments(
@@ -759,8 +710,7 @@ def _gather_pruned_segments(
     batch_size: int,
     segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
     *,
-    include_stages: bool,
-    include_target_kinds: bool,
+    training: bool,
 ) -> _PrunedDecisionBatch:
     """Gather only the tensors selected by an internal consumer.
 
@@ -771,15 +721,15 @@ def _gather_pruned_segments(
 
     states, counts, starts, targets = _gather_base_columns(batch_size, segments)
     _require_gathered_targets(targets, counts)
-    stages = None
-    if include_stages:
+    # Cached traversal indices can become forced after an in-place offsets edit.
+    if training and np.any(counts <= FORCED_CANDIDATE_COUNT):
+        raise DataError("training traversal included a forced decision")
+    stages = target_kinds = None
+    if not training:
         stages = np.empty(batch_size, dtype=np.int64)
-        for rows, shard, local in segments:
-            stages[rows] = shard.stages[local]
-    target_kinds = None
-    if include_target_kinds:
         target_kinds = np.empty(batch_size, dtype=np.int64)
         for rows, shard, local in segments:
+            stages[rows] = shard.stages[local]
             target_kinds[rows] = shard.target_kinds[local]
     candidates = _pad_candidate_rows(batch_size, segments, counts, starts)
     max_count = int(counts.max())
@@ -789,7 +739,6 @@ def _gather_pruned_segments(
         candidates=torch.from_numpy(candidates),
         mask=torch.from_numpy(mask),
         targets=torch.from_numpy(targets),
-        candidate_counts=counts,
         stages=None if stages is None else torch.from_numpy(stages),
         target_kinds=(
             None if target_kinds is None else torch.from_numpy(target_kinds)
@@ -862,84 +811,58 @@ def _gather_segments(
     )
 
 
-def _packed_batch_gatherer(
+def _packed_dataset(
     dataset: DecisionDataset,
-) -> Callable[[np.ndarray], DecisionBatch] | None:
-    """Return the vectorized gatherer for the built-in packed datasets.
-
-    Only the exact built-in classes qualify: a subclass may override
-    ``__getitem__``, and its per-sample semantics must keep applying. Shards
-    without ``target_kinds`` are also excluded so target-kind derivation keeps
-    its per-sample validation.
-    """
+) -> PackedDecisionDataset | ShardedDecisionDataset | None:
+    """Qualify built-ins without bypassing subclass or target-kind derivation."""
 
     if type(dataset) is PackedDecisionDataset:
-        if dataset.target_kinds is None:
-            return None
-        return dataset._gather_batch
-    if type(dataset) is ShardedDecisionDataset:
-        for shard in dataset.shards:
-            if type(shard) is not PackedDecisionDataset or shard.target_kinds is None:
-                return None
-        return dataset._gather_batch
+        return dataset if dataset.target_kinds is not None else None
+    if type(dataset) is ShardedDecisionDataset and all(
+        type(shard) is PackedDecisionDataset and shard.target_kinds is not None
+        for shard in dataset.shards
+    ):
+        return dataset
     return None
 
 
-def _pruned_batch_gatherer(
-    dataset: DecisionDataset,
-) -> Callable[..., _PrunedDecisionBatch] | None:
-    """Return the narrow-field gatherer for built-in packed datasets.
-
-    The same exact-class and target-kind gates as the public vectorized path
-    apply: a subclass may override ``__getitem__`` and a shard without
-    ``target_kinds`` must keep per-sample target-kind derivation. Only the
-    attribute is inspected here; no metadata window is read.
-    """
-
-    if type(dataset) is PackedDecisionDataset:
-        if dataset.target_kinds is None:
-            return None
-        return dataset._gather_pruned_batch
-    if type(dataset) is ShardedDecisionDataset:
-        for shard in dataset.shards:
-            if type(shard) is not PackedDecisionDataset or shard.target_kinds is None:
-                return None
-        return dataset._gather_pruned_batch
-    return None
-
-
-def _iter_pruned_batches(
+def _iter_model_batches(
     dataset: DecisionDataset,
     indices: Sequence[int] | np.ndarray,
     *,
     batch_size: int,
-    include_stages: bool,
-    include_target_kinds: bool,
-) -> Iterator[_PrunedDecisionBatch] | None:
-    """Iterate narrow internal batches, or ``None`` when the caller must fall back.
+    num_workers: int = 0,
+    training: bool,
+) -> Iterator[DecisionBatch | _PrunedDecisionBatch]:
+    """Gather training/evaluation fields, retaining full batches on fallback.
 
-    No fallback batch is produced here: a caller that receives ``None`` keeps
-    its existing :func:`iter_batches` path and semantics.
+    Evaluation callers must first establish the eligible-only layout. Narrow
+    training batches validate current targets and eligibility during gathering;
+    public fallback batches retain the consumer's original validation.
     """
 
-    gather = _pruned_batch_gatherer(dataset)
-    if gather is None:
-        return None
+    packed = _packed_dataset(dataset) if num_workers == 0 else None
+    if packed is None:
+        yield from iter_batches(
+            dataset, indices, batch_size=batch_size, num_workers=num_workers
+        )
+        return
     if batch_size < 1:
         raise DataError("batch_size must be positive")
     ordered = np.asarray(indices, dtype=np.int64)
     if ordered.ndim != 1:
         raise DataError("indices must be a one-dimensional sequence")
-
-    def batches() -> Iterator[_PrunedDecisionBatch]:
-        for start in range(0, ordered.size, batch_size):
-            yield gather(
-                ordered[start : start + batch_size],
-                include_stages=include_stages,
-                include_target_kinds=include_target_kinds,
-            )
-
-    return batches()
+    for start in range(0, ordered.size, batch_size):
+        if packed._closed:
+            raise DataError("dataset is closed")
+        positions = ordered[start : start + batch_size]
+        _check_batch_positions(positions, len(packed))
+        segments = (
+            _shard_segments(packed, positions)
+            if type(packed) is ShardedDecisionDataset
+            else ((np.arange(positions.size, dtype=np.int64), packed, positions),)
+        )
+        yield _gather_pruned_segments(positions.size, segments, training=training)
 
 
 def _as_float32_tensor(value: object) -> Tensor:
@@ -1129,10 +1052,10 @@ def iter_batches(
             "worker spawning would copy whole maps. Use num_workers=0."
         )
     if num_workers == 0:
-        gather = _packed_batch_gatherer(dataset)
-        if gather is not None:
+        packed = _packed_dataset(dataset)
+        if packed is not None:
             for start in range(0, ordered.size, batch_size):
-                yield gather(ordered[start : start + batch_size])
+                yield packed._gather_batch(ordered[start : start + batch_size])
             return
         for start in range(0, ordered.size, batch_size):
             chunk = ordered[start : start + batch_size]

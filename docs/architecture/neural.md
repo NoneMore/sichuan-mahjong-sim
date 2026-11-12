@@ -53,8 +53,9 @@ Public samples, `DecisionBatch`, collation, `iter_batches()` and batch device
 moves retain their complete contract. Internal training batches gather only
 states, candidates, mask and targets; eligible-only evaluation adds stages
 and target kinds. Neither path gathers provenance fields or creates a batch
-eligible tensor. Training checks current-offset candidate counts on the host
-before averaging all-row NLL; metrics derive eligibility from the mask.
+eligible tensor. The shared internal iterator checks training targets and
+current-offset eligibility while gathering on the host, before averaging
+all-row NLL; metrics derive eligibility from the mask.
 
 Narrow gathering requires num_workers=0, exact built-in packed datasets and
 target-kind metadata in every shard. Custom datasets, subclasses, missing
