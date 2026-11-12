@@ -19,6 +19,7 @@ from .data import (
     DecisionDataset,
     PackedDecisionDataset,
     ShardedDecisionDataset,
+    _iter_model_batches,
     iter_batches,
     require_dataset_identity,
 )
@@ -428,6 +429,12 @@ def evaluate_dataset(
     builtin_layout = _builtin_eligible_layout(dataset)
     if builtin_layout is None:
         indices = np.arange(len(dataset), dtype=np.int64)
+        batches = iter_batches(
+            dataset,
+            indices,
+            batch_size=batch_size,
+            num_workers=num_workers,
+        )
     else:
         indices, forced_by_stage = builtin_layout
         accumulator._add_forced_split(
@@ -435,16 +442,18 @@ def evaluate_dataset(
             eligible=int(indices.size),
             forced_by_stage=forced_by_stage,
         )
+        batches = _iter_model_batches(
+            dataset,
+            indices,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            training=False,
+        )
     was_training = model.training
     model.eval()
     try:
         with torch.no_grad():
-            for batch in iter_batches(
-                dataset,
-                indices,
-                batch_size=batch_size,
-                num_workers=num_workers,
-            ):
+            for batch in batches:
                 moved = batch.to(target_device)
                 logits = model(moved.states, moved.candidates, moved.mask)
                 accumulator.add(

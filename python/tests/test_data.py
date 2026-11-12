@@ -10,10 +10,12 @@ import torch
 import mahjong_bc.data as data_module
 from mahjong_bc.constants import CANDIDATE_WIDTH, STATE_WIDTH
 from mahjong_bc.data import (
+    DecisionBatch,
     DecisionDataset,
     DecisionSample,
     PackedDecisionDataset,
     ShardedDecisionDataset,
+    _iter_model_batches,
     collate_decisions,
     contains_memory_mapped_arrays,
     derive_target_kind,
@@ -1010,3 +1012,302 @@ def test_packed_shards_without_target_kinds_keep_the_per_sample_path(monkeypatch
         int(dataset[0].target_kind),
         int(dataset[1].target_kind),
     ]
+
+
+class _ReadGuardedArray(np.ndarray):
+    """ndarray view that records every window accessed after construction."""
+
+    def __new__(cls, values: np.ndarray, reads: list[object]):
+        view = np.asarray(values).view(cls)
+        view.reads = reads
+        return view
+
+    def __array_finalize__(self, source):
+        if source is not None:
+            self.reads = getattr(source, "reads", None)
+
+    def __getitem__(self, key):
+        if self.reads is not None:
+            self.reads.append(key)
+        return super().__getitem__(key)
+
+
+def _pruned_batches(dataset, indices, batch_size, *, metadata: bool):
+    iterator = _iter_model_batches(
+        dataset,
+        indices,
+        batch_size=batch_size,
+        training=not metadata,
+    )
+    return list(iterator)
+
+
+def _assert_pruned_matches_reference(actual, expected, *, metadata: bool) -> None:
+    assert actual.batch_size == expected.batch_size
+    for name in ("states", "candidates", "mask", "targets"):
+        got = getattr(actual, name)
+        want = getattr(expected, name)
+        assert got.dtype == want.dtype, name
+        assert torch.equal(got, want), name
+    for name in ("stages", "target_kinds"):
+        got = getattr(actual, name)
+        if metadata:
+            assert got is not None and got.dtype == torch.int64
+            assert torch.equal(got, getattr(expected, name)), name
+        else:
+            assert got is None, name
+    assert not hasattr(actual, "eligible")
+    assert not hasattr(actual, "actor_seats")
+    assert not hasattr(actual, "decision_indices")
+    assert not hasattr(actual, "episode_ids")
+
+
+@pytest.mark.parametrize("sharded", [False, True])
+def test_pruned_batches_match_reference_collation(sharded):
+    first = _metadata_dataset(counts=[1, 3, 2, 4], seed=201)
+    if sharded:
+        second = _metadata_dataset(counts=[2, 1], seed=202)
+        third = _metadata_dataset(counts=[3, 2], seed=203)
+        dataset = ShardedDecisionDataset(
+            (first, _empty_packed_dataset(), second, third),
+            identity(
+                split="train",
+                decisions=8,
+                eligible=(
+                    first.eligible_count
+                    + second.eligible_count
+                    + third.eligible_count
+                ),
+            ),
+        )
+    else:
+        dataset = first
+    if sharded:
+        indices = np.array([0, 0, 3, 7, 2, 5, 1, 6, 4, 1])
+        expected_sizes = [3, 3, 3, 1]
+    else:
+        indices = np.array([0, 0, 3, 2, 1, 3, 2])
+        expected_sizes = [3, 3, 1]
+    for metadata in (False, True):
+        order = indices if metadata else indices[dataset.candidate_counts()[indices] > 1]
+        reference = _reference_batches(dataset, order, 3)
+        actual = _pruned_batches(dataset, order, 3, metadata=metadata)
+        assert len(actual) == len(reference)
+        assert [batch.batch_size for batch in actual] == [
+            batch.batch_size for batch in reference
+        ]
+        if metadata:
+            assert [batch.batch_size for batch in actual] == expected_sizes
+        for got, want in zip(actual, reference):
+            _assert_pruned_matches_reference(got, want, metadata=metadata)
+    assert list(
+        _iter_model_batches(
+            dataset,
+            [],
+            batch_size=3,
+            training=True,
+        )
+    ) == []
+
+
+def test_pruned_training_fields_do_not_touch_unconsumed_metadata():
+    dataset = _metadata_dataset(
+        counts=[2, 2, 3, 2], seed=204, episode_ids="list"
+    )
+    reads: list[object] = []
+    dataset.stages = _ReadGuardedArray(dataset.stages, reads)
+    dataset.target_kinds = _ReadGuardedArray(dataset.target_kinds, reads)
+    dataset.actor_seats = _ReadGuardedArray(dataset.actor_seats, reads)
+    dataset.decision_indices = _ReadGuardedArray(dataset.decision_indices, reads)
+    dataset.episode_ids = _ReadGuardedArray(
+        np.asarray(dataset.episode_ids, dtype=object), reads
+    )
+    batches = _pruned_batches(dataset, [3, 0, 1, 2], 2, metadata=False)
+    assert [batch.batch_size for batch in batches] == [2, 2]
+    assert reads == []
+    # Evaluation consumes stages and target kinds, but not provenance arrays.
+    dataset.stages = np.asarray(dataset.stages)
+    dataset.target_kinds = np.asarray(dataset.target_kinds)
+    reads.clear()
+    evaluated = _pruned_batches(dataset, [3, 0, 1, 2], 2, metadata=True)
+    assert [batch.batch_size for batch in evaluated] == [2, 2]
+    assert reads == []
+
+
+def _created_arrays(monkeypatch, action):
+    created: list[tuple[tuple[int, ...], str]] = []
+    real_from_numpy = data_module.torch.from_numpy
+
+    def spy(array):
+        created.append((tuple(array.shape), str(array.dtype)))
+        return real_from_numpy(array)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(data_module.torch, "from_numpy", spy)
+        result = action()
+    return created, result
+
+
+def test_pruned_gather_allocates_only_consumed_tensors(monkeypatch):
+    dataset = _metadata_dataset(counts=[2, 3, 2], seed=205)
+    expected_training = [
+        ((3, STATE_WIDTH), "float32"),
+        ((3, 3, CANDIDATE_WIDTH), "float32"),
+        ((3, 3), "bool"),
+        ((3,), "int64"),
+    ]
+    created, training = _created_arrays(
+        monkeypatch,
+        lambda: _pruned_batches(dataset, [0, 1, 2], 3, metadata=False)[0],
+    )
+    assert created == expected_training
+    expected_evaluation = expected_training + [
+        ((3,), "int64"),
+        ((3,), "int64"),
+    ]
+    created, evaluation = _created_arrays(
+        monkeypatch,
+        lambda: _pruned_batches(dataset, [0, 1, 2], 3, metadata=True)[0],
+    )
+    assert created == expected_evaluation
+    assert training.stages is None and training.target_kinds is None
+    assert evaluation.stages is not None and evaluation.target_kinds is not None
+
+
+def test_pruned_batch_to_moves_only_consumed_tensors(monkeypatch):
+    dataset = _metadata_dataset(counts=[2, 3, 2], seed=206)
+    training = _pruned_batches(dataset, [0, 1, 2], 3, metadata=False)[0]
+    evaluation = _pruned_batches(dataset, [0, 1, 2], 3, metadata=True)[0]
+    real_to = torch.Tensor.to
+    moved: list[tuple[tuple[int, ...], str]] = []
+
+    def spy(tensor, *args, **kwargs):
+        moved.append((tuple(tensor.shape), str(tensor.dtype).removeprefix("torch.")))
+        return real_to(tensor, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(torch.Tensor, "to", spy)
+        moved_training = training.to("cpu")
+    assert moved == [
+        ((3, STATE_WIDTH), "float32"),
+        ((3, 3, CANDIDATE_WIDTH), "float32"),
+        ((3, 3), "bool"),
+        ((3,), "int64"),
+    ]
+    assert moved_training.stages is None
+    moved.clear()
+    with monkeypatch.context() as patch:
+        patch.setattr(torch.Tensor, "to", spy)
+        moved_evaluation = evaluation.to("cpu")
+    assert moved == [
+        ((3, STATE_WIDTH), "float32"),
+        ((3, 3, CANDIDATE_WIDTH), "float32"),
+        ((3, 3), "bool"),
+        ((3,), "int64"),
+        ((3,), "int64"),
+        ((3,), "int64"),
+    ]
+    assert moved_evaluation.stages is not None
+    assert moved_evaluation.target_kinds is not None
+
+
+@pytest.mark.parametrize("name", ["decision_indices", "actor_seats"])
+def test_pruned_gather_ignores_unconsumed_unsigned_overflow(monkeypatch, name):
+    dataset = _metadata_dataset(counts=[2, 2], seed=207)
+    values = getattr(dataset, name).astype(np.uint64)
+    values[0] = np.uint64(2**63)
+    setattr(dataset, name, values)
+
+    def forbidden(segments):
+        raise AssertionError("pruned fields must not check unconsumed metadata")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(data_module, "_unsigned_metadata_overflows", forbidden)
+        for metadata in (False, True):
+            batches = _pruned_batches(
+                dataset, [0, 1], 2, metadata=metadata
+            )
+            assert [batch.batch_size for batch in batches] == [2]
+    with pytest.raises(ValueError):
+        list(iter_batches(dataset, [0, 1], batch_size=2))
+
+
+def test_pruned_gather_rechecks_targets_and_current_offsets():
+    dataset = _metadata_dataset(counts=[2, 2, 3], seed=208)
+    dataset.targets[0] = 2
+    with pytest.raises(DataError, match="sample target is outside"):
+        _pruned_batches(dataset, [0], 1, metadata=False)
+    dataset = _metadata_dataset(counts=[2, 2, 3], seed=209)
+    dataset.offsets[1] = 1
+    assert np.diff(dataset.offsets).tolist() == [1, 3, 3]
+    dataset.targets[0] = 0
+    first = _pruned_batches(dataset, [0, 1], 2, metadata=True)[0]
+    assert first.mask.sum(dim=1).tolist() == [1, 3]
+    assert first.candidates.shape[1] == 3
+
+
+def test_model_batches_fall_back_for_non_qualifying_datasets():
+    source = _metadata_dataset(counts=[2, 2], seed=211)
+    subclass = _TrackingDataset(source)
+    datasets = (
+        _metadata_dataset(counts=[2, 2], seed=210, target_kinds=False),
+        subclass,
+        ShardedDecisionDataset(
+            (subclass,), identity(split="train", decisions=2, eligible=2)
+        ),
+    )
+    for dataset in datasets:
+        for training in (True, False):
+            actual = list(_iter_model_batches(
+                dataset, [1, 0], batch_size=2, training=training
+            ))
+            reference = _reference_batches(dataset, [1, 0], 2)
+            assert len(actual) == 1 and isinstance(actual[0], DecisionBatch)
+            for field in _BATCH_FIELDS:
+                got, want = getattr(actual[0], field), getattr(reference[0], field)
+                if isinstance(got, torch.Tensor):
+                    assert torch.equal(got, want), field
+                else:
+                    assert got == want, field
+
+
+@pytest.mark.parametrize("training", [True, False])
+def test_model_batches_use_public_path_for_workers(monkeypatch, training):
+    dataset = _metadata_dataset(counts=[2], seed=213)
+    sentinel = object()
+    calls = []
+
+    def public_batches(dataset, indices, **kwargs):
+        calls.append(kwargs["num_workers"])
+        yield sentinel
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("workers must not use narrow gathering")
+
+    monkeypatch.setattr(data_module, "iter_batches", public_batches)
+    monkeypatch.setattr(data_module, "_gather_pruned_segments", forbidden)
+    assert list(_iter_model_batches(
+        dataset, [0], batch_size=1, num_workers=1, training=training
+    )) == [sentinel]
+    assert calls == [1]
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_pruned_batches_move_only_consumed_fields_to_cuda():
+    dataset = _metadata_dataset(counts=[2, 3, 2], seed=212)
+    training = _pruned_batches(dataset, [0, 1, 2], 3, metadata=False)[0]
+    moved_training = training.to("cuda")
+    assert moved_training.states.device.type == "cuda"
+    assert moved_training.candidates.device.type == "cuda"
+    assert moved_training.mask.device.type == "cuda"
+    assert moved_training.targets.device.type == "cuda"
+    assert moved_training.stages is None
+    assert moved_training.target_kinds is None
+    evaluation = _pruned_batches(dataset, [0, 1, 2], 3, metadata=True)[0]
+    moved_evaluation = evaluation.to("cuda")
+    assert moved_evaluation.stages.device.type == "cuda"
+    assert moved_evaluation.target_kinds.device.type == "cuda"
+    assert torch.equal(moved_evaluation.stages.cpu(), evaluation.stages)
+    assert torch.equal(
+        moved_evaluation.target_kinds.cpu(), evaluation.target_kinds
+    )

@@ -25,7 +25,7 @@ from mahjong_bc.config import (
     TrainingConfig,
 )
 from mahjong_bc.constants import ROLE_BEST, ROLE_LAST, ROLE_POLICY
-from mahjong_bc.data import PackedDecisionDataset
+from mahjong_bc.data import PackedDecisionDataset, iter_batches
 from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError, ResumeError
 import mahjong_bc.policy as policy_module
 from mahjong_bc.policy import CandidatePolicy, build_policy
@@ -114,6 +114,24 @@ def _assert_state_tree_close(left: Any, right: Any, *, path: str = "") -> None:
         return
     if isinstance(left, float):
         assert right == pytest.approx(left, rel=1e-6, abs=1e-7), path
+        return
+    assert left == right, path
+
+
+def _assert_state_tree_exact(left: Any, right: Any, *, path: str = "") -> None:
+    if isinstance(left, torch.Tensor):
+        assert isinstance(right, torch.Tensor), path
+        assert torch.equal(left, right), path
+        return
+    if isinstance(left, dict):
+        assert isinstance(right, dict) and set(left) == set(right), path
+        for key in left:
+            _assert_state_tree_exact(left[key], right[key], path=f"{path}.{key}")
+        return
+    if isinstance(left, (list, tuple)):
+        assert isinstance(right, (list, tuple)) and len(left) == len(right), path
+        for index, (first, second) in enumerate(zip(left, right)):
+            _assert_state_tree_exact(first, second, path=f"{path}[{index}]")
         return
     assert left == right, path
 
@@ -257,7 +275,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
     continuous_order: list[list[int]] = []
     interrupted_order: list[list[int]] = []
     resumed_order: list[list[int]] = []
-    real_batches = train_module.iter_batches
+    real_batches = train_module._iter_model_batches
 
     def traced_batches(trace, *, interrupt=False):
         def iterator(dataset, indices, **kwargs):
@@ -284,7 +302,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
         device="cpu",
     )
     monkeypatch.setattr(
-        train_module, "iter_batches", traced_batches(continuous_order)
+        train_module, "_iter_model_batches", traced_batches(continuous_order)
     )
     summary_a = uninterrupted.train()
 
@@ -298,7 +316,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
     )
     monkeypatch.setattr(
         train_module,
-        "iter_batches",
+        "_iter_model_batches",
         traced_batches(interrupted_order, interrupt=True),
     )
     with pytest.raises(KeyboardInterrupt, match="injected"):
@@ -321,7 +339,7 @@ def test_midepoch_interruption_resumes_with_exact_following_order_and_state(
         device="cpu",
     )
     monkeypatch.setattr(
-        train_module, "iter_batches", traced_batches(resumed_order)
+        train_module, "_iter_model_batches", traced_batches(resumed_order)
     )
     summary_b = resumed.train(resume_from=tmp_path / "interrupted" / "last.pt")
 
@@ -1280,6 +1298,7 @@ def test_training_loss_matches_the_public_reference_exactly(tmp_path, monkeypatc
     model_config = _small_model()
     summaries = []
     weights = []
+    reference_calls: list[int] = []
     for name in ("trusted", "reference"):
         trainer = Trainer(
             train_dataset=train,
@@ -1291,20 +1310,27 @@ def test_training_loss_matches_the_public_reference_exactly(tmp_path, monkeypatc
         )
         with monkeypatch.context() as patch:
             if name == "reference":
+                def public_reference(logits, mask, targets):
+                    reference_calls.append(int(logits.shape[0]))
+                    nll = policy_module.decision_nll(logits, mask, targets)
+                    torch.testing.assert_close(
+                        nll.mean(),
+                        policy_module.masked_cross_entropy(logits, mask, targets),
+                        rtol=0, atol=0,
+                    )
+                    return nll
+
                 patch.setattr(
                     train_module,
-                    "_masked_cross_entropy_validated",
-                    lambda logits, mask, targets, eligible: (
-                        policy_module.masked_cross_entropy(
-                            logits, mask, targets, eligible=eligible
-                        )
-                    ),
+                    "_decision_nll_validated",
+                    public_reference,
                 )
             summaries.append(trainer.train())
         assert trainer.model is not None
         weights.append(
             {key: value.clone() for key, value in trainer.model.state_dict().items()}
         )
+    assert reference_calls
     assert summaries[0].to_dict() == summaries[1].to_dict()
     assert summaries[0].history[0]["train_nll"] == summaries[1].history[0]["train_nll"]
     _assert_state_dict_equal(weights[0], weights[1])
@@ -1359,12 +1385,6 @@ def _mask_off_targets(batch):
     [
         (
             lambda batch: dataclasses.replace(
-                batch, eligible=torch.zeros_like(batch.eligible)
-            ),
-            "forced decision",
-        ),
-        (
-            lambda batch: dataclasses.replace(
                 batch, targets=batch.targets.clone().fill_(batch.candidates.shape[1])
             ),
             "outside the padded candidate range",
@@ -1376,21 +1396,28 @@ def _mask_off_targets(batch):
             "integer tensor",
         ),
         (_mask_off_targets, "does not reference a valid candidate"),
+        (
+            lambda batch: dataclasses.replace(
+                batch, mask=torch.zeros_like(batch.mask)
+            ),
+            "at least one valid candidate",
+        ),
     ],
 )
-def test_training_rejects_malformed_host_batches_before_updating(
+def test_training_rejects_malformed_fallback_batches_before_updating(
     tmp_path, monkeypatch, mutate, message
 ):
     train, validation = learnable_pair(cache_id="host-batches")
-    real_batches = train_module.iter_batches
+    real_batches = train_module._iter_model_batches
 
     def corrupting(dataset, indices, **kwargs):
         for batch in real_batches(dataset, indices, **kwargs):
+            assert hasattr(batch, "eligible")
             yield mutate(batch)
 
-    monkeypatch.setattr(train_module, "iter_batches", corrupting)
+    monkeypatch.setattr(train_module, "_iter_model_batches", corrupting)
     trainer = Trainer(
-        train_dataset=train,
+        train_dataset=_record(train),
         validation_dataset=validation,
         model_config=_small_model(),
         training_config=_config(epochs=1, batch_size=3, learning_rate=0.01),
@@ -1402,3 +1429,282 @@ def test_training_rejects_malformed_host_batches_before_updating(
     assert trainer.optimizer is not None and not trainer.optimizer.state
     for name in TRAIN_OUTPUT_NAMES:
         assert not (tmp_path / "host-batches" / name).exists()
+
+
+def test_training_rejects_forced_public_batch_on_fallback(
+    tmp_path, monkeypatch
+):
+    train, validation = learnable_pair(cache_id="fallback-forced")
+    real_batches = train_module._iter_model_batches
+
+    def corrupting(dataset, indices, **kwargs):
+        for batch in real_batches(dataset, indices, **kwargs):
+            assert hasattr(batch, "eligible")
+            yield dataclasses.replace(
+                batch, eligible=torch.zeros_like(batch.eligible)
+            )
+
+    monkeypatch.setattr(train_module, "_iter_model_batches", corrupting)
+    trainer = Trainer(
+        train_dataset=_record(train),
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=1, batch_size=3, learning_rate=0.01),
+        output_dir=tmp_path / "fallback-forced",
+        device="cpu",
+    )
+    with pytest.raises(DataError, match="forced decision"):
+        trainer.train()
+    assert trainer.optimizer is not None and not trainer.optimizer.state
+
+
+def test_training_rejects_forced_row_from_current_offsets(tmp_path):
+    train = make_dataset(
+        split="train", counts=[2], seed=131, cache_id="current-offsets"
+    )
+    validation = make_dataset(
+        split="validation", counts=[2], seed=132, cache_id="current-offsets"
+    )
+    train.targets[0] = 0
+    train.offsets[1] = 1  # The cached eligible index is now a forced row.
+    trainer = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=1, batch_size=1, learning_rate=0.01),
+        output_dir=tmp_path / "current-offsets",
+        device="cpu",
+    )
+    with pytest.raises(DataError, match="forced decision"):
+        trainer.train()
+    assert trainer.optimizer is not None and not trainer.optimizer.state
+
+
+def test_training_checks_target_legality_before_forced_rejection(tmp_path):
+    train = make_dataset(
+        split="train", counts=[2, 2], seed=133, cache_id="target-first"
+    )
+    validation = make_dataset(
+        split="validation", counts=[2], seed=134, cache_id="target-first"
+    )
+    train.offsets[1] = 1
+    assert np.diff(train.offsets).tolist() == [1, 3]
+    train.targets[0] = 0  # Valid for the now-forced first row.
+    train.targets[1] = 4  # Outside the current three-candidate range.
+    trainer = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=1, batch_size=2, learning_rate=0.01),
+        output_dir=tmp_path / "target-first",
+        device="cpu",
+    )
+    with pytest.raises(DataError, match="sample target is outside"):
+        trainer.train()
+    assert trainer.optimizer is not None and not trainer.optimizer.state
+
+
+def test_pruned_training_matches_full_batch_baseline_exactly(
+    tmp_path, monkeypatch
+):
+    train = make_dataset(
+        split="train", counts=[2, 1, 3, 4, 2, 3, 2, 4],
+        seed=141, cache_id="pruned-baseline"
+    )
+    validation = make_dataset(
+        split="validation", counts=[2, 3, 2, 4],
+        seed=142, cache_id="pruned-baseline"
+    )
+    config = _config(epochs=3, batch_size=3, learning_rate=0.03)
+    model_config = _small_model()
+
+    def reference_batches(dataset, indices, *, training, **kwargs):
+        return iter_batches(dataset, indices, **kwargs)
+
+    summaries = []
+    models = []
+    for name, dataset, reference in (
+        ("pruned", train, False),
+        ("full", train, True),
+    ):
+        trainer = Trainer(
+            train_dataset=dataset,
+            validation_dataset=(
+                _record(validation) if reference else validation
+            ),
+            model_config=model_config,
+            training_config=config,
+            output_dir=tmp_path / name,
+            device="cpu",
+        )
+        with monkeypatch.context() as patch:
+            if reference:
+                patch.setattr(
+                    train_module,
+                    "_iter_model_batches",
+                    reference_batches,
+                )
+            summaries.append(trainer.train())
+        assert trainer.model is not None
+        models.append(
+            {
+                key: value.clone()
+                for key, value in trainer.model.state_dict().items()
+            }
+        )
+    assert summaries[0].to_dict() == summaries[1].to_dict()
+    assert summaries[0].best_epoch == summaries[1].best_epoch
+    assert summaries[0].global_step == summaries[1].global_step
+    assert summaries[0].samples_seen == summaries[1].samples_seen
+    _assert_state_dict_equal(models[0], models[1])
+    first_best = load_checkpoint(
+        tmp_path / "pruned" / "best.pt", require_training=True
+    )
+    second_best = load_checkpoint(
+        tmp_path / "full" / "best.pt", require_training=True
+    )
+    assert first_best.training.best_epoch == second_best.training.best_epoch
+    assert first_best.metrics == second_best.metrics
+    _assert_state_dict_equal(
+        first_best.model.state_dict(), second_best.model.state_dict()
+    )
+    first_last = load_checkpoint(
+        tmp_path / "pruned" / "last.pt", require_training=True
+    )
+    second_last = load_checkpoint(
+        tmp_path / "full" / "last.pt", require_training=True
+    )
+    assert first_last.training.global_step == second_last.training.global_step
+    assert first_last.training.samples_seen == second_last.training.samples_seen
+    _assert_state_dict_equal(
+        first_last.model.state_dict(), second_last.model.state_dict()
+    )
+    _assert_state_tree_exact(
+        first_last.training.optimizer_state,
+        second_last.training.optimizer_state,
+    )
+
+
+def test_pruned_training_recovery_replays_exactly(tmp_path, monkeypatch):
+    train, validation = learnable_pair(
+        train_decisions=12, validation_decisions=6, cache_id="pruned-replay"
+    )
+    config = _config(epochs=4, batch_size=3, learning_rate=0.01)
+    model = _small_model()
+    real_batches = train_module._iter_model_batches
+    continuous_order: list[list[int]] = []
+    resumed_order: list[list[int]] = []
+
+    def traced_batches(trace, *, interrupt=False):
+        def iterator(dataset, indices, **kwargs):
+            trace.append([int(index) for index in indices])
+            for number, batch in enumerate(
+                real_batches(dataset, indices, **kwargs)
+            ):
+                assert not hasattr(batch, "eligible")
+                yield batch
+                if interrupt and len(trace) == 2 and number == 0:
+                    raise KeyboardInterrupt("injected pruned mid-epoch stop")
+
+        return iterator
+
+    continuous = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=model,
+        training_config=config,
+        output_dir=tmp_path / "continuous",
+        device="cpu",
+    )
+    monkeypatch.setattr(
+        train_module, "_iter_model_batches", traced_batches(continuous_order)
+    )
+    expected = continuous.train()
+
+    interrupted = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=model,
+        training_config=config,
+        output_dir=tmp_path / "interrupted",
+        device="cpu",
+    )
+    monkeypatch.setattr(
+        train_module,
+        "_iter_model_batches",
+        traced_batches([], interrupt=True),
+    )
+    with pytest.raises(KeyboardInterrupt, match="injected"):
+        interrupted.train()
+
+    resumed = Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=model,
+        training_config=config,
+        output_dir=tmp_path / "resumed",
+        device="cpu",
+    )
+    monkeypatch.setattr(
+        train_module, "_iter_model_batches", traced_batches(resumed_order)
+    )
+    actual = resumed.train(resume_from=tmp_path / "interrupted" / "last.pt")
+    assert continuous_order[1:] == resumed_order
+    assert expected.to_dict() == actual.to_dict()
+    expected_last = load_checkpoint(
+        tmp_path / "continuous" / "last.pt", require_training=True
+    )
+    actual_last = load_checkpoint(
+        tmp_path / "resumed" / "last.pt", require_training=True
+    )
+    _assert_state_dict_equal(
+        expected_last.model.state_dict(), actual_last.model.state_dict()
+    )
+    _assert_state_tree_exact(
+        expected_last.training.optimizer_state,
+        actual_last.training.optimizer_state,
+    )
+
+
+
+def test_training_missing_target_kinds_keeps_public_batch_fallback(
+    tmp_path, monkeypatch
+):
+    train_source = make_dataset(
+        split="train", counts=[2, 2, 2, 2], seed=151, cache_id="no-kinds"
+    )
+    validation_source = make_dataset(
+        split="validation", counts=[2, 2], seed=152, cache_id="no-kinds"
+    )
+
+    def without_kinds(source):
+        return PackedDecisionDataset(
+            states=source.states,
+            candidate_features=source.candidate_features,
+            offsets=source.offsets,
+            targets=source.targets,
+            stages=source.stages,
+            identity=source.identity,
+        )
+
+    trainer = Trainer(
+        train_dataset=without_kinds(train_source),
+        validation_dataset=without_kinds(validation_source),
+        model_config=_small_model(),
+        training_config=_config(epochs=1, batch_size=2, learning_rate=0.01),
+        output_dir=tmp_path / "no-kinds",
+        device="cpu",
+    )
+    real_batches = train_module._iter_model_batches
+    public_batches: list[bool] = []
+
+    def recording(dataset, indices, **kwargs):
+        for batch in real_batches(dataset, indices, **kwargs):
+            public_batches.append(hasattr(batch, "eligible"))
+            yield batch
+
+    monkeypatch.setattr(train_module, "_iter_model_batches", recording)
+    summary = trainer.train()
+    assert summary.completed_epochs == 1
+    assert summary.samples_seen == 4
+    assert public_batches and all(public_batches)

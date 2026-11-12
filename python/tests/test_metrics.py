@@ -718,3 +718,65 @@ def test_accumulator_host_transfers_per_batch_are_bounded():
         )
     )
     assert forced["cpu"] == 2
+
+
+class _ReadGuardedArray(np.ndarray):
+    def __new__(cls, values: np.ndarray, reads: list[object]):
+        view = np.asarray(values).view(cls)
+        view.reads = reads
+        return view
+
+    def __array_finalize__(self, source):
+        if source is not None:
+            self.reads = getattr(source, "reads", None)
+
+    def __getitem__(self, key):
+        if self.reads is not None:
+            self.reads.append(key)
+        return super().__getitem__(key)
+
+
+def test_evaluate_dataset_does_not_read_provenance_metadata():
+    dataset = make_dataset(
+        split="validation", counts=[2, 1, 3, 2], seed=59
+    )
+    reads: list[object] = []
+    dataset.actor_seats = _ReadGuardedArray(
+        np.zeros(len(dataset), dtype=np.uint8), reads
+    )
+    dataset.decision_indices = _ReadGuardedArray(
+        np.arange(len(dataset), dtype=np.uint64), reads
+    )
+    dataset.episode_ids = _ReadGuardedArray(
+        np.arange(len(dataset), dtype=np.uint64), reads
+    )
+    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=19)
+    recording = _RecordingPolicy(model)
+    report = evaluate_dataset(recording, dataset, batch_size=2, device="cpu")
+    assert reads == []
+    assert sum(recording.rows) == dataset.eligible_count
+    assert (report.decisions, report.eligible, report.forced) == (
+        4,
+        3,
+        1,
+    )
+
+
+def test_evaluate_dataset_missing_target_kinds_keeps_fallback():
+    source = make_dataset(
+        split="validation", counts=[2, 1, 3, 2], seed=60
+    )
+    dataset = PackedDecisionDataset(
+        states=source.states,
+        candidate_features=source.candidate_features,
+        offsets=source.offsets,
+        targets=source.targets,
+        stages=source.stages,
+        identity=source.identity,
+    )
+    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=20)
+    report = evaluate_dataset(model, dataset, batch_size=2, device="cpu")
+    baseline = _full_traversal_report(model, dataset)
+    assert (report.decisions, report.eligible, report.forced) == (4, 3, 1)
+    assert report.top1 == baseline.top1
+    assert_reports_equal(report, baseline, tolerance=1e-6)

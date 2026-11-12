@@ -43,15 +43,15 @@ from .constants import PACKAGE_VERSION, ROLE_BEST, ROLE_LAST
 from .data import (
     DecisionBatch,
     DecisionDataset,
+    _iter_model_batches,
     contains_memory_mapped_arrays,
-    iter_batches,
     require_dataset_identity,
 )
 from .errors import ConfigurationError, DataError, ResumeError
 from .metrics import MetricsReport, evaluate_dataset
 from .policy import (
     CandidatePolicy,
-    _masked_cross_entropy_validated,
+    _decision_nll_validated,
     _require_finite_valid,
     _validate_logits_mask_structure,
     _validate_mask_structure,
@@ -730,24 +730,23 @@ class Trainer:
             epoch_indices = eligible_indices[permutation]
             epoch_losses = _EpochLossTotals()
             epoch_steps = 0
-            for batch in iter_batches(
+            for batch in _iter_model_batches(
                 self.train_dataset,
                 epoch_indices,
                 batch_size=batch_size,
                 num_workers=self.training_config.num_workers,
+                training=True,
             ):
-                _require_host_training_batch(batch)
+                if isinstance(batch, DecisionBatch):
+                    _require_host_training_batch(batch)
                 moved = batch.to(self.device)
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(moved.states, moved.candidates, moved.mask)
                 _validate_logits_mask_structure(logits, moved.mask)
                 _require_finite_valid(logits, moved.mask)
-                loss = _masked_cross_entropy_validated(
-                    logits,
-                    moved.mask,
-                    moved.targets,
-                    moved.eligible,
-                )
+                loss = _decision_nll_validated(
+                    logits, moved.mask, moved.targets
+                ).mean()
                 loss.backward()
                 optimizer.step()
                 progress.global_step += 1
