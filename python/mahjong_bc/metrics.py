@@ -110,9 +110,9 @@ class MetricAccumulator:
     Fixed-shape stage/kind reductions avoid dynamic output sizes and CUDA
     atomics. Totals accumulate on the host in batch order as ``float64``.
 
-    Each ``add`` validates its batch immediately and reads back one host
-    vector containing the checks plus totals buffered from the previous batch.
-    :meth:`report` flushes the last pending totals.
+    Each ``add`` reads back one vector containing its checks and totals, then
+    rejects invalid input before updating any counters. ``report`` only reads
+    the accumulated host state.
     """
 
     def __init__(self) -> None:
@@ -126,8 +126,8 @@ class MetricAccumulator:
         self._correct_by_stage = [0] * STAGE_COUNT
         self._support_by_kind = [0] * ACTION_KIND_COUNT
         self._correct_by_kind = [0] * ACTION_KIND_COUNT
-        self._pending_totals: Tensor | None = None
 
+    @torch.no_grad()
     def add(
         self,
         logits: Tensor,
@@ -139,8 +139,8 @@ class MetricAccumulator:
         """Add one padded batch containing all decisions, forced included.
 
         Validate every batch immediately, including non-finite logits, using
-        the public NLL/selection predicates and messages. Previous totals share
-        the value-check transfer and remain accounted for if this batch fails.
+        the public NLL/selection predicates and messages. Checks and totals
+        share one host transfer; invalid batches leave the accumulator intact.
         """
 
         if not isinstance(logits, Tensor) or logits.dtype != torch.float32:
@@ -175,6 +175,9 @@ class MetricAccumulator:
             if value.device != logits.device:
                 raise DataError(f"{name} and logits must be on the same device")
         eligible = mask.sum(dim=1) > 1
+        # Compute totals before reading the checks, but keep every gather safe
+        # even when targets are invalid. Clamping never bypasses rejection.
+        safe_targets = targets.long().clamp(0, logits.shape[1] - 1)
         checks = torch.stack(
             (
                 mask.any(dim=1).all(),
@@ -184,26 +187,17 @@ class MetricAccumulator:
                 target_kinds.max() < ACTION_KIND_COUNT,
                 targets.min() >= 0,
                 targets.max() < logits.shape[1],
-                mask.gather(
-                    1, targets.long().clamp(0, logits.shape[1] - 1).unsqueeze(1)
-                ).all(),
+                mask.gather(1, safe_targets.unsqueeze(1)).all(),
                 # Fixed-shape replacement for ``logits.masked_select(mask)``;
                 # the latter sizes its output from device data and syncs.
                 (~mask | torch.isfinite(logits)).all(),
             )
         ).to(torch.float64)
+        nll = _decision_nll_validated(logits, mask, safe_targets)
+        correct = _greedy_indices_validated(logits, mask).eq(targets.long())
+        totals = _batch_totals(nll, correct, eligible, stages, target_kinds)
         check_count = checks.numel()
-        pending = self._pending_totals
-        if pending is not None and pending.device != logits.device:
-            # Mixed-device callers keep working; only merging needs one device.
-            self._flush_pending()
-            pending = None
-        if pending is None:
-            values = checks.cpu().tolist()
-        else:
-            values = torch.cat((checks, pending)).cpu().tolist()
-            self._pending_totals = None
-            self._apply_totals(values[check_count:])
+        values = torch.cat((checks, totals)).cpu().tolist()
         (
             candidate_present,
             stage_min_ok,
@@ -228,15 +222,8 @@ class MetricAccumulator:
         if not logits_finite:
             raise DataError("valid candidate logits must be finite")
 
-        nll = _decision_nll_validated(logits, mask, targets)
-        correct = _greedy_indices_validated(logits, mask).eq(targets.long())
-
         self._decisions += batch_size
-        # Reports are not differentiable; retain only the small totals vector,
-        # not a public caller's model graph until the next add/report.
-        self._pending_totals = _batch_totals(
-            nll, correct, eligible, stages, target_kinds
-        ).detach()
+        self._apply_totals(values[check_count:])
 
     def _apply_totals(self, totals: Sequence[float]) -> None:
         """Add one transferred totals vector in the documented layout."""
@@ -256,15 +243,6 @@ class MetricAccumulator:
             self._correct_by_kind[index] += int(
                 totals[kind_base + ACTION_KIND_COUNT + index]
             )
-
-    def _flush_pending(self) -> None:
-        """Apply totals held since the last completed batch, if any."""
-
-        pending = self._pending_totals
-        if pending is None:
-            return
-        self._pending_totals = None
-        self._apply_totals(pending.cpu().tolist())
 
     def _add_forced_split(
         self,
@@ -299,7 +277,6 @@ class MetricAccumulator:
         self._decisions += decisions - eligible
 
     def report(self) -> MetricsReport:
-        self._flush_pending()
         stages = tuple(
             StageMetrics(
                 stage_id=index,
@@ -346,11 +323,11 @@ def _batch_totals(
     stages: Tensor,
     target_kinds: Tensor,
 ) -> Tensor:
-    """Fixed-shape float64 totals for one validated batch.
+    """Fixed-shape float64 totals, accumulated only after validation.
 
     The flat layout is stage NLL, stage correct, stage support, stage forced,
     then kind support, kind correct, then batch NLL, batch correct and batch
-    eligible. Range-checked ids allow fixed-size grouping by equality.
+    eligible. Id equality keeps grouping safe for invalid stage/kind values.
     ``torch.where`` excludes ineligible NaNs without evaluating ``0 * NaN``.
     """
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections import Counter
 from typing import Any, Callable, Sequence
 
@@ -198,6 +199,35 @@ def count_host_reads(action: Callable[[], Any]) -> Counter[str]:
     with _Recorder():
         action()
     return Counter(seen)
+
+
+def count_cuda_syncs(action: Callable[[], Any]) -> int:
+    """Count CUDA debug-checker sync warnings, without inspecting operators.
+
+    Callers warm up their workload first. This checker does not detect every
+    synchronization and is not a substitute for throughput measurements.
+    """
+
+    previous = torch.cuda.get_sync_debug_mode()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.filterwarnings("ignore", message="Synchronization debug mode is a prototype")
+        warnings.filterwarnings(
+            "always", message="called a synchronizing CUDA operation", category=UserWarning
+        )
+        try:
+            torch.cuda.set_sync_debug_mode("warn")
+            action()
+        finally:
+            torch.cuda.set_sync_debug_mode(previous)
+    syncs = 0
+    for warning in caught:
+        if "synchronizing CUDA operation" in str(warning.message):
+            syncs += 1
+        else:
+            warnings.warn_explicit(
+                warning.message, warning.category, warning.filename, warning.lineno
+            )
+    return syncs
 
 
 def host_read_count(counts: Counter[str]) -> int:

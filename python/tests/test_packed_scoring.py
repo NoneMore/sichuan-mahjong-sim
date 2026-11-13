@@ -7,7 +7,6 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
-from torch.utils._python_dispatch import TorchDispatchMode
 
 import mahjong_bc.train as train_module
 from mahjong_bc.config import ModelConfig, TrainingConfig
@@ -27,7 +26,9 @@ from mahjong_bc.policy import (
 )
 from mahjong_bc.train import TRAIN_OUTPUT_NAMES, Trainer
 
-from .helpers import assert_reports_equal, identity, learnable_pair, make_dataset
+from .helpers import (
+    assert_reports_equal, count_cuda_syncs, identity, learnable_pair, make_dataset,
+)
 
 DEVICES = [
     "cpu",
@@ -217,18 +218,6 @@ def test_packed_training_rejects_nonfinite_output_before_any_update(
     assert not any((trainer.output_dir / name).exists() for name in TRAIN_OUTPUT_NAMES)
 
 
-class _RecordingDispatch(TorchDispatchMode):
-    """Record the ATen dispatch graph without changing its results."""
-
-    def __init__(self) -> None:
-        self.ops: list[str] = []
-        super().__init__()
-
-    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
-        self.ops.append(str(func))
-        return func(*args, **(kwargs or {}))
-
-
 def test_packed_candidate_positions_describe_the_mask_layout():
     dataset = make_dataset(counts=[1, 2, 3, 8, 1], seed=71)
     batches = _batches(
@@ -250,32 +239,17 @@ def test_packed_candidate_positions_describe_the_mask_layout():
         assert torch.equal(moved.candidate_positions, positions)
 
 
-def test_internal_packed_scoring_uses_fixed_shape_index_ops():
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_internal_packed_scoring_does_not_synchronize_cuda():
     dataset = make_dataset(counts=[1, 3, 2, 5], seed=73, signal=True)
     batch = _batches(
         dataset, np.arange(len(dataset)), batch_size=4, packed=True
-    )[0]
-    batch = replace(
-        batch,
-        states=batch.states.clone().requires_grad_(True),
-        candidates=batch.candidates.clone().requires_grad_(True),
-    )
+    )[0].to("cuda")
     model = build_policy(
         ModelConfig(state_hidden=(16,), scorer_hidden=(16,)), seed=19
-    )
-    recorder = _RecordingDispatch()
-    with recorder:
-        logits = _batch_logits(model, batch)
-        _decision_nll_validated(logits, batch.mask, batch.targets).mean().backward()
-    assert "aten.index_select.default" in recorder.ops
-    assert "aten.index_copy_.default" in recorder.ops
-    # Boolean-mask indexing discovers its output size on the device.
-    assert "aten.index.Tensor" not in recorder.ops
-    assert "aten.index_put_.default" not in recorder.ops
-    assert "aten.nonzero.default" not in recorder.ops
-    # A plain gather backward would scatter-add duplicate decision rows.
-    assert "aten.index_add.default" not in recorder.ops
-    assert "aten.index_add_.default" not in recorder.ops
+    ).cuda()
+    _forward_backward(model, batch)
+    assert count_cuda_syncs(lambda: _forward_backward(model, batch)) == 0
 
 
 def test_packed_forward_without_positions_keeps_the_mask_fallback():
@@ -333,16 +307,17 @@ def test_packed_scoring_rejects_candidate_positions_on_another_device():
         _batch_logits(model, malformed)
 
 
-def test_packed_gradients_match_padded_path_and_repeat_exactly():
+@pytest.mark.parametrize("device", DEVICES)
+def test_packed_gradients_match_padded_path_and_repeat_exactly(device):
     dataset = make_dataset(counts=[1, 2, 3, 8, 2], seed=81, signal=True)
     indices = np.arange(len(dataset))
     padded, packed = (
-        _batches(dataset, indices, batch_size=5, packed=flat)[0]
+        _batches(dataset, indices, batch_size=5, packed=flat)[0].to(device)
         for flat in (False, True)
     )
     model = build_policy(
         ModelConfig(state_hidden=(16, 8), scorer_hidden=(12,)), seed=29
-    )
+    ).to(device)
     first = _forward_backward(model, packed)
     second = _forward_backward(model, packed)
     expected = _forward_backward(model, padded)

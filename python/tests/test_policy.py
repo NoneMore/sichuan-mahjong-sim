@@ -5,7 +5,6 @@ import math
 import pytest
 import torch
 from torch import nn
-from torch.utils._python_dispatch import TorchDispatchMode
 
 import mahjong_bc.policy as policy_module
 from mahjong_bc.config import ACTIVATION_NAMES, ModelConfig
@@ -24,7 +23,7 @@ from mahjong_bc.policy import (
     sample_indices,
 )
 
-from .helpers import count_host_reads, host_read_count
+from .helpers import count_cuda_syncs, count_host_reads, host_read_count
 
 
 def small_policy(seed: int = 1) -> CandidatePolicy:
@@ -162,7 +161,7 @@ def test_public_entry_points_still_reject_what_the_trusted_path_skips():
         )
 
 
-def test_finite_check_ignores_padding_and_does_not_size_by_mask():
+def test_finite_check_ignores_nonfinite_padding():
     logits = torch.tensor([[1.0, float("nan")], [float("inf"), 2.0]])
     mask = torch.tensor([[True, False], [False, True]])
     # Padding values are irrelevant; only valid logits must be finite.
@@ -171,17 +170,14 @@ def test_finite_check_ignores_padding_and_does_not_size_by_mask():
         _require_finite_valid(
             torch.tensor([[float("nan")]]), torch.ones(1, 1, dtype=torch.bool)
         )
-    seen: list[str] = []
 
-    class Recorder(TorchDispatchMode):
-        def __torch_dispatch__(self, func, types, args=(), kwargs=None):
-            seen.append(str(func))
-            return func(*args, **(kwargs or {}))
 
-    with Recorder():
-        _require_finite_valid(logits, mask)
-    # masked_select discovers its result size on the device.
-    assert "aten.masked_select.default" not in seen
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_finite_check_needs_only_its_validation_sync():
+    logits = torch.tensor([[1.0, float("nan")]], device="cuda")
+    mask = torch.tensor([[True, False]], device="cuda")
+    _require_finite_valid(logits, mask)
+    assert count_cuda_syncs(lambda: _require_finite_valid(logits, mask)) <= 1
 
 
 def test_logits_are_computed_once_per_state_representation():

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import gc
 import math
+import weakref
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 import torch
-from torch.overrides import TorchFunctionMode
 
 from mahjong_bc.config import ModelConfig
 from mahjong_bc.constants import (
@@ -28,12 +29,23 @@ from mahjong_bc.policy import build_policy, decision_nll, greedy_indices
 from .helpers import (
     DelegatingDataset,
     assert_reports_equal,
+    count_cuda_syncs,
     count_host_reads,
-    host_read_count,
     identity,
     make_dataset,
     support_by_stage,
 )
+
+
+DEVICES = [
+    "cpu",
+    pytest.param(
+        "cuda",
+        marks=pytest.mark.skipif(
+            not torch.cuda.is_available(), reason="CUDA is not available"
+        ),
+    ),
+]
 
 
 class _RecordingPolicy:
@@ -596,20 +608,18 @@ def test_accumulator_matches_per_decision_reference_groups():
         assert_ratio(kind.top1, kind_correct[index], kind_support[index])
 
 
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
-def test_accumulator_rejects_nonfinite_valid_logits_before_accumulating(bad):
+def test_accumulator_rejects_nonfinite_valid_logits_before_accumulating(bad, device):
     accumulator = MetricAccumulator()
     logits = torch.zeros(2, 3)
     logits[1, 2] = bad
     mask = torch.tensor([[True, False, False], [True, True, True]])
     with pytest.raises(DataError, match="finite"):
-        accumulator.add(
-            logits,
-            mask,
-            torch.tensor([0, 2]),
-            torch.tensor([0, 1]),
-            torch.tensor([2, 3]),
+        batch = (
+            logits, mask, torch.tensor([0, 2]), torch.tensor([0, 1]), torch.tensor([2, 3])
         )
+        accumulator.add(*(t.to(device) for t in batch))
     report = accumulator.report()
     assert (report.decisions, report.eligible, report.forced) == (0, 0, 0)
     assert report.nll is None and report.top1 is None
@@ -644,7 +654,8 @@ def test_accumulator_ignores_negative_infinity_padding():
     assert support_by_stage(report) == (1, 0, 0, 0, 0)
 
 
-def test_accumulator_ignores_nonfinite_padding_and_keeps_public_messages():
+@pytest.mark.parametrize("device", DEVICES)
+def test_accumulator_ignores_nonfinite_padding_and_keeps_public_messages(device):
     logits = torch.tensor([[0.0, 0.0, float("nan")], [1.0, 0.0, float("inf")]])
     mask = torch.tensor([[True, True, False], [True, True, False]])
     accumulator = MetricAccumulator()
@@ -716,11 +727,12 @@ def test_accumulator_ignores_nonfinite_padding_and_keeps_public_messages():
     for logits_case, mask_case, targets, stages, kinds, message in cases:
         rejected = MetricAccumulator()
         with pytest.raises(DataError, match=message):
-            rejected.add(logits_case, mask_case, targets, stages, kinds)
+            batch = (logits_case, mask_case, targets, stages, kinds)
+            rejected.add(*(t.to(device) for t in batch))
         assert rejected.report().decisions == 0
 
 
-def test_accumulator_pending_totals_do_not_retain_the_model_graph():
+def test_accumulator_does_not_retain_logits_or_their_graph():
     logits, *metadata = _batches()[0]
     reference = MetricAccumulator()
     reference.add(logits, *metadata)
@@ -728,29 +740,13 @@ def test_accumulator_pending_totals_do_not_retain_the_model_graph():
 
     accumulator = MetricAccumulator()
     logits = logits.clone().requires_grad_(True)
+    tracked = weakref.ref(logits)
     accumulator.add(logits, *metadata)
+    del logits
+    gc.collect()
 
-    pending = accumulator._pending_totals
-    assert pending is not None
-    assert not pending.requires_grad
-    assert pending.grad_fn is None
-    assert logits.grad is None
+    assert tracked() is None
     assert accumulator.report() == expected
-
-
-def _operation_names(action) -> list[str]:
-    """Record every torch function dispatched while ``action`` runs."""
-
-    names: list[str] = []
-
-    class _Recorder(TorchFunctionMode):
-        def __torch_function__(self, func, types, args=(), kwargs=None):
-            names.append(getattr(func, "__name__", str(func)))
-            return func(*args, **(kwargs or {}))
-
-    with _Recorder():
-        action()
-    return names
 
 
 def _batches():
@@ -845,9 +841,7 @@ def test_accumulator_host_transfers_per_batch_are_bounded():
     reads = count_host_reads(
         lambda: MetricAccumulator().add(logits, mask, targets, stages, kinds)
     )
-    # The first batch has no earlier totals, so its single transfer carries
-    # only the validation checks. No dynamic grouping op may add its own
-    # implicit device read.
+    # Checks and this batch's totals share one explicit host transfer.
     assert reads["cpu"] == 1
     assert reads["item"] == reads["__bool__"] == reads["__int__"] == 0
     forced = count_host_reads(
@@ -862,29 +856,32 @@ def test_accumulator_host_transfers_per_batch_are_bounded():
     assert forced["cpu"] == 1
 
 
-def test_accumulator_merges_buffered_totals_into_one_later_transfer():
+def test_each_batch_is_complete_and_report_needs_no_transfer():
     first, second, _ = _batches()
+    accumulator = MetricAccumulator()
 
     def run():
-        accumulator = MetricAccumulator()
         accumulator.add(*first)
         accumulator.add(*second)
-        return accumulator.report()
 
-    reads = count_host_reads(run)
-    # One validation transfer per batch plus the report flush: the first
-    # batch's totals travel with the second batch's checks.
-    assert reads["cpu"] == 3
+    assert count_host_reads(run)["cpu"] == 2
+    assert count_host_reads(accumulator.report)["cpu"] == 0
+    assert accumulator.report().decisions == 5
 
 
-def test_accumulator_uses_fixed_shape_grouping_operations():
-    first, second, _ = _batches()
-    names = _operation_names(
-        lambda: MetricAccumulator().add(*first)
-    ) + _operation_names(lambda: MetricAccumulator().add(*second))
-    for dynamic in ("bincount", "masked_select", "nonzero", "__getitem__"):
-        assert dynamic not in names
-    assert names.count("cpu") == 2
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_accumulator_cuda_syncs_are_bounded_by_batch_count():
+    batches = [tuple(t.cuda() for t in batch) for batch in _batches()]
+    accumulator = MetricAccumulator()
+    for batch in batches:
+        accumulator.add(*batch)
+
+    def run():
+        for batch in batches:
+            accumulator.add(*batch)
+
+    assert count_cuda_syncs(run) <= len(batches)
+    assert count_cuda_syncs(accumulator.report) == 0
 
 
 class _ReadGuardedArray(np.ndarray):
@@ -1006,7 +1003,7 @@ def test_accumulator_matches_per_decision_reference_at_batch_boundaries():
     )
 
 
-def test_report_flushes_buffered_totals_and_can_be_reused():
+def test_report_is_repeatable_and_accumulation_can_continue():
     first, second, _ = _batches()
     accumulator = MetricAccumulator()
     accumulator.add(*first)
@@ -1020,12 +1017,11 @@ def test_report_flushes_buffered_totals_and_can_be_reused():
     reference = MetricAccumulator()
     reference.add(*first)
     reference.add(*second)
-    # Flushing at an explicit report boundary keeps the same float64
-    # accumulation order as accumulating both batches before one report.
+    # Reporting does not change subsequent accumulation or its order.
     assert_reports_equal(combined, reference.report(), tolerance=0.0)
 
 
-def test_rejected_batch_keeps_earlier_buffered_totals():
+def test_rejected_batch_keeps_earlier_totals():
     first, _, _ = _batches()
     reference = MetricAccumulator()
     reference.add(*first)
@@ -1055,6 +1051,52 @@ def test_rejected_batch_keeps_earlier_buffered_totals():
     assert_reports_equal(
         structure_rejected.report(), reference.report(), tolerance=0.0
     )
+
+
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize(
+    ("column", "bad_value", "message"),
+    [
+        (2, -1, "outside the padded candidate range"),
+        (2, torch.iinfo(torch.int64).max, "outside the padded candidate range"),
+        (3, -1, "stages must be in"),
+        (3, STAGE_COUNT, "stages must be in"),
+        (4, -1, "target_kinds must be in"),
+        (4, ACTION_KIND_COUNT, "target_kinds must be in"),
+    ],
+)
+def test_invalid_batch_is_rejected_without_changing_state(
+    device, column, bad_value, message
+):
+    batch = tuple(t.to(device) for t in _batches()[0])
+    accumulator = MetricAccumulator()
+    accumulator.add(*batch)
+    accepted = accumulator.report()
+    invalid = list(batch)
+    invalid[column] = invalid[column].clone()
+    invalid[column][0] = bad_value
+
+    with pytest.raises(DataError, match=message):
+        accumulator.add(*invalid)
+    assert accumulator.report() == accepted
+    # A CUDA gather on the invalid original target must not poison the device.
+    accumulator.add(*batch)
+    reference = MetricAccumulator()
+    reference.add(*batch)
+    reference.add(*batch)
+    assert accumulator.report() == reference.report()
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_accumulator_accepts_batches_from_different_devices():
+    first, second, _ = _batches()
+    accumulator = MetricAccumulator()
+    accumulator.add(*first)
+    accumulator.add(*(t.cuda() for t in second))
+    reference = MetricAccumulator()
+    reference.add(*first)
+    reference.add(*second)
+    assert_reports_equal(accumulator.report(), reference.report(), tolerance=1e-6)
 
 
 def test_accumulator_all_forced_batch_counts_by_stage():
@@ -1105,7 +1147,7 @@ def test_accumulator_accepts_int32_metadata_without_changing_values():
     assert accumulator.report() == _manual_accumulator().report()
 
 
-def test_empty_batch_is_ignored_without_flushing_buffered_totals():
+def test_empty_batch_leaves_the_accumulator_unchanged():
     first, _, _ = _batches()
     accumulator = MetricAccumulator()
     accumulator.add(*first)
@@ -1121,9 +1163,13 @@ def test_empty_batch_is_ignored_without_flushing_buffered_totals():
     assert_reports_equal(accumulator.report(), reference.report(), tolerance=0.0)
 
 
-def test_accumulator_supports_deterministic_algorithms():
-    batches = _batches()
-    previous = torch.are_deterministic_algorithms_enabled()
+@pytest.mark.parametrize("device", DEVICES)
+def test_accumulator_supports_deterministic_algorithms(device):
+    batches = [tuple(t.to(device) for t in batch) for batch in _batches()]
+    previous = (
+        torch.are_deterministic_algorithms_enabled(),
+        torch.is_deterministic_algorithms_warn_only_enabled(),
+    )
     torch.use_deterministic_algorithms(True)
     try:
         def run():
@@ -1135,7 +1181,7 @@ def test_accumulator_supports_deterministic_algorithms():
         deterministic = run()
         repeated = run()
     finally:
-        torch.use_deterministic_algorithms(previous)
+        torch.use_deterministic_algorithms(previous[0], warn_only=previous[1])
 
     assert deterministic == repeated
     default = MetricAccumulator()
@@ -1146,16 +1192,22 @@ def test_accumulator_supports_deterministic_algorithms():
     assert_reports_equal(deterministic, default.report(), tolerance=1e-15)
 
 
-def test_evaluate_dataset_supports_deterministic_algorithms():
+@pytest.mark.parametrize("device", DEVICES)
+def test_evaluate_dataset_supports_deterministic_algorithms(device):
     dataset = make_dataset(
         split="validation", counts=[2, 1, 3, 2, 1, 2], seed=71
     )
-    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=31)
-    previous = torch.are_deterministic_algorithms_enabled()
+    model = build_policy(
+        ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=31
+    ).to(device)
+    previous = (
+        torch.are_deterministic_algorithms_enabled(),
+        torch.is_deterministic_algorithms_warn_only_enabled(),
+    )
     torch.use_deterministic_algorithms(True)
     try:
-        first = evaluate_dataset(model, dataset, batch_size=2, device="cpu")
-        second = evaluate_dataset(model, dataset, batch_size=2, device="cpu")
+        first = evaluate_dataset(model, dataset, batch_size=2, device=device)
+        second = evaluate_dataset(model, dataset, batch_size=2, device=device)
     finally:
-        torch.use_deterministic_algorithms(previous)
+        torch.use_deterministic_algorithms(previous[0], warn_only=previous[1])
     assert_reports_equal(first, second, tolerance=0.0)
