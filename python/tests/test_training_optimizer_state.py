@@ -195,6 +195,8 @@ def test_resume_restores_slot_placement_and_matches_uninterrupted_continuation(
     )
     uninterrupted_summary = uninterrupted.train()
 
+    # Exact continuation also guards against nondeterministic CUDA operations
+    # entering either the packed backward or validation path.
     assert resumed_summary.to_dict() == uninterrupted_summary.to_dict()
     assert resumed.model is not None and uninterrupted.model is not None
     _assert_tree_exact(

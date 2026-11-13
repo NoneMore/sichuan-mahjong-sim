@@ -32,9 +32,6 @@ from .policy import (
     _supports_packed_candidate_scoring,
 )
 
-#: Booleans read back per ``add`` call, in the order the error checks use.
-_CHECK_COUNT = 9
-
 #: Widths of the stage and kind sections of one transferred totals vector.
 _STAGE_TOTAL_WIDTH = 4 * STAGE_COUNT
 _KIND_TOTAL_WIDTH = 2 * ACTION_KIND_COUNT
@@ -207,6 +204,7 @@ class MetricAccumulator:
                 (~mask | torch.isfinite(logits)).all(),
             )
         ).to(torch.float64)
+        check_count = checks.numel()
         pending = self._pending_totals
         if pending is not None and pending.device != logits.device:
             # Mixed-device callers keep working; only merging needs one device.
@@ -217,7 +215,7 @@ class MetricAccumulator:
         else:
             values = torch.cat((checks, pending)).cpu().tolist()
             self._pending_totals = None
-            self._apply_totals(values[_CHECK_COUNT:])
+            self._apply_totals(values[check_count:])
         (
             candidate_present,
             stage_min_ok,
@@ -228,7 +226,7 @@ class MetricAccumulator:
             target_max_ok,
             target_valid,
             logits_finite,
-        ) = (bool(value) for value in values[:_CHECK_COUNT])
+        ) = (bool(value) for value in values[:check_count])
         if not candidate_present:
             raise DataError("every decision must have at least one candidate")
         if not (stage_min_ok and stage_max_ok):
@@ -246,9 +244,11 @@ class MetricAccumulator:
         correct = _greedy_indices_validated(logits, mask).eq(targets.long())
 
         self._decisions += batch_size
+        # Reports are not differentiable; retain only the small totals vector,
+        # not a public caller's model graph until the next add/report.
         self._pending_totals = _batch_totals(
             nll, correct, eligible, stages, target_kinds
-        )
+        ).detach()
 
     def _apply_totals(self, totals: Sequence[float]) -> None:
         """Add one transferred totals vector in the documented layout."""

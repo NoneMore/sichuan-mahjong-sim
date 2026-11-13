@@ -720,6 +720,24 @@ def test_accumulator_ignores_nonfinite_padding_and_keeps_public_messages():
         assert rejected.report().decisions == 0
 
 
+def test_accumulator_pending_totals_do_not_retain_the_model_graph():
+    logits, *metadata = _batches()[0]
+    reference = MetricAccumulator()
+    reference.add(logits, *metadata)
+    expected = reference.report()
+
+    accumulator = MetricAccumulator()
+    logits = logits.clone().requires_grad_(True)
+    accumulator.add(logits, *metadata)
+
+    pending = accumulator._pending_totals
+    assert pending is not None
+    assert not pending.requires_grad
+    assert pending.grad_fn is None
+    assert logits.grad is None
+    assert accumulator.report() == expected
+
+
 def _operation_names(action) -> list[str]:
     """Record every torch function dispatched while ``action`` runs."""
 

@@ -77,11 +77,10 @@ that support deterministic CUDA algorithms. Every batch is validated before
 acceptance; one batch's totals may remain on the device until the next batch
 or report, with host accumulation preserving batch order.
 
-last.pt captures the last completed epoch,
-optimizer, traversal and RNG states for recovery; partial epochs replay
-after interruption. Resume checks dataset, configuration, device and
-dependency identities. Checkpoints publish atomically and carry model,
-encoding and source provenance.
+last.pt captures the last completed epoch, optimizer, traversal and RNG states
+for recovery; partial epochs replay after interruption. Resume checks dataset,
+configuration, device and dependency identities. Checkpoints publish atomically
+and carry model, encoding and source provenance.
 
 [Training and checkpoint contract](../../python/README.md#training-metrics-and-checkpoints)
 

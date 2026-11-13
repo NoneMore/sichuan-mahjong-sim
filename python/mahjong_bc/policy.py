@@ -119,6 +119,14 @@ class CandidatePolicy(nn.Module):
         packed: bool = False,
         candidate_positions: Tensor | None = None,
     ) -> Tensor:
+        """Score padded or packed candidates.
+
+        ``candidate_positions`` is trusted internal packed-layout metadata:
+        strictly increasing, in-range padded positions matching ``mask`` in
+        row-major order. Internal batching establishes these value invariants
+        on the host; direct packed callers can omit it to use the mask layout.
+        """
+
         if packed:
             return _packed_candidate_logits(
                 self, states, candidates, mask, candidate_positions
