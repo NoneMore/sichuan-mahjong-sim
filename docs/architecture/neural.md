@@ -57,8 +57,9 @@ checks targets and current-offset training eligibility before loss computation.
 
 With `num_workers=0`, exact built-in packed datasets with target-kind metadata
 and the built-in `CandidatePolicy` use flat valid-candidate rows. Only those
-rows reach the scorer; logits are restored to the padded layout for the
-existing loss and metrics.
+rows reach the scorer; host-derived position mappings restore padded logits
+without device-side mask indexing. Packed state gradients remain deterministic
+on CUDA.
 
 Custom datasets, dataset subclasses, missing target-kind metadata and workers
 retain full batches. Policy subclasses retain padded scoring. Both layouts
@@ -71,11 +72,13 @@ shared nonlinear network; candidate position does not enter the model.
 Training visits every eligible decision each seeded epoch, uses
 equal-weight imitation loss and reports forced decisions separately.
 
-Validation NLL selects best.pt. last.pt captures the last completed epoch,
-optimizer, traversal and RNG states for recovery; partial epochs replay
-after interruption. Resume checks dataset, configuration, device and
-dependency identities. Checkpoints publish atomically and carry model,
-encoding and source provenance.
+Validation NLL selects best.pt. Fixed-shape metric reductions support
+deterministic CUDA execution; totals accumulate on the host in batch order.
+
+last.pt captures the last completed epoch, optimizer, traversal and RNG states
+for recovery; partial epochs replay after interruption. Resume checks dataset,
+configuration, device and dependency identities. Checkpoints publish atomically
+and carry model, encoding and source provenance.
 
 [Training and checkpoint contract](../../python/README.md#training-metrics-and-checkpoints)
 

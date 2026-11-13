@@ -264,13 +264,34 @@ def _cpu_state_dict(model: CandidatePolicy) -> dict[str, torch.Tensor]:
     }
 
 
-def _move_optimizer_state(
-    optimizer: torch.optim.Optimizer, device: torch.device
-) -> None:
-    for state in optimizer.state.values():
-        for key, value in state.items():
-            if isinstance(value, torch.Tensor):
-                state[key] = value.to(device)
+def _optimizer_state_slot_device(
+    key: str, parameter: torch.Tensor, group: Mapping[str, Any]
+) -> torch.device:
+    """Return the device where a restored AdamW slot is read.
+
+    Non-capturable, non-fused AdamW reads ``step`` on the host; moving it to
+    CUDA would synchronize once per parameter per update. Other slots, and
+    capturable/fused steps, follow the parameter device.
+    """
+
+    if key == "step" and not (group.get("capturable") or group.get("fused")):
+        return torch.device("cpu")
+    return parameter.device
+
+
+def _move_optimizer_state(optimizer: torch.optim.Optimizer) -> None:
+    """Place restored optimizer state where its step path reads it."""
+
+    for group in optimizer.param_groups:
+        for parameter in group["params"]:
+            state = optimizer.state.get(parameter)
+            if not state:
+                continue
+            for key, value in state.items():
+                if isinstance(value, torch.Tensor):
+                    state[key] = value.to(
+                        _optimizer_state_slot_device(key, parameter, group)
+                    )
 
 
 _OPTIMIZER_STATE_DICT_KEYS = {"state", "param_groups"}
@@ -601,7 +622,7 @@ class Trainer:
             raise ResumeError(
                 f"checkpoint optimizer state cannot be loaded: {exc}"
             ) from exc
-        _move_optimizer_state(optimizer, self.device)
+        _move_optimizer_state(optimizer)
         restore_random_state(
             state,
             order_generator=self.order_generator,
