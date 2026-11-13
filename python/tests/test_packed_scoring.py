@@ -7,6 +7,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 import torch
+from torch.utils._python_dispatch import TorchDispatchMode
 
 import mahjong_bc.train as train_module
 from mahjong_bc.config import ModelConfig, TrainingConfig
@@ -214,3 +215,174 @@ def test_packed_training_rejects_nonfinite_output_before_any_update(
         trainer.train()
     assert trainer.optimizer is not None and not trainer.optimizer.state
     assert not any((trainer.output_dir / name).exists() for name in TRAIN_OUTPUT_NAMES)
+
+
+class _RecordingDispatch(TorchDispatchMode):
+    """Record the ATen dispatch graph without changing its results."""
+
+    def __init__(self) -> None:
+        self.ops: list[str] = []
+        super().__init__()
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        self.ops.append(str(func))
+        return func(*args, **(kwargs or {}))
+
+
+def test_packed_candidate_positions_describe_the_mask_layout():
+    dataset = make_dataset(counts=[1, 2, 3, 8, 1], seed=71)
+    batches = _batches(
+        dataset, np.arange(len(dataset)), batch_size=2, packed=True
+    )
+    assert len(batches) == 3
+    for batch in batches:
+        positions = batch.candidate_positions
+        assert positions is not None
+        assert positions.dtype == torch.int64
+        assert positions.shape == (batch.candidates.shape[0],)
+        expected = batch.mask.reshape(-1).nonzero(as_tuple=False).squeeze(1)
+        assert torch.equal(positions, expected)
+        # Strictly increasing means every gather/scatter index is unique.
+        assert torch.all(positions[1:] > positions[:-1])
+        assert int(positions.max()) < batch.mask.numel()
+        moved = batch.to("cpu")
+        assert isinstance(moved, _PackedCandidateBatch)
+        assert torch.equal(moved.candidate_positions, positions)
+
+
+def test_internal_packed_scoring_uses_fixed_shape_index_ops():
+    dataset = make_dataset(counts=[1, 3, 2, 5], seed=73, signal=True)
+    batch = _batches(
+        dataset, np.arange(len(dataset)), batch_size=4, packed=True
+    )[0]
+    batch = replace(
+        batch,
+        states=batch.states.clone().requires_grad_(True),
+        candidates=batch.candidates.clone().requires_grad_(True),
+    )
+    model = build_policy(
+        ModelConfig(state_hidden=(16,), scorer_hidden=(16,)), seed=19
+    )
+    recorder = _RecordingDispatch()
+    with recorder:
+        logits = _batch_logits(model, batch)
+        _decision_nll_validated(logits, batch.mask, batch.targets).mean().backward()
+    assert "aten.index_select.default" in recorder.ops
+    assert "aten.index_copy_.default" in recorder.ops
+    # Boolean-mask indexing discovers its output size on the device.
+    assert "aten.index.Tensor" not in recorder.ops
+    assert "aten.index_put_.default" not in recorder.ops
+    assert "aten.nonzero.default" not in recorder.ops
+    # A plain gather backward would scatter-add duplicate decision rows.
+    assert "aten.index_add.default" not in recorder.ops
+    assert "aten.index_add_.default" not in recorder.ops
+
+
+def test_packed_forward_without_positions_keeps_the_mask_fallback():
+    dataset = make_dataset(counts=[1, 3, 2], seed=75, signal=True)
+    batch = _batches(
+        dataset, np.arange(len(dataset)), batch_size=3, packed=True
+    )[0]
+    model = build_policy(
+        ModelConfig(state_hidden=(16,), scorer_hidden=(16,)), seed=21
+    )
+    direct = model(batch.states, batch.candidates, batch.mask, packed=True)
+    mapped = model(
+        batch.states,
+        batch.candidates,
+        batch.mask,
+        packed=True,
+        candidate_positions=batch.candidate_positions,
+    )
+    assert torch.equal(direct, mapped)
+
+
+@pytest.mark.parametrize(
+    "make_positions, message",
+    [
+        (
+            lambda batch: torch.zeros(
+                batch.candidates.shape[0], dtype=torch.int32
+            ),
+            "int64",
+        ),
+        (lambda batch: [], "int64"),
+        (lambda batch: torch.zeros(1, dtype=torch.int64), "shape"),
+    ],
+)
+def test_packed_scoring_rejects_malformed_candidate_positions(
+    make_positions, message
+):
+    dataset = make_dataset(counts=[2, 3], seed=77)
+    batch = _batches(dataset, np.arange(len(dataset)), batch_size=2, packed=True)[0]
+    malformed = replace(batch, candidate_positions=make_positions(batch))
+    model = build_policy(ModelConfig(), seed=23)
+    with pytest.raises(DataError, match=message):
+        _batch_logits(model, malformed)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA is not available")
+def test_packed_scoring_rejects_candidate_positions_on_another_device():
+    dataset = make_dataset(counts=[2, 3], seed=79)
+    batch = _batches(dataset, np.arange(len(dataset)), batch_size=2, packed=True)[0]
+    malformed = replace(
+        batch, candidate_positions=batch.candidate_positions.cuda()
+    )
+    model = build_policy(ModelConfig(), seed=25)
+    with pytest.raises(DataError, match="same device"):
+        _batch_logits(model, malformed)
+
+
+def test_packed_gradients_match_padded_path_and_repeat_exactly():
+    dataset = make_dataset(counts=[1, 2, 3, 8, 2], seed=81, signal=True)
+    indices = np.arange(len(dataset))
+    padded, packed = (
+        _batches(dataset, indices, batch_size=5, packed=flat)[0]
+        for flat in (False, True)
+    )
+    model = build_policy(
+        ModelConfig(state_hidden=(16, 8), scorer_hidden=(12,)), seed=29
+    )
+    first = _forward_backward(model, packed)
+    second = _forward_backward(model, packed)
+    expected = _forward_backward(model, padded)
+    # The fixed-shape backward repeats bitwise; nothing is atomically ordered.
+    assert torch.equal(first[0], second[0])
+    for name, gradient in first[2].items():
+        assert torch.equal(gradient, second[2][name]), name
+    assert torch.equal(first[3], second[3])
+    assert torch.equal(first[4], second[4])
+    # Valid scores, parameters and inputs match the padded model computation.
+    torch.testing.assert_close(
+        first[0][packed.mask], expected[0][padded.mask], atol=1e-5, rtol=1e-5
+    )
+    for name, gradient in expected[2].items():
+        torch.testing.assert_close(
+            first[2][name], gradient, atol=1e-5, rtol=1e-4
+        )
+    torch.testing.assert_close(first[3], expected[3], atol=1e-6, rtol=1e-6)
+    torch.testing.assert_close(
+        first[4], expected[4][padded.mask], atol=1e-6, rtol=1e-6
+    )
+
+
+def test_packed_scoring_ignores_hostile_padding_in_the_padded_reference():
+    dataset = make_dataset(counts=[2, 1, 4, 3], seed=83, signal=True)
+    padded, packed = (
+        _batches(dataset, np.arange(len(dataset)), batch_size=4, packed=flat)[0]
+        for flat in (False, True)
+    )
+    padded = replace(padded, candidates=padded.candidates.clone())
+    padded.candidates[~padded.mask] = float("nan")
+    model = build_policy(
+        ModelConfig(state_hidden=(16,), scorer_hidden=(16,)), seed=31
+    )
+    expected = _forward_backward(model, padded)
+    actual = _forward_backward(model, packed)
+    torch.testing.assert_close(
+        actual[0][packed.mask], expected[0][padded.mask], atol=1e-5, rtol=1e-5
+    )
+    assert torch.count_nonzero(actual[0][~packed.mask]) == 0
+    torch.testing.assert_close(
+        actual[4], expected[4][padded.mask], atol=1e-6, rtol=1e-6
+    )

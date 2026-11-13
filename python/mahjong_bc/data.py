@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from bisect import bisect_right
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterator, Sequence
 
 import numpy as np
@@ -190,7 +190,30 @@ class _PrunedDecisionBatch:
 
 @dataclass(frozen=True)
 class _PackedCandidateBatch(_PrunedDecisionBatch):
-    """Valid candidate rows matching the row-major true entries of ``mask``."""
+    """Valid candidate rows matching the row-major true entries of ``mask``.
+
+    ``candidate_positions`` holds the padded flat position
+    (``row * candidate_columns + column``) of every flat valid row, in row-major
+    mask order. Batching derives it on the host together with the mask, it is
+    strictly increasing, and the packed scorer uses it for fixed-shape
+    gather/scatter instead of device-side mask indexing.
+    """
+
+    candidate_positions: Tensor | None = None
+
+    def to(
+        self, device: torch.device | str, *, non_blocking: bool = False
+    ) -> _PackedCandidateBatch:
+        moved = super().to(device, non_blocking=non_blocking)
+        positions = self.candidate_positions
+        if positions is None:
+            return moved
+        return replace(
+            moved,
+            candidate_positions=positions.to(
+                moved.states.device, non_blocking=non_blocking
+            ),
+        )
 
 
 def _read_only(array: np.ndarray) -> np.ndarray:
@@ -737,6 +760,22 @@ def _flat_candidate_rows(
     return candidates
 
 
+def _flat_candidate_positions(counts: np.ndarray, max_count: int) -> np.ndarray:
+    """Padded flat position of each flat valid row, in row-major mask order.
+
+    Flat rows are decision-major, so row ``b`` starts at ``b * max_count`` and
+    each following valid column increments it once. The result is strictly
+    increasing, which keeps every scorer gather/scatter index unique.
+    """
+
+    total = int(counts.sum())
+    row_offsets = (
+        np.arange(counts.size, dtype=np.int64) * max_count
+        - (np.cumsum(counts, dtype=np.int64) - counts)
+    )
+    return np.repeat(row_offsets, counts) + np.arange(total, dtype=np.int64)
+
+
 def _gather_pruned_segments(
     batch_size: int,
     segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
@@ -751,7 +790,8 @@ def _gather_pruned_segments(
     :func:`collate_decisions` produces for a public batch do not exist here.
     ``packed_candidates`` gathers the valid candidates as one flat block, which
     avoids copying the padded slots that a ``[B, C, candidate_width]`` batch
-    would allocate.
+    would allocate, plus the padded position of each flat row so packed
+    scoring can rebuild the padded layout with fixed-shape indices.
     """
 
     states, counts, starts, targets = _gather_base_columns(batch_size, segments)
@@ -779,6 +819,9 @@ def _gather_pruned_segments(
             stages=None if stages is None else torch.from_numpy(stages),
             target_kinds=(
                 None if target_kinds is None else torch.from_numpy(target_kinds)
+            ),
+            candidate_positions=torch.from_numpy(
+                _flat_candidate_positions(counts, max_count)
             ),
         )
     candidates = _pad_candidate_rows(batch_size, segments, counts, starts)

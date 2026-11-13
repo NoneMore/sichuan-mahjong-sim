@@ -111,10 +111,18 @@ class CandidatePolicy(nn.Module):
         return self.candidate_scorer(scorer_input).squeeze(-1)
 
     def forward(
-        self, states: Tensor, candidates: Tensor, mask: Tensor, *, packed: bool = False
+        self,
+        states: Tensor,
+        candidates: Tensor,
+        mask: Tensor,
+        *,
+        packed: bool = False,
+        candidate_positions: Tensor | None = None,
     ) -> Tensor:
         if packed:
-            return _packed_candidate_logits(self, states, candidates, mask)
+            return _packed_candidate_logits(
+                self, states, candidates, mask, candidate_positions
+            )
         return self.score(states, candidates, mask)
 
 
@@ -124,34 +132,108 @@ def _supports_packed_candidate_scoring(model: object) -> bool:
     return type(model) is CandidatePolicy
 
 
+class _ExpandDecisionRows(torch.autograd.Function):
+    """Repeat each decision's encoded state once per flat valid candidate.
+
+    ``candidate_positions`` is the CPU-derived, strictly increasing padded
+    position of every flat candidate row, so the forward gather needs no
+    device-side mask expansion.
+
+    A plain ``index_select`` backward accumulates duplicate decision indices
+    with ``index_add_``, whose CUDA kernel is an atomic scatter-add and is not
+    deterministic. This backward instead scatters each flat row's gradient to
+    its own padded position (unique indices) and reduces the candidate axis, so
+    no accumulation touches the same location twice and the state gradient is
+    a fixed-shape, order-stable reduction.
+    """
+
+    @staticmethod
+    def forward(
+        ctx, hidden: Tensor, candidate_positions: Tensor, candidate_columns: int
+    ) -> Tensor:
+        ctx.rows = hidden.shape[0]
+        ctx.candidate_columns = candidate_columns
+        ctx.save_for_backward(candidate_positions)
+        decisions = candidate_positions.div(
+            candidate_columns, rounding_mode="floor"
+        )
+        return hidden.index_select(0, decisions)
+
+    @staticmethod
+    def backward(ctx, grad_output: Tensor) -> tuple[Tensor, None, None]:
+        (candidate_positions,) = ctx.saved_tensors
+        padded = grad_output.new_zeros(
+            (ctx.rows * ctx.candidate_columns, grad_output.shape[1])
+        )
+        padded.index_copy_(0, candidate_positions, grad_output)
+        return padded.view(ctx.rows, ctx.candidate_columns, -1).sum(dim=1), None, None
+
+
 def _packed_candidate_logits(
     model: CandidatePolicy,
     states: Tensor,
     candidates: Tensor,
     mask: Tensor,
+    candidate_positions: Tensor | None = None,
 ) -> Tensor:
     """Score flat valid candidates and rebuild the padded logit layout.
 
-    Callers pass the flat ``[N, candidate_width]`` block and the ``[B, C]``
-    valid-candidate mask from one internal batch, so ``mask``'s row-major true
-    entries are exactly the flat block's rows. Only valid candidates reach the
-    scorer; padded logit slots are zeros, which every consumer masks before use.
+    Callers pass the flat ``[N, candidate_width]`` block, the ``[B, C]``
+    valid-candidate mask and the padded position of every flat row from one
+    internal batch, so ``mask``'s row-major true entries are exactly the flat
+    block's rows. Only valid candidates reach the scorer; padded logit slots
+    are zeros, which every consumer masks before use.
 
-    Hidden rows are selected by expanding the per-decision state over the mask
-    columns and gathering the true entries. Its autograd restores the dense
-    ``[B, C, H]`` gradient and sums the candidate axis. The former
-    ``repeat_interleave`` backward scatter-adds duplicate valid rows and is not
-    deterministic on CUDA.
+    The positions make both layout operations fixed-shape: state rows are
+    gathered for valid candidates only and logits are scattered back with
+    unique integer indices. Boolean-mask indexing would have to discover its
+    output size on the device, which synchronizes CUDA.
+
+    ``candidate_positions`` is optional only for direct callers of
+    ``forward(packed=True)``; without it the previous mask-driven layout is
+    used. Internal batches always supply it.
     """
 
     hidden = model.state_representation(states)
-    expanded = hidden.unsqueeze(1).expand(-1, mask.shape[1], -1)[mask]
+    if candidate_positions is None:
+        expanded = hidden.unsqueeze(1).expand(-1, mask.shape[1], -1)[mask]
+        flat = model.candidate_scorer(
+            torch.cat((expanded, candidates), dim=-1)
+        ).squeeze(-1)
+        logits = flat.new_zeros(mask.shape)
+        logits[mask] = flat
+        return logits
+    _validate_candidate_positions(candidate_positions, candidates)
+    expanded = _ExpandDecisionRows.apply(
+        hidden, candidate_positions, mask.shape[1]
+    )
     flat = model.candidate_scorer(
         torch.cat((expanded, candidates), dim=-1)
     ).squeeze(-1)
     logits = flat.new_zeros(mask.shape)
-    logits[mask] = flat
+    logits.view(-1).index_copy_(0, candidate_positions, flat)
     return logits
+
+
+def _validate_candidate_positions(
+    candidate_positions: Tensor, candidates: Tensor
+) -> None:
+    """Structural flat-row layout checks that never read tensor values."""
+
+    if (
+        not isinstance(candidate_positions, Tensor)
+        or candidate_positions.dtype != torch.int64
+    ):
+        raise DataError("candidate positions must be an int64 tensor")
+    if candidate_positions.shape != (candidates.shape[0],):
+        raise DataError(
+            f"candidate positions must have shape ({candidates.shape[0]},), "
+            f"got {tuple(candidate_positions.shape)}"
+        )
+    if candidate_positions.device != candidates.device:
+        raise DataError(
+            "candidate positions and candidates must be on the same device"
+        )
 
 
 def _batch_logits(model: CandidatePolicy, batch: object) -> Tensor:
@@ -159,7 +241,13 @@ def _batch_logits(model: CandidatePolicy, batch: object) -> Tensor:
 
     if not isinstance(batch, _PackedCandidateBatch):
         return model(batch.states, batch.candidates, batch.mask)
-    return model(batch.states, batch.candidates, batch.mask, packed=True)
+    return model(
+        batch.states,
+        batch.candidates,
+        batch.mask,
+        packed=True,
+        candidate_positions=batch.candidate_positions,
+    )
 
 
 def build_policy(config: ModelConfig | None = None, *, seed: int | None = None) -> CandidatePolicy:
@@ -266,7 +354,14 @@ def _validate_logits_mask(logits: Tensor, mask: Tensor) -> None:
 
 
 def _require_finite_valid(logits: Tensor, mask: Tensor) -> None:
-    if not bool(torch.isfinite(logits.masked_select(mask)).all()):
+    """Reject non-finite valid logits with one fixed-shape device check.
+
+    ``masked_select`` sizes its result on the device and synchronizes to build
+    it. Padding values are irrelevant, so a fixed-shape logical reduction over
+    the mask has the same meaning and still raises before any update.
+    """
+
+    if not bool((torch.isfinite(logits) | ~mask).all()):
         raise DataError("valid candidate logits must be finite")
 
 

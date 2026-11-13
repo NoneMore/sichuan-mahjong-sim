@@ -5,6 +5,7 @@ import math
 import pytest
 import torch
 from torch import nn
+from torch.utils._python_dispatch import TorchDispatchMode
 
 import mahjong_bc.policy as policy_module
 from mahjong_bc.config import ACTIVATION_NAMES, ModelConfig
@@ -14,6 +15,7 @@ from mahjong_bc.policy import (
     _decision_nll_validated,
     _greedy_indices_validated,
     _masked_cross_entropy_validated,
+    _require_finite_valid,
     build_policy,
     decision_nll,
     greedy_indices,
@@ -158,6 +160,28 @@ def test_public_entry_points_still_reject_what_the_trusted_path_skips():
         masked_cross_entropy(
             logits, mask, targets, eligible=torch.zeros(2, dtype=torch.bool)
         )
+
+
+def test_finite_check_ignores_padding_and_does_not_size_by_mask():
+    logits = torch.tensor([[1.0, float("nan")], [float("inf"), 2.0]])
+    mask = torch.tensor([[True, False], [False, True]])
+    # Padding values are irrelevant; only valid logits must be finite.
+    assert _require_finite_valid(logits, mask) is None
+    with pytest.raises(DataError, match="finite"):
+        _require_finite_valid(
+            torch.tensor([[float("nan")]]), torch.ones(1, 1, dtype=torch.bool)
+        )
+    seen: list[str] = []
+
+    class Recorder(TorchDispatchMode):
+        def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+            seen.append(str(func))
+            return func(*args, **(kwargs or {}))
+
+    with Recorder():
+        _require_finite_valid(logits, mask)
+    # masked_select discovers its result size on the device.
+    assert "aten.masked_select.default" not in seen
 
 
 def test_logits_are_computed_once_per_state_representation():
