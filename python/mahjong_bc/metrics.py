@@ -32,6 +32,13 @@ from .policy import (
     _supports_packed_candidate_scoring,
 )
 
+#: Booleans read back per ``add`` call, in the order the error checks use.
+_CHECK_COUNT = 9
+
+#: Widths of the stage and kind sections of one transferred totals vector.
+_STAGE_TOTAL_WIDTH = 4 * STAGE_COUNT
+_KIND_TOTAL_WIDTH = 2 * ACTION_KIND_COUNT
+
 
 @dataclass(frozen=True)
 class StageMetrics:
@@ -102,6 +109,18 @@ class MetricAccumulator:
 
     Forced decisions (one candidate) are counted separately and never enter
     NLL/top-1 or their groups. Zero-support groups report ``None``, not zero.
+
+    Group totals use fixed-shape masking over the small stage and kind axes.
+    Dynamic operations (boolean indexing, ``bincount``, ``masked_select``) need
+    a host-side output size and therefore synchronize on CUDA; this path does
+    not use them, so it also supports deterministic CUDA algorithms. Totals
+    are accumulated in batch order in ``float64`` on the host. Results are
+    mathematically equivalent to the earlier weighted-``bincount`` grouping,
+    but that CUDA reduction used atomics and is not bitwise comparable.
+
+    Each ``add`` validates its batch immediately and reads back one host
+    vector containing the checks plus totals buffered from the previous batch.
+    :meth:`report` flushes the last pending totals.
     """
 
     def __init__(self) -> None:
@@ -115,6 +134,7 @@ class MetricAccumulator:
         self._correct_by_stage = [0] * STAGE_COUNT
         self._support_by_kind = [0] * ACTION_KIND_COUNT
         self._correct_by_kind = [0] * ACTION_KIND_COUNT
+        self._pending_totals: Tensor | None = None
 
     def add(
         self,
@@ -126,12 +146,16 @@ class MetricAccumulator:
     ) -> None:
         """Add one padded batch containing all decisions, forced included.
 
-        Structural checks run on their tensors first; every value check then
-        shares one host round trip and the aggregate update shares another.
-        The value checks keep the public NLL/selection predicates and their
-        messages, so a batch the public helpers would reject is rejected here
-        before anything is accumulated. Logits are still tested for NaN/Inf on
-        every batch: they come from the model, not from validated data.
+        Structural checks run on their tensors first. The value checks keep
+        the public NLL/selection predicates and their messages, so a batch the
+        public helpers would reject is rejected here before it is accumulated.
+        Logits are still tested for NaN/Inf on every batch: they come from the
+        model, not from validated data.
+
+        Totals from the previous batch ride along with this batch's check
+        vector. They are applied before any error is raised, so a rejected
+        batch leaves earlier batches accounted for and only the rejected batch
+        unaccumulated.
         """
 
         if not isinstance(logits, Tensor) or logits.dtype != torch.float32:
@@ -178,10 +202,22 @@ class MetricAccumulator:
                 mask.gather(
                     1, targets.long().clamp(0, logits.shape[1] - 1).unsqueeze(1)
                 ).all(),
-                torch.isfinite(logits.masked_select(mask)).all(),
-                eligible.any(),
+                # Fixed-shape replacement for ``logits.masked_select(mask)``;
+                # the latter sizes its output from device data and syncs.
+                (~mask | torch.isfinite(logits)).all(),
             )
-        ).to(torch.uint8).cpu().tolist()
+        ).to(torch.float64)
+        pending = self._pending_totals
+        if pending is not None and pending.device != logits.device:
+            # Mixed-device callers keep working; only merging needs one device.
+            self._flush_pending()
+            pending = None
+        if pending is None:
+            values = checks.cpu().tolist()
+        else:
+            values = torch.cat((checks, pending)).cpu().tolist()
+            self._pending_totals = None
+            self._apply_totals(values[_CHECK_COUNT:])
         (
             candidate_present,
             stage_min_ok,
@@ -192,8 +228,7 @@ class MetricAccumulator:
             target_max_ok,
             target_valid,
             logits_finite,
-            has_eligible,
-        ) = (bool(value) for value in checks)
+        ) = (bool(value) for value in values[:_CHECK_COUNT])
         if not candidate_present:
             raise DataError("every decision must have at least one candidate")
         if not (stage_min_ok and stage_max_ok):
@@ -211,80 +246,37 @@ class MetricAccumulator:
         correct = _greedy_indices_validated(logits, mask).eq(targets.long())
 
         self._decisions += batch_size
-        if not has_eligible:
-            forced_stages = stages.to(torch.int64)
-            for stage, count in enumerate(
-                torch.bincount(forced_stages, minlength=STAGE_COUNT).cpu().tolist()
-            ):
-                self._forced_by_stage[stage] += int(count)
-            return
+        self._pending_totals = _batch_totals(
+            nll, correct, eligible, stages, target_kinds
+        )
 
-        eligible_stages = stages[eligible].to(torch.int64)
-        eligible_kinds = target_kinds[eligible].to(torch.int64)
-        eligible_nll = nll[eligible].to(torch.float64)
-        eligible_correct = correct[eligible].to(torch.float64)
-        forced_stages = stages[~eligible].to(torch.int64)
-        stage_totals = torch.stack(
-            (
-                torch.bincount(
-                    eligible_stages, weights=eligible_nll, minlength=STAGE_COUNT
-                ),
-                torch.bincount(
-                    eligible_stages, weights=eligible_correct, minlength=STAGE_COUNT
-                ),
-                torch.bincount(eligible_stages, minlength=STAGE_COUNT).double(),
-                torch.bincount(forced_stages, minlength=STAGE_COUNT).double(),
-            )
-        )
-        kind_totals = torch.stack(
-            (
-                torch.bincount(
-                    eligible_kinds, minlength=ACTION_KIND_COUNT
-                ).double(),
-                torch.bincount(
-                    eligible_kinds,
-                    weights=eligible_correct,
-                    minlength=ACTION_KIND_COUNT,
-                ),
-            )
-        )
-        # One host transfer for the whole update. Every group total is already
-        # float64, so per-group accumulation keeps its exact value and
-        # summation order relative to the previous per-tensor fetches.
-        totals = torch.cat(
-            (
-                stage_totals.flatten(),
-                kind_totals.flatten(),
-                torch.stack(
-                    (
-                        eligible_nll.sum(),
-                        eligible_correct.sum(),
-                        eligible.sum().double(),
-                    )
-                ),
-            )
-        ).cpu().tolist()
-        stage_offset = 4 * STAGE_COUNT
-        kind_offset = 2 * ACTION_KIND_COUNT
-        self._eligible += int(totals[stage_offset + kind_offset + 2])
-        self._nll_total += totals[stage_offset + kind_offset]
-        self._correct_total += int(totals[stage_offset + kind_offset + 1])
+    def _apply_totals(self, totals: Sequence[float]) -> None:
+        """Add one transferred totals vector in the documented layout."""
+
+        kind_base = _STAGE_TOTAL_WIDTH
+        summary_base = kind_base + _KIND_TOTAL_WIDTH
+        self._eligible += int(totals[summary_base + 2])
+        self._nll_total += totals[summary_base]
+        self._correct_total += int(totals[summary_base + 1])
         for index in range(STAGE_COUNT):
             self._nll_by_stage[index] += totals[index]
-            self._correct_by_stage[index] += int(
-                totals[STAGE_COUNT + index]
-            )
-            self._support_by_stage[index] += int(
-                totals[2 * STAGE_COUNT + index]
-            )
-            self._forced_by_stage[index] += int(
-                totals[3 * STAGE_COUNT + index]
-            )
+            self._correct_by_stage[index] += int(totals[STAGE_COUNT + index])
+            self._support_by_stage[index] += int(totals[2 * STAGE_COUNT + index])
+            self._forced_by_stage[index] += int(totals[3 * STAGE_COUNT + index])
         for index in range(ACTION_KIND_COUNT):
-            self._support_by_kind[index] += int(totals[stage_offset + index])
+            self._support_by_kind[index] += int(totals[kind_base + index])
             self._correct_by_kind[index] += int(
-                totals[stage_offset + ACTION_KIND_COUNT + index]
+                totals[kind_base + ACTION_KIND_COUNT + index]
             )
+
+    def _flush_pending(self) -> None:
+        """Apply totals held since the last completed batch, if any."""
+
+        pending = self._pending_totals
+        if pending is None:
+            return
+        self._pending_totals = None
+        self._apply_totals(pending.cpu().tolist())
 
     def _add_forced_split(
         self,
@@ -319,6 +311,7 @@ class MetricAccumulator:
         self._decisions += decisions - eligible
 
     def report(self) -> MetricsReport:
+        self._flush_pending()
         stages = tuple(
             StageMetrics(
                 stage_id=index,
@@ -356,6 +349,55 @@ class MetricAccumulator:
             stages=stages,
             action_kinds=kinds,
         )
+
+
+def _batch_totals(
+    nll: Tensor,
+    correct: Tensor,
+    eligible: Tensor,
+    stages: Tensor,
+    target_kinds: Tensor,
+) -> Tensor:
+    """Fixed-shape float64 totals for one validated batch.
+
+    The flat layout is stage NLL, stage correct, stage support, stage forced,
+    then kind support, kind correct, then batch NLL, batch correct and batch
+    eligible. The stage and kind ids have already been range-checked, so one
+    equality comparison against the small id axis replaces dynamic grouping.
+    ``torch.where`` (rather than multiplying by a 0/1 weight) keeps a NaN that
+    might reach an ineligible row from becoming ``0 * NaN``.
+    """
+
+    device = nll.device
+    stage_hit = stages.to(torch.int64).unsqueeze(1) == torch.arange(
+        STAGE_COUNT, device=device
+    )
+    kind_hit = target_kinds.to(torch.int64).unsqueeze(1) == torch.arange(
+        ACTION_KIND_COUNT, device=device
+    )
+    eligible_2d = eligible.unsqueeze(1)
+    stage_eligible = stage_hit & eligible_2d
+    kind_eligible = kind_hit & eligible_2d
+    zero = nll.new_zeros(())
+    nll64 = nll.to(torch.float64)
+    correct64 = correct.to(torch.float64)
+    return torch.cat(
+        (
+            torch.where(stage_eligible, nll64.unsqueeze(1), zero).sum(dim=0),
+            torch.where(stage_eligible, correct64.unsqueeze(1), zero).sum(dim=0),
+            stage_eligible.sum(dim=0).to(torch.float64),
+            (stage_hit & ~eligible_2d).sum(dim=0).to(torch.float64),
+            kind_eligible.sum(dim=0).to(torch.float64),
+            torch.where(kind_eligible, correct64.unsqueeze(1), zero).sum(dim=0),
+            torch.stack(
+                (
+                    torch.where(eligible, nll64, zero).sum(),
+                    torch.where(eligible, correct64, zero).sum(),
+                    eligible.sum().to(torch.float64),
+                )
+            ),
+        )
+    )
 
 
 def _offsets_match_cached_counts(shard: PackedDecisionDataset) -> bool:

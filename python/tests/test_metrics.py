@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
+from torch.overrides import TorchFunctionMode
 
 from mahjong_bc.config import ModelConfig
 from mahjong_bc.constants import (
@@ -616,6 +617,33 @@ def test_accumulator_rejects_nonfinite_valid_logits_before_accumulating(bad):
     assert all(kind.support == 0 and kind.top1 is None for kind in report.action_kinds)
 
 
+def test_accumulator_ignores_negative_infinity_padding():
+    logits = torch.tensor(
+        [
+            [0.0, 1.0, float("-inf")],
+            [2.0, float("-inf"), float("-inf")],
+            [float("-inf"), 0.5, float("-inf")],
+        ]
+    )
+    mask = torch.tensor(
+        [[True, True, False], [True, False, False], [False, True, False]]
+    )
+    accumulator = MetricAccumulator()
+    accumulator.add(
+        logits,
+        mask,
+        torch.tensor([0, 0, 1]),
+        torch.tensor([0, 4, 1]),
+        torch.tensor([2, 7, 4]),
+    )
+    report = accumulator.report()
+    assert (report.decisions, report.eligible, report.forced) == (3, 1, 2)
+    assert report.nll == pytest.approx(math.log1p(math.exp(1.0)), abs=1e-6)
+    assert report.top1 == 0.0
+    assert tuple(metric.forced for metric in report.stages) == (0, 1, 0, 0, 1)
+    assert support_by_stage(report) == (1, 0, 0, 0, 0)
+
+
 def test_accumulator_ignores_nonfinite_padding_and_keeps_public_messages():
     logits = torch.tensor([[0.0, 0.0, float("nan")], [1.0, 0.0, float("inf")]])
     mask = torch.tensor([[True, True, False], [True, True, False]])
@@ -692,6 +720,102 @@ def test_accumulator_ignores_nonfinite_padding_and_keeps_public_messages():
         assert rejected.report().decisions == 0
 
 
+def _operation_names(action) -> list[str]:
+    """Record every torch function dispatched while ``action`` runs."""
+
+    names: list[str] = []
+
+    class _Recorder(TorchFunctionMode):
+        def __torch_function__(self, func, types, args=(), kwargs=None):
+            names.append(getattr(func, "__name__", str(func)))
+            return func(*args, **(kwargs or {}))
+
+    with _Recorder():
+        action()
+    return names
+
+
+def _batches():
+    """Three crafted batches with forced rows at batch boundaries."""
+
+    first = (
+        torch.tensor(
+            [
+                [5.0, -5.0, float("nan")],
+                [0.0, 1.0, -2.0],
+                [-7.0, 2.0, float("inf")],
+            ]
+        ),
+        torch.tensor([[True, True, False], [True, True, True], [True, False, False]]),
+        torch.tensor([0, 1, 0]),
+        torch.tensor([0, 0, 4]),
+        torch.tensor([0, 1, 8]),
+    )
+    second = (
+        torch.tensor([[1.0, 2.0, 3.0], [0.0, 0.0, float("nan")]]),
+        torch.tensor([[True, True, True], [True, False, False]]),
+        torch.tensor([2, 0]),
+        torch.tensor([4, 0]),
+        torch.tensor([2, 0]),
+    )
+    third = (
+        torch.tensor([[0.5], [-0.5], [3.0]]),
+        torch.tensor([[True], [True], [True]]),
+        torch.tensor([0, 0, 0]),
+        torch.tensor([1, 3, 3]),
+        torch.tensor([1, 4, 4]),
+    )
+    return (first, second, third)
+
+
+def _reference_report(batches):
+    """Per-decision reference using the public NLL/selection helpers."""
+
+    decisions = eligible = 0
+    nll_total = 0.0
+    correct_total = 0
+    forced = [0] * STAGE_COUNT
+    support = [0] * STAGE_COUNT
+    nll_by_stage = [0.0] * STAGE_COUNT
+    correct_by_stage = [0] * STAGE_COUNT
+    kind_support = [0] * ACTION_KIND_COUNT
+    kind_correct = [0] * ACTION_KIND_COUNT
+    with torch.no_grad():
+        for logits, mask, targets, stages, kinds in batches:
+            nll = decision_nll(logits, mask, targets)
+            chosen = greedy_indices(logits, mask).eq(targets)
+            for row in range(logits.shape[0]):
+                stage = int(stages[row])
+                kind = int(kinds[row])
+                decisions += 1
+                if int(mask[row].sum()) == 1:
+                    forced[stage] += 1
+                    continue
+                value = float(nll[row].item())
+                hit = int(chosen[row].item())
+                eligible += 1
+                nll_total += value
+                correct_total += hit
+                support[stage] += 1
+                nll_by_stage[stage] += value
+                correct_by_stage[stage] += hit
+                kind_support[kind] += 1
+                kind_correct[kind] += hit
+    return SimpleNamespace(
+        decisions=decisions,
+        eligible=eligible,
+        forced=decisions - eligible,
+        nll_total=nll_total,
+        correct_total=correct_total,
+        forced_by_stage=forced,
+        support_by_stage=support,
+        nll_by_stage=nll_by_stage,
+        correct_by_stage=correct_by_stage,
+        kind_support=kind_support,
+        kind_correct=kind_correct,
+    )
+
+
 def test_accumulator_host_transfers_per_batch_are_bounded():
     logits = torch.tensor(
         [[0.0, 0.0, -100.0], [0.0, 0.0, 0.0], [10.0, 0.0, 0.0]]
@@ -703,10 +827,10 @@ def test_accumulator_host_transfers_per_batch_are_bounded():
     reads = count_host_reads(
         lambda: MetricAccumulator().add(logits, mask, targets, stages, kinds)
     )
-    # One validation transfer and one aggregation transfer. Implicit device
-    # reads inside masked_select, boolean indexing and bincount are not counted
-    # here, so this bounds explicit scalar fetches only.
-    assert reads["cpu"] == 2
+    # The first batch has no earlier totals, so its single transfer carries
+    # only the validation checks. No dynamic grouping op may add its own
+    # implicit device read.
+    assert reads["cpu"] == 1
     assert reads["item"] == reads["__bool__"] == reads["__int__"] == 0
     forced = count_host_reads(
         lambda: MetricAccumulator().add(
@@ -717,7 +841,32 @@ def test_accumulator_host_transfers_per_batch_are_bounded():
             kinds[:1],
         )
     )
-    assert forced["cpu"] == 2
+    assert forced["cpu"] == 1
+
+
+def test_accumulator_merges_buffered_totals_into_one_later_transfer():
+    first, second, _ = _batches()
+
+    def run():
+        accumulator = MetricAccumulator()
+        accumulator.add(*first)
+        accumulator.add(*second)
+        return accumulator.report()
+
+    reads = count_host_reads(run)
+    # One validation transfer per batch plus the report flush: the first
+    # batch's totals travel with the second batch's checks.
+    assert reads["cpu"] == 3
+
+
+def test_accumulator_uses_fixed_shape_grouping_operations():
+    first, second, _ = _batches()
+    names = _operation_names(
+        lambda: MetricAccumulator().add(*first)
+    ) + _operation_names(lambda: MetricAccumulator().add(*second))
+    for dynamic in ("bincount", "masked_select", "nonzero", "__getitem__"):
+        assert dynamic not in names
+    assert names.count("cpu") == 2
 
 
 class _ReadGuardedArray(np.ndarray):
@@ -780,3 +929,215 @@ def test_evaluate_dataset_missing_target_kinds_keeps_fallback():
     assert (report.decisions, report.eligible, report.forced) == (4, 3, 1)
     assert report.top1 == baseline.top1
     assert_reports_equal(report, baseline, tolerance=1e-6)
+
+
+def test_accumulator_matches_per_decision_reference_at_batch_boundaries():
+    batches = _batches()
+    accumulator = MetricAccumulator()
+    for batch in batches:
+        accumulator.add(*batch)
+    report = accumulator.report()
+    reference = _reference_report(batches)
+
+    assert (report.decisions, report.eligible, report.forced) == (
+        reference.decisions,
+        reference.eligible,
+        reference.forced,
+    )
+    assert (report.decisions, report.eligible, report.forced) == (8, 3, 5)
+    assert report.nll == pytest.approx(
+        reference.nll_total / reference.eligible, rel=1e-12, abs=1e-12
+    )
+    assert report.top1 == reference.correct_total / reference.eligible
+    assert math.isfinite(report.nll) and math.isfinite(report.top1)
+    for index, metric in enumerate(report.stages):
+        assert metric.support == reference.support_by_stage[index]
+        assert metric.forced == reference.forced_by_stage[index]
+        if metric.support:
+            assert metric.nll == pytest.approx(
+                reference.nll_by_stage[index] / metric.support,
+                rel=1e-12,
+                abs=1e-12,
+            )
+            assert metric.top1 == (
+                reference.correct_by_stage[index] / metric.support
+            )
+            assert math.isfinite(metric.nll)
+        else:
+            assert metric.nll is None and metric.top1 is None
+    for index, kind in enumerate(report.action_kinds):
+        assert kind.support == reference.kind_support[index]
+        if kind.support:
+            assert kind.top1 == reference.kind_correct[index] / kind.support
+        else:
+            assert kind.top1 is None
+    # Forced rows ending a batch, an all-forced batch, and NaN/Inf padding
+    # must not leak into eligible groups.
+    assert tuple(metric.forced for metric in report.stages) == (1, 1, 0, 2, 1)
+    assert support_by_stage(report) == (2, 0, 0, 0, 1)
+    assert tuple(metric.support for metric in report.action_kinds) == (
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    )
+
+
+def test_report_flushes_buffered_totals_and_can_be_reused():
+    first, second, _ = _batches()
+    accumulator = MetricAccumulator()
+    accumulator.add(*first)
+    partial = accumulator.report()
+    assert (partial.decisions, partial.eligible, partial.forced) == (3, 2, 1)
+    accumulator.add(*second)
+    combined = accumulator.report()
+    assert (combined.decisions, combined.eligible, combined.forced) == (5, 3, 2)
+    assert accumulator.report() == combined
+
+    reference = MetricAccumulator()
+    reference.add(*first)
+    reference.add(*second)
+    # Flushing at an explicit report boundary keeps the same float64
+    # accumulation order as accumulating both batches before one report.
+    assert_reports_equal(combined, reference.report(), tolerance=0.0)
+
+
+def test_rejected_batch_keeps_earlier_buffered_totals():
+    first, _, _ = _batches()
+    reference = MetricAccumulator()
+    reference.add(*first)
+
+    value_rejected = MetricAccumulator()
+    value_rejected.add(*first)
+    with pytest.raises(DataError, match="stages must be in"):
+        value_rejected.add(
+            torch.zeros(2, 3),
+            torch.tensor([[True, True, False], [True, True, True]]),
+            torch.tensor([0, 1]),
+            torch.tensor([0, STAGE_COUNT]),
+            torch.tensor([0, 1]),
+        )
+    assert_reports_equal(value_rejected.report(), reference.report(), tolerance=0.0)
+
+    structure_rejected = MetricAccumulator()
+    structure_rejected.add(*first)
+    with pytest.raises(DataError, match="float32"):
+        structure_rejected.add(
+            torch.zeros(1, 2, dtype=torch.float64),
+            torch.tensor([[True, True]]),
+            torch.tensor([0]),
+            torch.tensor([0]),
+            torch.tensor([0]),
+        )
+    assert_reports_equal(
+        structure_rejected.report(), reference.report(), tolerance=0.0
+    )
+
+
+def test_accumulator_all_forced_batch_counts_by_stage():
+    accumulator = MetricAccumulator()
+    accumulator.add(
+        torch.tensor([[0.0], [-1.0], [2.0]]),
+        torch.ones(3, 1, dtype=torch.bool),
+        torch.tensor([0, 0, 0]),
+        torch.tensor([0, 3, 3]),
+        torch.tensor([1, 4, 4]),
+    )
+    report = accumulator.report()
+    assert (report.decisions, report.eligible, report.forced) == (3, 0, 3)
+    assert report.nll is None and report.top1 is None
+    assert tuple(metric.forced for metric in report.stages) == (1, 0, 0, 2, 0)
+    assert all(
+        metric.support == 0 and metric.nll is None and metric.top1 is None
+        for metric in report.stages
+    )
+    assert all(
+        kind.support == 0 and kind.top1 is None for kind in report.action_kinds
+    )
+
+
+def test_accumulator_accepts_int32_metadata_without_changing_values():
+    logits = torch.tensor(
+        [[0.0, 0.0, -100.0], [0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [-5.0, 5.0, -100.0]]
+    )
+    mask = torch.tensor(
+        [
+            [True, True, False],
+            [True, True, True],
+            [True, False, False],
+            [True, True, False],
+        ]
+    )
+    targets = torch.tensor([0, 1, 0, 1])
+    stages = torch.tensor([0, 0, 4, 4])
+    kinds = torch.tensor([2, 3, 2, 2])
+    accumulator = MetricAccumulator()
+    accumulator.add(
+        logits,
+        mask,
+        targets.int(),
+        stages.int(),
+        kinds.int(),
+    )
+    assert accumulator.report() == _manual_accumulator().report()
+
+
+def test_empty_batch_is_ignored_without_flushing_buffered_totals():
+    first, _, _ = _batches()
+    accumulator = MetricAccumulator()
+    accumulator.add(*first)
+    accumulator.add(
+        torch.zeros(0, 3),
+        torch.zeros(0, 3, dtype=torch.bool),
+        torch.zeros(0, dtype=torch.int64),
+        torch.zeros(0, dtype=torch.int64),
+        torch.zeros(0, dtype=torch.int64),
+    )
+    reference = MetricAccumulator()
+    reference.add(*first)
+    assert_reports_equal(accumulator.report(), reference.report(), tolerance=0.0)
+
+
+def test_accumulator_supports_deterministic_algorithms():
+    batches = _batches()
+    previous = torch.are_deterministic_algorithms_enabled()
+    torch.use_deterministic_algorithms(True)
+    try:
+        def run():
+            accumulator = MetricAccumulator()
+            for batch in batches:
+                accumulator.add(*batch)
+            return accumulator.report()
+
+        deterministic = run()
+        repeated = run()
+    finally:
+        torch.use_deterministic_algorithms(previous)
+
+    assert deterministic == repeated
+    default = MetricAccumulator()
+    for batch in batches:
+        default.add(*batch)
+    # Deterministic mode is supported by avoiding atomics, not by promising
+    # bitwise equality with the earlier CUDA weighted-bincount grouping.
+    assert_reports_equal(deterministic, default.report(), tolerance=1e-15)
+
+
+def test_evaluate_dataset_supports_deterministic_algorithms():
+    dataset = make_dataset(
+        split="validation", counts=[2, 1, 3, 2, 1, 2], seed=71
+    )
+    model = build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=31)
+    previous = torch.are_deterministic_algorithms_enabled()
+    torch.use_deterministic_algorithms(True)
+    try:
+        first = evaluate_dataset(model, dataset, batch_size=2, device="cpu")
+        second = evaluate_dataset(model, dataset, batch_size=2, device="cpu")
+    finally:
+        torch.use_deterministic_algorithms(previous)
+    assert_reports_equal(first, second, tolerance=0.0)
