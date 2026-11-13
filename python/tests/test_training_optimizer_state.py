@@ -120,8 +120,20 @@ def test_move_optimizer_state_moves_cuda_step_back_to_the_host():
     assert state["exp_avg_sq"].device.type == "cuda"
 
 
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA is not available"
+            ),
+        ),
+    ],
+)
 def test_resume_restores_slot_placement_and_matches_uninterrupted_continuation(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, device
 ):
     train, validation = learnable_pair(
         train_decisions=9, validation_decisions=4, cache_id="optimizer-slots"
@@ -135,7 +147,7 @@ def test_resume_restores_slot_placement_and_matches_uninterrupted_continuation(
         model_config=model_config,
         training_config=config,
         output_dir=tmp_path / "boundary",
-        device="cpu",
+        device=device,
     )
     real_batches = train_module._iter_model_batches
     epoch_calls = 0
@@ -161,7 +173,7 @@ def test_resume_restores_slot_placement_and_matches_uninterrupted_continuation(
         model_config=model_config,
         training_config=config,
         output_dir=tmp_path / "resumed",
-        device="cpu",
+        device=device,
     )
     resumed_summary = resumed.train(resume_from=tmp_path / "boundary" / "last.pt")
 
@@ -179,7 +191,7 @@ def test_resume_restores_slot_placement_and_matches_uninterrupted_continuation(
         model_config=model_config,
         training_config=config,
         output_dir=tmp_path / "uninterrupted",
-        device="cpu",
+        device=device,
     )
     uninterrupted_summary = uninterrupted.train()
 
