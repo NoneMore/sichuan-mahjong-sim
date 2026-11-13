@@ -715,9 +715,8 @@ fn relative_seats_wrap_and_winning_players_keep_their_slots() {
     let missing = [Some(Suit::Tong), None, Some(Suit::Wan), Some(Suit::Tiao)];
     let scores = [160, -100, 7, -1];
     let won = [false, true, true, false];
-    for relative in 0..4 {
+    for (relative, player) in state.players.iter().enumerate() {
         let absolute = (3 + relative) % 4;
-        let player = &state.players[relative];
         assert_eq!(
             player.concealed_total,
             concealed[absolute] as f32 / 14.0,
