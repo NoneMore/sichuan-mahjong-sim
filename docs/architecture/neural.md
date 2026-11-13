@@ -56,14 +56,14 @@ kinds. Neither path gathers provenance or an eligible flag. Host gathering
 checks targets and current-offset training eligibility before loss computation.
 
 With `num_workers=0`, exact built-in packed datasets with target-kind metadata
-and an unmodified `CandidatePolicy` use flat valid-candidate rows. Only those
+and the built-in `CandidatePolicy` use flat valid-candidate rows. Only those
 rows reach the scorer; logits are restored to the padded layout for the
 existing loss and metrics.
 
 Custom datasets, dataset subclasses, missing target-kind metadata and workers
-retain full batches. Policy subclasses, `forward`/`score` overrides, compiled
-calls and policy/global hooks retain padded scoring so public calls are not
-bypassed. Evaluation retains full traversal when current offsets no longer
+retain full batches. Policy subclasses retain padded scoring. Both layouts
+use the normal model call, so packed scoring does not bypass `forward` or
+module hooks. Evaluation retains full traversal when current offsets no longer
 match cached counts; all-forced built-in splits use metadata without scoring.
 
 The policy embeds the state once and scores each legal candidate with a

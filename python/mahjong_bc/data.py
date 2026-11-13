@@ -170,7 +170,7 @@ class _PrunedDecisionBatch:
         self, device: torch.device | str, *, non_blocking: bool = False
     ) -> _PrunedDecisionBatch:
         target = torch.device(device)
-        return _PrunedDecisionBatch(
+        return type(self)(
             states=self.states.to(target, non_blocking=non_blocking),
             candidates=self.candidates.to(target, non_blocking=non_blocking),
             mask=self.mask.to(target, non_blocking=non_blocking),
@@ -189,53 +189,8 @@ class _PrunedDecisionBatch:
 
 
 @dataclass(frozen=True)
-class _PackedCandidateBatch:
-    """Internal model batch that holds only valid candidates.
-
-    ``candidates`` is one flat ``[N, CANDIDATE_WIDTH]`` block: each decision's
-    valid candidates appear consecutively, in decision order and then canonical
-    candidate order. ``candidate_counts`` is the per-decision valid count that
-    also produced ``mask``. Scoring gathers hidden rows through ``mask``, so
-    counts remain batch metadata rather than a placement source. A consumer can
-    still use them to audit the flat block or rebuild padded layouts. The other
-    fields match :class:`_PrunedDecisionBatch`.
-    """
-
-    states: Tensor
-    candidates: Tensor
-    candidate_counts: Tensor
-    mask: Tensor
-    targets: Tensor
-    stages: Tensor | None = None
-    target_kinds: Tensor | None = None
-
-    @property
-    def batch_size(self) -> int:
-        return int(self.states.shape[0])
-
-    def to(
-        self, device: torch.device | str, *, non_blocking: bool = False
-    ) -> _PackedCandidateBatch:
-        target = torch.device(device)
-        return _PackedCandidateBatch(
-            states=self.states.to(target, non_blocking=non_blocking),
-            candidates=self.candidates.to(target, non_blocking=non_blocking),
-            candidate_counts=self.candidate_counts.to(
-                target, non_blocking=non_blocking
-            ),
-            mask=self.mask.to(target, non_blocking=non_blocking),
-            targets=self.targets.to(target, non_blocking=non_blocking),
-            stages=(
-                None
-                if self.stages is None
-                else self.stages.to(target, non_blocking=non_blocking)
-            ),
-            target_kinds=(
-                None
-                if self.target_kinds is None
-                else self.target_kinds.to(target, non_blocking=non_blocking)
-            ),
-        )
+class _PackedCandidateBatch(_PrunedDecisionBatch):
+    """Valid candidate rows matching the row-major true entries of ``mask``."""
 
 
 def _read_only(array: np.ndarray) -> np.ndarray:
@@ -819,7 +774,6 @@ def _gather_pruned_segments(
             candidates=torch.from_numpy(
                 _flat_candidate_rows(segments, counts, starts)
             ),
-            candidate_counts=torch.from_numpy(counts),
             mask=torch.from_numpy(mask_array),
             targets=torch.from_numpy(targets),
             stages=None if stages is None else torch.from_numpy(stages),
