@@ -51,10 +51,12 @@ from .errors import ConfigurationError, DataError, ResumeError
 from .metrics import MetricsReport, evaluate_dataset
 from .policy import (
     CandidatePolicy,
+    _batch_logits,
     _decision_nll_validated,
     _require_finite_valid,
     _validate_logits_mask_structure,
     _validate_mask_structure,
+    _supports_packed_candidate_scoring,
     _validate_targets_structure,
     build_policy,
 )
@@ -722,6 +724,7 @@ class Trainer:
         eligible_indices = self.train_dataset.eligible_indices()
         eligible_count = int(eligible_indices.size)
         batch_size = self.training_config.batch_size
+        packed_candidates = _supports_packed_candidate_scoring(model)
         for epoch in range(progress.completed_epochs, self.training_config.epochs):
             model.train()
             permutation = torch.randperm(
@@ -736,12 +739,13 @@ class Trainer:
                 batch_size=batch_size,
                 num_workers=self.training_config.num_workers,
                 training=True,
+                packed_candidates=packed_candidates,
             ):
                 if isinstance(batch, DecisionBatch):
                     _require_host_training_batch(batch)
                 moved = batch.to(self.device)
                 optimizer.zero_grad(set_to_none=True)
-                logits = model(moved.states, moved.candidates, moved.mask)
+                logits = _batch_logits(model, moved)
                 _validate_logits_mask_structure(logits, moved.mask)
                 _require_finite_valid(logits, moved.mask)
                 loss = _decision_nll_validated(

@@ -120,6 +120,10 @@ batch-dependent normalization. Candidate permutation permutes logits; padding
 is zeroed before scoring and masked before loss/selection. Greedy ties choose
 canonical-first; categorical sampling uses the same masked logits.
 
+Compatible built-in packed paths score only valid candidates. Public inputs
+and batches retain their padded contracts; see
+[batching and fallbacks](../docs/architecture/neural.md#offline-python-data-and-training).
+
 Each seeded epoch visits every eligible decision (more than one candidate)
 once in shuffled order, including the final partial batch. Masked cross-entropy
 weights decisions equally; forced choices are counted separately.

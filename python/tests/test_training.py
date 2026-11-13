@@ -11,6 +11,7 @@ import pytest
 import torch
 
 import mahjong_bc
+import mahjong_bc.metrics as metrics_module
 import mahjong_bc.train as train_module
 from mahjong_bc.checkpoint import (
     atomic_torch_save,
@@ -25,7 +26,7 @@ from mahjong_bc.config import (
     TrainingConfig,
 )
 from mahjong_bc.constants import ROLE_BEST, ROLE_LAST, ROLE_POLICY
-from mahjong_bc.data import PackedDecisionDataset, iter_batches
+from mahjong_bc.data import PackedDecisionDataset, _PackedCandidateBatch, iter_batches
 from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError, ResumeError
 import mahjong_bc.policy as policy_module
 from mahjong_bc.policy import CandidatePolicy, build_policy
@@ -1507,6 +1508,7 @@ def test_training_checks_target_legality_before_forced_rejection(tmp_path):
 def test_pruned_training_matches_full_batch_baseline_exactly(
     tmp_path, monkeypatch
 ):
+    """Padded internal gathering preserves public collation's arithmetic."""
     train = make_dataset(
         split="train", counts=[2, 1, 3, 4, 2, 3, 2, 4],
         seed=141, cache_id="pruned-baseline"
@@ -1519,6 +1521,7 @@ def test_pruned_training_matches_full_batch_baseline_exactly(
     model_config = _small_model()
 
     def reference_batches(dataset, indices, *, training, **kwargs):
+        kwargs.pop("packed_candidates", None)
         return iter_batches(dataset, indices, **kwargs)
 
     summaries = []
@@ -1538,6 +1541,10 @@ def test_pruned_training_matches_full_batch_baseline_exactly(
             device="cpu",
         )
         with monkeypatch.context() as patch:
+            for module in (train_module, metrics_module):
+                patch.setattr(
+                    module, "_supports_packed_candidate_scoring", lambda model: False
+                )
             if reference:
                 patch.setattr(
                     train_module,
@@ -1601,7 +1608,7 @@ def test_pruned_training_recovery_replays_exactly(tmp_path, monkeypatch):
             for number, batch in enumerate(
                 real_batches(dataset, indices, **kwargs)
             ):
-                assert not hasattr(batch, "eligible")
+                assert isinstance(batch, _PackedCandidateBatch)
                 yield batch
                 if interrupt and len(trace) == 2 and number == 0:
                     raise KeyboardInterrupt("injected pruned mid-epoch stop")

@@ -14,6 +14,7 @@ import torch
 from torch import Tensor, nn
 
 from .config import ModelConfig
+from .data import _PackedCandidateBatch
 from .errors import ConfigurationError, DataError
 
 _ACTIVATION_FACTORIES: dict[str, Callable[[], nn.Module]] = {
@@ -109,8 +110,56 @@ class CandidatePolicy(nn.Module):
         scorer_input = torch.cat((expanded, padded_candidates), dim=-1)
         return self.candidate_scorer(scorer_input).squeeze(-1)
 
-    def forward(self, states: Tensor, candidates: Tensor, mask: Tensor) -> Tensor:
+    def forward(
+        self, states: Tensor, candidates: Tensor, mask: Tensor, *, packed: bool = False
+    ) -> Tensor:
+        if packed:
+            return _packed_candidate_logits(self, states, candidates, mask)
         return self.score(states, candidates, mask)
+
+
+def _supports_packed_candidate_scoring(model: object) -> bool:
+    """Custom policy classes retain the padded forward interface."""
+
+    return type(model) is CandidatePolicy
+
+
+def _packed_candidate_logits(
+    model: CandidatePolicy,
+    states: Tensor,
+    candidates: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    """Score flat valid candidates and rebuild the padded logit layout.
+
+    Callers pass the flat ``[N, candidate_width]`` block and the ``[B, C]``
+    valid-candidate mask from one internal batch, so ``mask``'s row-major true
+    entries are exactly the flat block's rows. Only valid candidates reach the
+    scorer; padded logit slots are zeros, which every consumer masks before use.
+
+    Hidden rows are selected by expanding the per-decision state over the mask
+    columns and gathering the true entries. Its autograd restores the dense
+    ``[B, C, H]`` gradient and sums the candidate axis. The former
+    ``repeat_interleave`` backward scatter-adds duplicate valid rows and is not
+    deterministic on CUDA.
+    """
+
+    hidden = model.state_representation(states)
+    expanded = hidden.unsqueeze(1).expand(-1, mask.shape[1], -1)[mask]
+    flat = model.candidate_scorer(
+        torch.cat((expanded, candidates), dim=-1)
+    ).squeeze(-1)
+    logits = flat.new_zeros(mask.shape)
+    logits[mask] = flat
+    return logits
+
+
+def _batch_logits(model: CandidatePolicy, batch: object) -> Tensor:
+    """Padded logits for a public, pruned or flat-candidate internal batch."""
+
+    if not isinstance(batch, _PackedCandidateBatch):
+        return model(batch.states, batch.candidates, batch.mask)
+    return model(batch.states, batch.candidates, batch.mask, packed=True)
 
 
 def build_policy(config: ModelConfig | None = None, *, seed: int | None = None) -> CandidatePolicy:

@@ -383,14 +383,10 @@ fn decode_discards(
     players: &[ProjectedPlayer; PLAYER_COUNT],
 ) -> Vec<DiscardInfo> {
     let mut records = Vec::new();
-    for source in 0..PLAYER_COUNT {
-        for category in 0..3 {
-            for tile_index in 0..27 {
-                let count = decode_scaled(
-                    state.discards[source][category][tile_index],
-                    4.0,
-                    "discard count",
-                );
+    for (source, discards) in state.discards.iter().enumerate() {
+        for (category, tiles) in discards.iter().enumerate() {
+            for (tile_index, &value) in tiles.iter().enumerate() {
+                let count = decode_scaled(value, 4.0, "discard count");
                 for _ in 0..count {
                     let tile = Tile::from_index(tile_index as u8).expect("tile index in range");
                     let mut winners = [false; PLAYER_COUNT];

@@ -26,8 +26,10 @@ from .data import (
 from .errors import DataError
 from .policy import (
     CandidatePolicy,
+    _batch_logits,
     _decision_nll_validated,
     _greedy_indices_validated,
+    _supports_packed_candidate_scoring,
 )
 
 
@@ -448,6 +450,7 @@ def evaluate_dataset(
             batch_size=batch_size,
             num_workers=num_workers,
             training=False,
+            packed_candidates=_supports_packed_candidate_scoring(model),
         )
     was_training = model.training
     model.eval()
@@ -455,7 +458,7 @@ def evaluate_dataset(
         with torch.no_grad():
             for batch in batches:
                 moved = batch.to(target_device)
-                logits = model(moved.states, moved.candidates, moved.mask)
+                logits = _batch_logits(model, moved)
                 accumulator.add(
                     logits,
                     moved.mask,

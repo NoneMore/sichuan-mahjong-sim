@@ -170,7 +170,7 @@ class _PrunedDecisionBatch:
         self, device: torch.device | str, *, non_blocking: bool = False
     ) -> _PrunedDecisionBatch:
         target = torch.device(device)
-        return _PrunedDecisionBatch(
+        return type(self)(
             states=self.states.to(target, non_blocking=non_blocking),
             candidates=self.candidates.to(target, non_blocking=non_blocking),
             mask=self.mask.to(target, non_blocking=non_blocking),
@@ -186,6 +186,11 @@ class _PrunedDecisionBatch:
                 else self.target_kinds.to(target, non_blocking=non_blocking)
             ),
         )
+
+
+@dataclass(frozen=True)
+class _PackedCandidateBatch(_PrunedDecisionBatch):
+    """Valid candidate rows matching the row-major true entries of ``mask``."""
 
 
 def _read_only(array: np.ndarray) -> np.ndarray:
@@ -706,17 +711,47 @@ def _pad_candidate_rows(
     return candidates
 
 
+def _flat_candidate_rows(
+    segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
+    counts: np.ndarray,
+    starts: np.ndarray,
+) -> np.ndarray:
+    """Copy each decision's current candidate span into one flat block.
+
+    Rows follow decision order and then candidate order, so they are exactly
+    the true entries of the batch mask in row-major order.
+    """
+
+    total = int(counts.sum())
+    candidates = np.empty((total, CANDIDATE_WIDTH), dtype=np.float32)
+    row_starts = np.cumsum(counts) - counts
+    for rows, shard, local in segments:
+        segment_counts = counts[rows]
+        segment_starts = starts[rows]
+        exclusive = np.cumsum(segment_counts) - segment_counts
+        length = int(segment_counts.sum())
+        ranks = np.arange(length) - np.repeat(exclusive, segment_counts)
+        candidates[np.repeat(row_starts[rows], segment_counts) + ranks] = (
+            shard.candidate_features[np.repeat(segment_starts, segment_counts) + ranks]
+        )
+    return candidates
+
+
 def _gather_pruned_segments(
     batch_size: int,
     segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
     *,
     training: bool,
-) -> _PrunedDecisionBatch:
+    packed_candidates: bool = False,
+) -> _PrunedDecisionBatch | _PackedCandidateBatch:
     """Gather only the tensors selected by an internal consumer.
 
     Unrequested fields are never read, converted or allocated. In particular
     the provenance arrays and the derived ``eligible`` tensor that
     :func:`collate_decisions` produces for a public batch do not exist here.
+    ``packed_candidates`` gathers the valid candidates as one flat block, which
+    avoids copying the padded slots that a ``[B, C, candidate_width]`` batch
+    would allocate.
     """
 
     states, counts, starts, targets = _gather_base_columns(batch_size, segments)
@@ -731,13 +766,26 @@ def _gather_pruned_segments(
         for rows, shard, local in segments:
             stages[rows] = shard.stages[local]
             target_kinds[rows] = shard.target_kinds[local]
-    candidates = _pad_candidate_rows(batch_size, segments, counts, starts)
     max_count = int(counts.max())
-    mask = np.arange(max_count)[None, :] < counts[:, None]
+    mask_array = np.arange(max_count)[None, :] < counts[:, None]
+    if packed_candidates:
+        return _PackedCandidateBatch(
+            states=torch.from_numpy(states),
+            candidates=torch.from_numpy(
+                _flat_candidate_rows(segments, counts, starts)
+            ),
+            mask=torch.from_numpy(mask_array),
+            targets=torch.from_numpy(targets),
+            stages=None if stages is None else torch.from_numpy(stages),
+            target_kinds=(
+                None if target_kinds is None else torch.from_numpy(target_kinds)
+            ),
+        )
+    candidates = _pad_candidate_rows(batch_size, segments, counts, starts)
     return _PrunedDecisionBatch(
         states=torch.from_numpy(states),
         candidates=torch.from_numpy(candidates),
-        mask=torch.from_numpy(mask),
+        mask=torch.from_numpy(mask_array),
         targets=torch.from_numpy(targets),
         stages=None if stages is None else torch.from_numpy(stages),
         target_kinds=(
@@ -833,12 +881,17 @@ def _iter_model_batches(
     batch_size: int,
     num_workers: int = 0,
     training: bool,
-) -> Iterator[DecisionBatch | _PrunedDecisionBatch]:
+    packed_candidates: bool = False,
+) -> Iterator[DecisionBatch | _PrunedDecisionBatch | _PackedCandidateBatch]:
     """Gather training/evaluation fields, retaining full batches on fallback.
 
     Evaluation callers must first establish the eligible-only layout. Narrow
     training batches validate current targets and eligibility during gathering;
     public fallback batches retain the consumer's original validation.
+    ``packed_candidates`` only applies to built-in packed datasets with target
+    kinds and asks for flat valid candidates instead of padded ones; it is
+    opt-in because scoring that layout needs the built-in policy. The default
+    keeps the padded batch every existing consumer expects.
     """
 
     packed = _packed_dataset(dataset) if num_workers == 0 else None
@@ -862,7 +915,12 @@ def _iter_model_batches(
             if type(packed) is ShardedDecisionDataset
             else ((np.arange(positions.size, dtype=np.int64), packed, positions),)
         )
-        yield _gather_pruned_segments(positions.size, segments, training=training)
+        yield _gather_pruned_segments(
+            positions.size,
+            segments,
+            training=training,
+            packed_candidates=packed_candidates,
+        )
 
 
 def _as_float32_tensor(value: object) -> Tensor:

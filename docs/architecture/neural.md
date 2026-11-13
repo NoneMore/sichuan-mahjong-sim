@@ -50,18 +50,21 @@ remain in canonical order; batch collation pads each batch and marks
 padding with a mask. Read-only memory-mapped loading uses num_workers=0.
 
 Public samples, `DecisionBatch`, collation, `iter_batches()` and batch device
-moves retain their complete contract. Internal training batches gather only
-states, candidates, mask and targets; eligible-only evaluation adds stages
-and target kinds. Neither path gathers provenance fields or creates a batch
-eligible tensor. The shared internal iterator checks training targets and
-current-offset eligibility while gathering on the host, before averaging
-all-row NLL; metrics derive eligibility from the mask.
+moves retain their padded layouts and complete contracts. Internal training
+batches gather model inputs and targets; evaluation adds stages and target
+kinds. Neither path gathers provenance or an eligible flag. Host gathering
+checks targets and current-offset training eligibility before loss computation.
 
-Narrow gathering requires num_workers=0, exact built-in packed datasets and
-target-kind metadata in every shard. Custom datasets, subclasses, missing
-metadata and worker processes retain full batches. Evaluation also retains
-full traversal when its eligible-only layout check fails; all-forced built-in
-splits use metadata counts without model batches.
+With `num_workers=0`, exact built-in packed datasets with target-kind metadata
+and the built-in `CandidatePolicy` use flat valid-candidate rows. Only those
+rows reach the scorer; logits are restored to the padded layout for the
+existing loss and metrics.
+
+Custom datasets, dataset subclasses, missing target-kind metadata and workers
+retain full batches. Policy subclasses retain padded scoring. Both layouts
+use the normal model call, so packed scoring does not bypass `forward` or
+module hooks. Evaluation retains full traversal when current offsets no longer
+match cached counts; all-forced built-in splits use metadata without scoring.
 
 The policy embeds the state once and scores each legal candidate with a
 shared nonlinear network; candidate position does not enter the model.
