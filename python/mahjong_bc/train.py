@@ -269,12 +269,9 @@ def _optimizer_state_slot_device(
 ) -> torch.device:
     """Return the device where a restored AdamW slot is read.
 
-    Non-capturable, non-fused AdamW increments and reads ``step`` on the host
-    during every update, so putting that scalar on the parameter's CUDA device
-    synchronizes once per parameter per step. Capturable and fused variants
-    keep every slot on the parameter device. Moment slots always follow the
-    parameter. This mirrors ``Optimizer.load_state_dict`` explicitly instead
-    of relying on its casting behavior.
+    Non-capturable, non-fused AdamW reads ``step`` on the host; moving it to
+    CUDA would synchronize once per parameter per update. Other slots, and
+    capturable/fused steps, follow the parameter device.
     """
 
     if key == "step" and not (group.get("capturable") or group.get("fused")):

@@ -143,16 +143,10 @@ def _supports_packed_candidate_scoring(model: object) -> bool:
 class _ExpandDecisionRows(torch.autograd.Function):
     """Repeat each decision's encoded state once per flat valid candidate.
 
-    ``candidate_positions`` is the CPU-derived, strictly increasing padded
-    position of every flat candidate row, so the forward gather needs no
-    device-side mask expansion.
-
-    A plain ``index_select`` backward accumulates duplicate decision indices
-    with ``index_add_``, whose CUDA kernel is an atomic scatter-add and is not
-    deterministic. This backward instead scatters each flat row's gradient to
-    its own padded position (unique indices) and reduces the candidate axis, so
-    no accumulation touches the same location twice and the state gradient is
-    a fixed-shape, order-stable reduction.
+    CPU-derived positions avoid device-side mask expansion. A plain
+    ``index_select`` backward uses atomic ``index_add_`` for duplicate decision
+    rows, which is nondeterministic on CUDA. Instead, backward copies gradients
+    to unique padded positions and sums the candidate axis in a fixed order.
     """
 
     @staticmethod
@@ -186,20 +180,12 @@ def _packed_candidate_logits(
 ) -> Tensor:
     """Score flat valid candidates and rebuild the padded logit layout.
 
-    Callers pass the flat ``[N, candidate_width]`` block, the ``[B, C]``
-    valid-candidate mask and the padded position of every flat row from one
-    internal batch, so ``mask``'s row-major true entries are exactly the flat
-    block's rows. Only valid candidates reach the scorer; padded logit slots
-    are zeros, which every consumer masks before use.
+    Flat rows match the ``[B, C]`` mask's true entries in row-major order.
+    Internal batches supply unique padded positions for fixed-shape gathering
+    and scattering, avoiding CUDA synchronization from boolean indexing.
+    Padded logits are zero and must be masked by consumers.
 
-    The positions make both layout operations fixed-shape: state rows are
-    gathered for valid candidates only and logits are scattered back with
-    unique integer indices. Boolean-mask indexing would have to discover its
-    output size on the device, which synchronizes CUDA.
-
-    ``candidate_positions`` is optional only for direct callers of
-    ``forward(packed=True)``; without it the previous mask-driven layout is
-    used. Internal batches always supply it.
+    Direct packed callers without positions retain the mask-driven layout.
     """
 
     hidden = model.state_representation(states)

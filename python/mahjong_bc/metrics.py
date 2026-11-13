@@ -107,13 +107,8 @@ class MetricAccumulator:
     Forced decisions (one candidate) are counted separately and never enter
     NLL/top-1 or their groups. Zero-support groups report ``None``, not zero.
 
-    Group totals use fixed-shape masking over the small stage and kind axes.
-    Dynamic operations (boolean indexing, ``bincount``, ``masked_select``) need
-    a host-side output size and therefore synchronize on CUDA; this path does
-    not use them, so it also supports deterministic CUDA algorithms. Totals
-    are accumulated in batch order in ``float64`` on the host. Results are
-    mathematically equivalent to the earlier weighted-``bincount`` grouping,
-    but that CUDA reduction used atomics and is not bitwise comparable.
+    Fixed-shape stage/kind reductions avoid dynamic output sizes and CUDA
+    atomics. Totals accumulate on the host in batch order as ``float64``.
 
     Each ``add`` validates its batch immediately and reads back one host
     vector containing the checks plus totals buffered from the previous batch.
@@ -143,16 +138,9 @@ class MetricAccumulator:
     ) -> None:
         """Add one padded batch containing all decisions, forced included.
 
-        Structural checks run on their tensors first. The value checks keep
-        the public NLL/selection predicates and their messages, so a batch the
-        public helpers would reject is rejected here before it is accumulated.
-        Logits are still tested for NaN/Inf on every batch: they come from the
-        model, not from validated data.
-
-        Totals from the previous batch ride along with this batch's check
-        vector. They are applied before any error is raised, so a rejected
-        batch leaves earlier batches accounted for and only the rejected batch
-        unaccumulated.
+        Validate every batch immediately, including non-finite logits, using
+        the public NLL/selection predicates and messages. Previous totals share
+        the value-check transfer and remain accounted for if this batch fails.
         """
 
         if not isinstance(logits, Tensor) or logits.dtype != torch.float32:
@@ -362,10 +350,8 @@ def _batch_totals(
 
     The flat layout is stage NLL, stage correct, stage support, stage forced,
     then kind support, kind correct, then batch NLL, batch correct and batch
-    eligible. The stage and kind ids have already been range-checked, so one
-    equality comparison against the small id axis replaces dynamic grouping.
-    ``torch.where`` (rather than multiplying by a 0/1 weight) keeps a NaN that
-    might reach an ineligible row from becoming ``0 * NaN``.
+    eligible. Range-checked ids allow fixed-size grouping by equality.
+    ``torch.where`` excludes ineligible NaNs without evaluating ``0 * NaN``.
     """
 
     device = nll.device

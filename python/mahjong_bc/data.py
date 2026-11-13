@@ -192,11 +192,9 @@ class _PrunedDecisionBatch:
 class _PackedCandidateBatch(_PrunedDecisionBatch):
     """Valid candidate rows matching the row-major true entries of ``mask``.
 
-    ``candidate_positions`` holds the padded flat position
-    (``row * candidate_columns + column``) of every flat valid row, in row-major
-    mask order. Batching derives it on the host together with the mask, it is
-    strictly increasing, and the packed scorer uses it for fixed-shape
-    gather/scatter instead of device-side mask indexing.
+    ``candidate_positions`` contains ``row * candidate_columns + column`` for
+    each flat row. Host batching derives these strictly increasing positions
+    together with the mask for fixed-shape scorer gather/scatter.
     """
 
     candidate_positions: Tensor | None = None
