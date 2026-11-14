@@ -6,9 +6,11 @@ import argparse
 import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
+from ._input_pipeline import BatchTransferConfig
 from .cache import load_prepared_cache
 from .checkpoint import (
     LoadedCheckpoint,
@@ -38,6 +40,113 @@ _RESUME_FORBIDDEN_OPTIONS = (
     *_TRAINING_OPTION_NAMES,
     *_MODEL_OPTION_NAMES,
 )
+_MIB = 2**20
+_DATA_STORAGE_CHOICES = ("mmap", "ram")
+_BATCH_TRANSFER_CHOICES = ("sync", "cuda-prefetch")
+
+
+@dataclass(frozen=True)
+class _SupplyOptions:
+    """One invocation's cache-loading and batch-transfer choices."""
+
+    storage: str
+    ram_limit_bytes: int | None
+    batch_transfer: BatchTransferConfig
+
+
+def _positive_mib(text: str) -> int:
+    """Parse an exact positive MiB budget."""
+
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            f"must be a whole number of MiB, got {text!r}"
+        ) from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1 MiB, got {value}")
+    return value
+
+
+def _add_supply_options(parser: argparse.ArgumentParser) -> None:
+    """Add the independent storage and transfer choices shared by commands."""
+
+    parser.add_argument(
+        "--data-storage",
+        choices=_DATA_STORAGE_CHOICES,
+        default="mmap",
+        help="prepared-cache split representation (default: mmap)",
+    )
+    parser.add_argument(
+        "--ram-limit-mib",
+        type=_positive_mib,
+        help="RAM budget in MiB; required by, and only valid for, "
+        "--data-storage ram",
+    )
+    parser.add_argument(
+        "--batch-transfer",
+        choices=_BATCH_TRANSFER_CHOICES,
+        default="sync",
+        help="device-batch transfer (default: sync)",
+    )
+    parser.add_argument(
+        "--pinned-limit-mib",
+        type=_positive_mib,
+        help="pinned slot budget in MiB; required by, and only valid for, "
+        "--batch-transfer cuda-prefetch",
+    )
+
+
+def _resolve_supply_options(args: argparse.Namespace) -> _SupplyOptions:
+    """Validate supply options and convert their MiB budgets to bytes."""
+
+    if args.data_storage == "ram":
+        if args.ram_limit_mib is None:
+            raise ConfigurationError(
+                "--data-storage ram requires --ram-limit-mib"
+            )
+        ram_limit_bytes = args.ram_limit_mib * _MIB
+    elif args.ram_limit_mib is not None:
+        raise ConfigurationError(
+            "--ram-limit-mib requires --data-storage ram"
+        )
+    else:
+        ram_limit_bytes = None
+    if args.batch_transfer == "cuda-prefetch":
+        if args.pinned_limit_mib is None:
+            raise ConfigurationError(
+                "--batch-transfer cuda-prefetch requires --pinned-limit-mib"
+            )
+        pinned_limit_bytes = args.pinned_limit_mib * _MIB
+    elif args.pinned_limit_mib is not None:
+        raise ConfigurationError(
+            "--pinned-limit-mib requires --batch-transfer cuda-prefetch"
+        )
+    else:
+        pinned_limit_bytes = None
+    return _SupplyOptions(
+        storage=args.data_storage,
+        ram_limit_bytes=ram_limit_bytes,
+        batch_transfer=BatchTransferConfig(
+            mode=args.batch_transfer, pinned_limit_bytes=pinned_limit_bytes
+        ),
+    )
+
+
+def _require_supply_workers(supply: _SupplyOptions, num_workers: int) -> None:
+    """Continuous RAM and CUDA prefetch both require in-process batching."""
+
+    if num_workers == 0:
+        return
+    if supply.storage == "ram":
+        raise ConfigurationError(
+            "continuous RAM loading requires num_workers=0, "
+            f"got {num_workers}"
+        )
+    if supply.batch_transfer.mode != "sync":
+        raise ConfigurationError(
+            f"CUDA batch prefetch requires num_workers=0, got {num_workers}"
+        )
 
 
 def _parse_widths(text: str) -> tuple[int, ...]:
@@ -90,6 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument(
         "--log-file", help="optional JSON summary destination"
     )
+    _add_supply_options(train)
 
     evaluate = subparsers.add_parser(
         "evaluate", help="evaluate a frozen checkpoint on a validation/test split"
@@ -107,6 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--num-workers", type=int, default=0)
     evaluate.add_argument("--output", help="optional JSON metrics destination")
     evaluate.add_argument("--log-file", help="optional JSON summary destination")
+    _add_supply_options(evaluate)
 
     inspect = subparsers.add_parser(
         "inspect", help="print checkpoint metadata without training"
@@ -288,6 +399,7 @@ def _emit(
 
 
 def _cmd_train(args: argparse.Namespace) -> int:
+    supply = _resolve_supply_options(args)
     resume = None
     if args.resume:
         _require_no_resume_overrides(args)
@@ -295,70 +407,91 @@ def _cmd_train(args: argparse.Namespace) -> int:
         model_config, training_config = _resume_config(resume)
     else:
         model_config, training_config = _new_run_config(args)
+    _require_supply_workers(supply, training_config.num_workers)
     cache = load_prepared_cache(args.dataset)
     _validate_train_paths(args.output, args.log_file, cache.root)
-    train_dataset = cache.load_split("train")
-    validation_dataset = cache.load_split("validation")
     dataset_metadata = _cache_metadata(cache)
-    trainer = Trainer(
-        train_dataset=train_dataset,
-        validation_dataset=validation_dataset,
-        model_config=model_config,
-        training_config=training_config,
-        output_dir=args.output,
-        device=args.device,
-        dataset_provenance=dataset_metadata,
-    )
-    summary = trainer.train(resume_from=resume)
-    payload = trainer.run_payload(summary)
-    result = {
-        "command": "train",
-        "package_version": payload["package_version"],
-        "source": payload["source"],
-        "dataset": dataset_metadata,
-        "model_config": payload["model_config"],
-        "training_config": payload["training_config"],
-        "dependencies": payload["dependencies"],
-        "device_type": payload["device_type"],
-        "train_dataset_identity": payload["dataset"]["train_dataset_identity"],
-        "validation_dataset_identity": payload["dataset"][
-            "validation_dataset_identity"
-        ],
-        "summary": payload["summary"],
-        "checkpoints": {
-            "best": str(trainer.best_path),
-            "last": str(trainer.last_path),
-        },
-        "run_record": str(trainer.run_record_path),
-    }
+    # The loading context is the last resource to close: dataset refresh and
+    # batch production both finish before training publishes a checkpoint.
+    with cache.open_splits(
+        ("train", "validation"),
+        storage=supply.storage,
+        ram_limit_bytes=supply.ram_limit_bytes,
+    ) as inputs:
+        provenance = dict(dataset_metadata)
+        provenance["input_loading"] = inputs.loading_record
+        trainer = Trainer(
+            train_dataset=inputs.datasets["train"],
+            validation_dataset=inputs.datasets["validation"],
+            model_config=model_config,
+            training_config=training_config,
+            output_dir=args.output,
+            device=args.device,
+            dataset_provenance=provenance,
+            batch_transfer=supply.batch_transfer,
+        )
+        summary = trainer.train(resume_from=resume)
+        payload = trainer.run_payload(summary)
+        result = {
+            "command": "train",
+            "package_version": payload["package_version"],
+            "source": payload["source"],
+            "dataset": dataset_metadata,
+            "input_loading": inputs.loading_record,
+            "batch_transfer": payload["batch_transfer"],
+            "model_config": payload["model_config"],
+            "training_config": payload["training_config"],
+            "dependencies": payload["dependencies"],
+            "device_type": payload["device_type"],
+            "train_dataset_identity": payload["dataset"]["train_dataset_identity"],
+            "validation_dataset_identity": payload["dataset"][
+                "validation_dataset_identity"
+            ],
+            "summary": payload["summary"],
+            "checkpoints": {
+                "best": str(trainer.best_path),
+                "last": str(trainer.last_path),
+            },
+            "run_record": str(trainer.run_record_path),
+        }
     _emit(result, log_file=args.log_file)
     return 0
 
 
 def _cmd_evaluate(args: argparse.Namespace) -> int:
+    supply = _resolve_supply_options(args)
+    _require_supply_workers(supply, args.num_workers)
     cache = load_prepared_cache(args.dataset)
     _validate_report_paths(
         (("--output", args.output), ("--log-file", args.log_file)),
         cache.root,
         checkpoint=args.checkpoint,
     )
-    dataset = cache.load_split(args.split)
-    report = evaluate_checkpoint(
-        args.checkpoint,
-        dataset,
-        batch_size=args.batch_size,
-        device=args.device,
-        num_workers=args.num_workers,
-    )
-    result = {
-        "command": "evaluate",
-        "package_version": PACKAGE_VERSION,
-        "checkpoint": str(args.checkpoint),
-        "split": args.split,
-        "dataset": _cache_metadata(cache),
-        "dataset_identity": dataset.identity.to_dict(),
-        "metrics": report.to_dict(),
-    }
+    with cache.open_splits(
+        (args.split,),
+        storage=supply.storage,
+        ram_limit_bytes=supply.ram_limit_bytes,
+    ) as inputs:
+        dataset = inputs.datasets[args.split]
+        report = evaluate_checkpoint(
+            args.checkpoint,
+            dataset,
+            batch_size=args.batch_size,
+            device=args.device,
+            num_workers=args.num_workers,
+            batch_transfer=supply.batch_transfer,
+        )
+        result = {
+            "command": "evaluate",
+            "package_version": PACKAGE_VERSION,
+            "checkpoint": str(args.checkpoint),
+            "split": args.split,
+            "dataset": _cache_metadata(cache),
+            "dataset_identity": dataset.identity.to_dict(),
+            "input_loading": inputs.loading_record,
+            "batch_transfer": supply.batch_transfer.to_dict(),
+            "metrics": report.to_dict(),
+        }
     _emit(result, output=args.output, log_file=args.log_file)
     return 0
 

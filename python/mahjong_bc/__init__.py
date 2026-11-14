@@ -10,6 +10,7 @@ scope.
 
 from __future__ import annotations
 
+from ._input_pipeline import BatchTransferConfig
 from .cache import (
     ARRAY_NAMES,
     CacheArray,
@@ -94,6 +95,7 @@ __all__ = [
     "ACTION_KIND_NAMES",
     "ARRAY_NAMES",
     "ActionKindMetrics",
+    "BatchTransferConfig",
     "CacheArray",
     "CacheContractError",
     "CacheCounts",

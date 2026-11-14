@@ -10,6 +10,7 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 
 import pytest
+import torch
 
 import mahjong_bc
 import mahjong_bc.checkpoint as checkpoint_module
@@ -24,7 +25,7 @@ from mahjong_bc.constants import PACKAGE_VERSION, ROLE_POLICY
 from mahjong_bc.policy import build_policy
 from mahjong_bc.train import TRAIN_OUTPUT_NAMES
 
-from .cache_fixture import read_manifest
+from .cache_fixture import read_manifest, write_cache
 
 
 def _parse(capsys) -> dict:
@@ -324,11 +325,32 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(shared_cache, tmp_pat
     assert record["training_config"]["seed"] == 1
     assert record["best_checkpoint"] == "best.pt"
     assert record["last_checkpoint"] == "last.pt"
+    assert result["batch_transfer"] == {
+        "mode": "sync",
+        "pinned_limit_bytes": None,
+    }
+    assert record["batch_transfer"] == result["batch_transfer"]
+    assert result["input_loading"] == {
+        "storage": "mmap",
+        "ram_limit_bytes": None,
+        "ram_bytes": None,
+        "splits": {
+            "train": {"representation": "sharded", "ram_bytes": None},
+            "validation": {"representation": "sharded", "ram_bytes": None},
+        },
+    }
+    # The loading record describes this invocation inside dataset provenance.
+    assert (
+        record["dataset"]["provenance"]["input_loading"]
+        == result["input_loading"]
+    )
     assert set(result) == {
         "command",
         "package_version",
         "source",
         "dataset",
+        "input_loading",
+        "batch_transfer",
         "model_config",
         "training_config",
         "dependencies",
@@ -383,6 +405,16 @@ def test_train_evaluate_inspect_synthetic_cache_end_to_end(shared_cache, tmp_pat
     test_counts = manifest["splits"]["test"]["counts"]
     assert evaluation["metrics"]["eligible"] == test_counts["eligible_decisions"]
     assert evaluation["metrics"]["forced"] == test_counts["forced_decisions"]
+    assert evaluation["batch_transfer"] == {
+        "mode": "sync",
+        "pinned_limit_bytes": None,
+    }
+    assert evaluation["input_loading"] == {
+        "storage": "mmap",
+        "ram_limit_bytes": None,
+        "ram_bytes": None,
+        "splits": {"test": {"representation": "sharded", "ram_bytes": None}},
+    }
     assert metrics_path.is_file()
     assert eval_log.is_file()
 
@@ -798,3 +830,365 @@ def test_cli_path_checks_normalize_filesystem_case(shared_cache, tmp_path, capsy
     assert "aliases the training output" in captured.err
     assert not (output / "best.pt").exists()
     assert _cache_snapshot(fixture.root) == before
+
+
+# ---- cache storage and batch transfer options ----------------------------
+
+CUDA = pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="CUDA is not available"
+)
+_MIB = 2**20
+_TRAINING_CONFIG_KEYS = {
+    "seed",
+    "epochs",
+    "batch_size",
+    "learning_rate",
+    "weight_decay",
+    "beta1",
+    "beta2",
+    "optimizer",
+    "num_workers",
+}
+
+
+def _supply_args(
+    *,
+    storage: str = "mmap",
+    ram_mib: int | None = None,
+    transfer: str = "sync",
+    pinned_mib: int | None = None,
+) -> list[str]:
+    args = ["--data-storage", storage]
+    if ram_mib is not None:
+        args.extend(["--ram-limit-mib", str(ram_mib)])
+    args.extend(["--batch-transfer", transfer])
+    if pinned_mib is not None:
+        args.extend(["--pinned-limit-mib", str(pinned_mib)])
+    return args
+
+
+def _run_args(root: Path, output: Path, *, epochs: int = 1) -> list[str]:
+    return [
+        "train",
+        "--dataset",
+        str(root),
+        "--output",
+        str(output),
+        "--seed",
+        "4",
+        "--epochs",
+        str(epochs),
+        "--batch-size",
+        "2",
+        "--learning-rate",
+        "0.02",
+        "--state-hidden",
+        "8",
+        "--scorer-hidden",
+        "8",
+    ]
+
+
+def _failed_run(capsys, argv: list[str], fragment: str) -> None:
+    assert main(argv) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("error:")
+    assert fragment in captured.err
+
+
+def _outputs_absent(output: Path) -> bool:
+    return not output.exists() or not any(output.iterdir())
+
+
+def test_cli_records_ram_loading_and_sync_transfer(shared_cache, tmp_path, capsys):
+    output = tmp_path / "ram-sync"
+    rc = main(
+        _run_args(shared_cache.root, output)
+        + _supply_args(storage="ram", ram_mib=8)
+    )
+    assert rc == 0
+    result = _parse(capsys)
+    loading = result["input_loading"]
+    assert loading["storage"] == "ram"
+    assert loading["ram_limit_bytes"] == 8 * _MIB
+    assert loading["ram_bytes"] > 0
+    assert set(loading["splits"]) == {"train", "validation"}
+    for entry in loading["splits"].values():
+        assert entry["representation"] == "packed"
+        assert 0 < entry["ram_bytes"] < loading["ram_bytes"]
+    assert loading["ram_bytes"] == sum(
+        entry["ram_bytes"] for entry in loading["splits"].values()
+    )
+    assert result["batch_transfer"] == {"mode": "sync", "pinned_limit_bytes": None}
+
+    record = json.loads((output / "run.json").read_text(encoding="utf-8"))
+    assert record["dataset"]["provenance"]["input_loading"] == loading
+    assert record["batch_transfer"] == result["batch_transfer"]
+    # Supply choices are execution options, never training hyperparameters.
+    assert set(record["training_config"]) == _TRAINING_CONFIG_KEYS
+    assert (output / "best.pt").is_file()
+    assert (output / "last.pt").is_file()
+    assert result["summary"]["completed_epochs"] == 1
+
+
+@CUDA
+def test_cli_records_cuda_prefetch_with_mmap_loading(shared_cache, tmp_path, capsys):
+    output = tmp_path / "mmap-prefetch"
+    rc = main(
+        _run_args(shared_cache.root, output)
+        + ["--device", "cuda"]
+        + _supply_args(transfer="cuda-prefetch", pinned_mib=8)
+    )
+    assert rc == 0
+    result = _parse(capsys)
+    assert result["device_type"] == "cuda"
+    assert result["batch_transfer"] == {
+        "mode": "cuda-prefetch",
+        "pinned_limit_bytes": 8 * _MIB,
+    }
+    loading = result["input_loading"]
+    assert loading == {
+        "storage": "mmap",
+        "ram_limit_bytes": None,
+        "ram_bytes": None,
+        "splits": {
+            "train": {"representation": "sharded", "ram_bytes": None},
+            "validation": {"representation": "sharded", "ram_bytes": None},
+        },
+    }
+    record = json.loads((output / "run.json").read_text(encoding="utf-8"))
+    assert record["dataset"]["provenance"]["input_loading"] == loading
+    assert record["batch_transfer"] == result["batch_transfer"]
+    assert (output / "best.pt").is_file()
+    assert (output / "last.pt").is_file()
+
+
+@CUDA
+def test_cli_four_supply_combinations_match_exactly(shared_cache, tmp_path, capsys):
+    """mmap or RAM storage and sync or prefetch transfer stay numerically equal."""
+
+    combinations = (
+        ("mmap", "sync"),
+        ("ram", "sync"),
+        ("mmap", "cuda-prefetch"),
+        ("ram", "cuda-prefetch"),
+    )
+    results = {}
+    for storage, transfer in combinations:
+        output = tmp_path / f"{storage}-{transfer}"
+        rc = main(
+            _run_args(shared_cache.root, output, epochs=2)
+            + ["--device", "cuda"]
+            + _supply_args(
+                storage=storage,
+                ram_mib=8 if storage == "ram" else None,
+                transfer=transfer,
+                pinned_mib=8 if transfer != "sync" else None,
+            )
+        )
+        assert rc == 0
+        result = _parse(capsys)
+        assert result["device_type"] == "cuda"
+        assert result["input_loading"]["storage"] == storage
+        assert result["batch_transfer"]["mode"] == transfer
+        assert result["summary"]["completed_epochs"] == 2
+        results[(storage, transfer)] = result
+
+    reference = results[("mmap", "sync")]
+    reference_model = load_policy_checkpoint(tmp_path / "mmap-sync" / "best.pt").model
+    reference_state = reference_model.state_dict()
+    for key, result in results.items():
+        assert result["summary"] == reference["summary"]
+        assert result["model_config"] == reference["model_config"]
+        assert result["training_config"] == reference["training_config"]
+        model = load_policy_checkpoint(
+            tmp_path / f"{key[0]}-{key[1]}" / "best.pt"
+        ).model
+        state = model.state_dict()
+        assert set(state) == set(reference_state)
+        for name, tensor in reference_state.items():
+            assert torch.equal(state[name], tensor), (key, name)
+
+    # Evaluation keeps the same guarantees for each loading/transfer request.
+    reports = {}
+    for storage, transfer in combinations:
+        checkpoint = tmp_path / f"{storage}-{transfer}" / "best.pt"
+        rc = main(
+            _evaluate_args(shared_cache.root, checkpoint)
+            + ["--device", "cuda"]
+            + _supply_args(
+                storage=storage,
+                ram_mib=8 if storage == "ram" else None,
+                transfer=transfer,
+                pinned_mib=8 if transfer != "sync" else None,
+            )
+        )
+        assert rc == 0
+        evaluation = _parse(capsys)
+        assert evaluation["input_loading"]["storage"] == storage
+        assert evaluation["batch_transfer"]["mode"] == transfer
+        reports[(storage, transfer)] = evaluation["metrics"]
+    assert reports[("ram", "sync")] == reports[("mmap", "sync")]
+    assert reports[("mmap", "cuda-prefetch")] == reports[("mmap", "sync")]
+    assert reports[("ram", "cuda-prefetch")] == reports[("mmap", "sync")]
+
+
+def test_cli_supply_options_reject_inapplicable_requests(
+    shared_cache, tmp_path, capsys
+):
+    root = shared_cache.root
+    train_cases = (
+        (_supply_args(storage="ram"), "requires --ram-limit-mib"),
+        (_supply_args(ram_mib=8), "requires --data-storage ram"),
+        (
+            _supply_args(transfer="cuda-prefetch"),
+            "requires --pinned-limit-mib",
+        ),
+        (_supply_args(pinned_mib=8), "requires --batch-transfer cuda-prefetch"),
+        (
+            _supply_args(storage="ram", ram_mib=8) + ["--num-workers", "1"],
+            "num_workers=0",
+        ),
+        (
+            _supply_args(transfer="cuda-prefetch", pinned_mib=8)
+            + ["--num-workers", "1"],
+            "num_workers=0",
+        ),
+    )
+    for index, (extra, fragment) in enumerate(train_cases):
+        output = tmp_path / f"rejected-{index}"
+        _failed_run(capsys, _run_args(root, output) + extra, fragment)
+        assert _outputs_absent(output)
+
+    checkpoint = _write_checkpoint(tmp_path / "policy.pt")
+    evaluate_cases = (
+        (["--data-storage", "ram"], "requires --ram-limit-mib"),
+        (["--ram-limit-mib", "8"], "requires --data-storage ram"),
+        (["--batch-transfer", "cuda-prefetch"], "requires --pinned-limit-mib"),
+        (
+            ["--pinned-limit-mib", "8"],
+            "requires --batch-transfer cuda-prefetch",
+        ),
+        (
+            ["--data-storage", "ram", "--ram-limit-mib", "8", "--num-workers", "1"],
+            "num_workers=0",
+        ),
+        (
+            [
+                "--batch-transfer",
+                "cuda-prefetch",
+                "--pinned-limit-mib",
+                "8",
+                "--num-workers",
+                "1",
+            ],
+            "num_workers=0",
+        ),
+    )
+    for extra, fragment in evaluate_cases:
+        _failed_run(capsys, _evaluate_args(root, checkpoint) + extra, fragment)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "1.5", "x"])
+def test_cli_supply_budgets_must_be_positive_mib(shared_cache, tmp_path, value):
+    output = tmp_path / "bad-budget"
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            _run_args(shared_cache.root, output)
+            + ["--data-storage", "ram", "--ram-limit-mib", value]
+        )
+    assert exc_info.value.code == 2
+    assert _outputs_absent(output)
+
+    checkpoint = _write_checkpoint(tmp_path / "policy.pt")
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            _evaluate_args(shared_cache.root, checkpoint)
+            + ["--batch-transfer", "cuda-prefetch", "--pinned-limit-mib", value]
+        )
+    assert exc_info.value.code == 2
+
+
+def test_cli_ram_budget_is_preflighted_before_loading(tmp_path, capsys):
+    fixture = write_cache(
+        tmp_path / "large-cache",
+        games=80,
+        decisions_per_episode=8,
+        episodes_per_shard=16,
+    )
+    tiny = tmp_path / "tiny-budget"
+    _failed_run(
+        capsys,
+        _run_args(fixture.root, tiny) + _supply_args(storage="ram", ram_mib=1),
+        "cannot hold the requested splits",
+    )
+    assert _outputs_absent(tiny)
+
+    accepted = tmp_path / "large-budget"
+    argv = [
+        "train",
+        "--dataset",
+        str(fixture.root),
+        "--output",
+        str(accepted),
+        "--seed",
+        "4",
+        "--epochs",
+        "1",
+        "--batch-size",
+        "32",
+        "--learning-rate",
+        "0.02",
+        "--state-hidden",
+        "8",
+        "--scorer-hidden",
+        "8",
+    ] + _supply_args(storage="ram", ram_mib=64)
+    assert main(argv) == 0
+    result = _parse(capsys)
+    loading = result["input_loading"]
+    assert loading["ram_limit_bytes"] == 64 * _MIB
+    # The accepted run holds more than the rejected 1 MiB budget.
+    assert loading["ram_bytes"] > _MIB
+
+
+def test_cli_resume_can_reselect_loading_and_transfer(
+    completed_resume_run, tmp_path, capsys
+):
+    fixture, old = completed_resume_run
+    original = json.loads((old / "run.json").read_text(encoding="utf-8"))
+    output = tmp_path / "resumed-ram"
+    rc = main(
+        _resume_args(fixture.root, output, old / "last.pt")
+        + _supply_args(storage="ram", ram_mib=8)
+    )
+    assert rc == 0
+    result = _parse(capsys)
+    assert result["input_loading"]["storage"] == "ram"
+    assert result["input_loading"]["ram_limit_bytes"] == 8 * _MIB
+    assert result["batch_transfer"] == {"mode": "sync", "pinned_limit_bytes": None}
+    record = json.loads((output / "run.json").read_text(encoding="utf-8"))
+    assert record["dataset"]["provenance"]["input_loading"]["storage"] == "ram"
+    # Execution options never rewrite the training identity or old records.
+    assert record["training_config"] == original["training_config"]
+    assert record["model_config"] == original["model_config"]
+    assert record["summary"] == original["summary"]
+    assert original["dataset"]["provenance"]["input_loading"]["storage"] == "mmap"
+    assert (output / "best.pt").is_file()
+    assert (output / "last.pt").is_file()
+
+
+def test_cli_help_lists_loading_and_transfer_options(capsys):
+    for command in ("train", "evaluate"):
+        with pytest.raises(SystemExit) as exc_info:
+            main([command, "--help"])
+        assert exc_info.value.code == 0
+        output = capsys.readouterr().out
+        for option in (
+            "--data-storage",
+            "--ram-limit-mib",
+            "--batch-transfer",
+            "--pinned-limit-mib",
+        ):
+            assert option in output, (command, option)

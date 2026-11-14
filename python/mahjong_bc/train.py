@@ -20,6 +20,11 @@ from typing import Any, Mapping
 import torch
 
 from ._device import resolve_device
+from ._input_pipeline import (
+    BatchTransferConfig,
+    device_batches,
+    validate_batch_transfer,
+)
 from ._source import collect_training_source
 from .checkpoint import (
     LoadedCheckpoint,
@@ -48,7 +53,11 @@ from .data import (
     require_dataset_identity,
 )
 from .errors import ConfigurationError, DataError, ResumeError
-from .metrics import MetricsReport, evaluate_dataset
+from .metrics import (
+    MetricsReport,
+    _builtin_eligible_layout,
+    evaluate_dataset,
+)
 from .policy import (
     CandidatePolicy,
     _batch_logits,
@@ -187,6 +196,18 @@ def _require_host_training_batch(batch: DecisionBatch) -> None:
         raise DataError("target index is outside the padded candidate range")
     if not bool(batch.mask.gather(1, batch.targets.long().unsqueeze(1)).all()):
         raise DataError("target index does not reference a valid candidate")
+
+
+def _validate_training_host_batch(batch: object) -> None:
+    """Validate a gathered training batch before it is copied to the device.
+
+    Internal pruned batches are validated while gathering, so only a full
+    public fallback batch carries the fields :func:`_require_host_training_batch`
+    checks. Custom datasets therefore keep their previous messages.
+    """
+
+    if isinstance(batch, DecisionBatch):
+        _require_host_training_batch(batch)
 
 
 class _EpochLossTotals:
@@ -479,6 +500,7 @@ class Trainer:
         device: str | torch.device = "cpu",
         dependencies: DependencyVersions | None = None,
         dataset_provenance: Mapping[str, Any] | None = None,
+        batch_transfer: BatchTransferConfig | None = None,
     ) -> None:
         train_identity = require_dataset_identity(
             train_dataset, "train_dataset", dataset_error=ConfigurationError
@@ -502,6 +524,12 @@ class Trainer:
             dataset_provenance, Mapping
         ):
             raise ConfigurationError("dataset_provenance must be a mapping or None")
+        if batch_transfer is not None and not isinstance(
+            batch_transfer, BatchTransferConfig
+        ):
+            raise ConfigurationError(
+                "batch_transfer must be a BatchTransferConfig or None"
+            )
         self.model_config = model_config if model_config is not None else ModelConfig()
         _require_same_capture(train_identity, validation_identity)
         if train_dataset.eligible_count == 0:
@@ -527,6 +555,11 @@ class Trainer:
         self.source = collect_training_source()
         self.dataset_provenance = (
             None if dataset_provenance is None else dict(dataset_provenance)
+        )
+        # Capture the effective transfer choice once per run so the run record
+        # describes this invocation even when the default was requested.
+        self.batch_transfer = (
+            BatchTransferConfig() if batch_transfer is None else batch_transfer
         )
         self.best_path = self.output_dir / BEST_CHECKPOINT_NAME
         self.last_path = self.output_dir / LAST_CHECKPOINT_NAME
@@ -738,6 +771,38 @@ class Trainer:
 
     # ---- epoch loop ------------------------------------------------------
 
+    def _require_supported_transfer(
+        self, model: CandidatePolicy, packed_candidates: bool
+    ) -> None:
+        """Reject an unsupported explicit transfer before any producer starts.
+
+        Both splits are checked once per run: an unsupported validation dataset
+        must fail before an epoch is trained, not after its update work. The
+        default synchronous transfer keeps the previous fallbacks here.
+        """
+
+        num_workers = self.training_config.num_workers
+        validate_batch_transfer(
+            self.train_dataset,
+            model=model,
+            device=self.device,
+            num_workers=num_workers,
+            config=self.batch_transfer,
+            training=True,
+            packed_candidates=packed_candidates,
+        )
+        validate_batch_transfer(
+            self.validation_dataset,
+            model=model,
+            device=self.device,
+            num_workers=num_workers,
+            config=self.batch_transfer,
+            training=False,
+            packed_candidates=packed_candidates,
+            eligible_only=_builtin_eligible_layout(self.validation_dataset)
+            is not None,
+        )
+
     def _run_epochs(self, progress: _TrainingProgress) -> TrainingSummary:
         model = self.model
         optimizer = self.optimizer
@@ -746,6 +811,7 @@ class Trainer:
         eligible_count = int(eligible_indices.size)
         batch_size = self.training_config.batch_size
         packed_candidates = _supports_packed_candidate_scoring(model)
+        self._require_supported_transfer(model, packed_candidates)
         for epoch in range(progress.completed_epochs, self.training_config.epochs):
             model.train()
             permutation = torch.randperm(
@@ -754,31 +820,34 @@ class Trainer:
             epoch_indices = eligible_indices[permutation]
             epoch_losses = _EpochLossTotals()
             epoch_steps = 0
-            for batch in _iter_model_batches(
+            with device_batches(
                 self.train_dataset,
                 epoch_indices,
                 batch_size=batch_size,
                 num_workers=self.training_config.num_workers,
                 training=True,
                 packed_candidates=packed_candidates,
-            ):
-                if isinstance(batch, DecisionBatch):
-                    _require_host_training_batch(batch)
-                moved = batch.to(self.device)
-                optimizer.zero_grad(set_to_none=True)
-                logits = _batch_logits(model, moved)
-                _validate_logits_mask_structure(logits, moved.mask)
-                _require_finite_valid(logits, moved.mask)
-                loss = _decision_nll_validated(
-                    logits, moved.mask, moved.targets
-                ).mean()
-                loss.backward()
-                optimizer.step()
-                progress.global_step += 1
-                epoch_steps += 1
-                decisions = moved.batch_size
-                progress.samples_seen += decisions
-                epoch_losses.add(loss, decisions)
+                model=model,
+                device=self.device,
+                batch_transfer=self.batch_transfer,
+                batch_iterator=_iter_model_batches,
+                host_validator=_validate_training_host_batch,
+            ) as batches:
+                for moved in batches:
+                    optimizer.zero_grad(set_to_none=True)
+                    logits = _batch_logits(model, moved)
+                    _validate_logits_mask_structure(logits, moved.mask)
+                    _require_finite_valid(logits, moved.mask)
+                    loss = _decision_nll_validated(
+                        logits, moved.mask, moved.targets
+                    ).mean()
+                    loss.backward()
+                    optimizer.step()
+                    progress.global_step += 1
+                    epoch_steps += 1
+                    decisions = moved.batch_size
+                    progress.samples_seen += decisions
+                    epoch_losses.add(loss, decisions)
             train_decisions = epoch_losses.decisions
             if train_decisions != eligible_count:
                 raise RuntimeError(
@@ -792,6 +861,7 @@ class Trainer:
                 batch_size=batch_size,
                 device=self.device,
                 num_workers=self.training_config.num_workers,
+                batch_transfer=self.batch_transfer,
             )
             if validation.nll is None:
                 raise ConfigurationError(
@@ -879,6 +949,7 @@ class Trainer:
             "training_config": self.training_config.to_dict(),
             "dependencies": self.dependencies.to_dict(),
             "device_type": self.device.type,
+            "batch_transfer": self.batch_transfer.to_dict(),
             "seed": self.training_config.seed,
             "dataset": {
                 "train_dataset_identity": self.train_identity.to_dict(),
@@ -902,6 +973,7 @@ def evaluate_checkpoint(
     batch_size: int,
     device: str | torch.device = "cpu",
     num_workers: int = 0,
+    batch_transfer: BatchTransferConfig | None = None,
 ) -> MetricsReport:
     """Evaluate a frozen policy checkpoint on a complete validation/test split."""
 
@@ -923,4 +995,5 @@ def evaluate_checkpoint(
         batch_size=batch_size,
         device=resolved,
         num_workers=num_workers,
+        batch_transfer=batch_transfer,
     )

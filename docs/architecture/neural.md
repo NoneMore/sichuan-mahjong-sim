@@ -47,7 +47,11 @@ Prepared caches can be verified without retaining the source corpus.
 The independent [mahjong-bc package](../../python/README.md) validates the
 Rust-produced cache and preserves its opaque cache_id. Packed candidates
 remain in canonical order; batch collation pads each batch and marks
-padding with a mask. Read-only memory-mapped loading uses num_workers=0.
+padding with a mask. The prepared-cache layer owns multi-split loading contexts
+and preflights their combined RAM budget. Mmap retains shards; RAM copies them
+into exact built-in packed datasets so columnar gathering and valid-candidate
+scoring remain available. Both preserve row order, metadata and split identity;
+the older loading API retains its ownership and mutability behavior.
 
 Public samples, `DecisionBatch`, collation, `iter_batches()` and batch device
 moves retain their padded layouts and complete contracts. Internal training
@@ -65,7 +69,24 @@ Custom datasets, dataset subclasses, missing target-kind metadata and workers
 retain full batches. Policy subclasses retain padded scoring. Both layouts
 use the normal model call, so packed scoring does not bypass `forward` or
 module hooks. Evaluation retains full traversal when current offsets no longer
-match cached counts; all-forced built-in splits use metadata without scoring.
+match cached counts; all-forced built-in splits use metadata without scoring,
+staging or a producer.
+
+The shared `_input_pipeline.py` owns device-batch consumption contexts. Sync
+retains the fallbacks above; explicit CUDA prefetch requires their read-only,
+consistent packed layout and rejects unsupported inputs before production.
+Storage and transfer are independent execution options; their configuration
+and budget contracts belong to the [Python guide](../../python/README.md#loading-and-batching).
+
+One host producer gathers into ordinary batches and stages consumed fields in
+two fixed-capacity pinned slots. The main thread submits ready batches on a
+separate copy stream, records completion events and makes the caller's compute
+stream wait only for its own batch. Tensor stream recording protects device
+lifetimes; H2D completion gates host-slot reuse. A ready next batch can copy
+while the current batch computes, without blocking compute for an unready
+producer. Exhaustion, early exit and errors join the producer and finish pending
+copies before releasing staging or closing input datasets. Host errors arrive
+in batch order; device errors terminate the epoch without retry or fallback.
 
 The policy embeds the state once and scores each legal candidate with a
 shared nonlinear network; candidate position does not enter the model.
@@ -78,7 +99,10 @@ deterministic CUDA execution; totals accumulate on the host in batch order.
 last.pt captures the last completed epoch, optimizer, traversal and RNG states
 for recovery; partial epochs replay after interruption. Resume checks dataset,
 configuration, device and dependency identities. Checkpoints publish atomically
-and carry model, encoding and source provenance.
+and carry model, encoding and source provenance. Transfer contexts exit before
+checkpoint publication; loading contexts outlive their consumers. Queues, slots
+and events are transient, while storage/transfer choices and loading records
+belong to invocation metadata, not checkpoint identity or schema.
 
 [Training and checkpoint contract](../../python/README.md#training-metrics-and-checkpoints)
 

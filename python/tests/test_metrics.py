@@ -9,6 +9,8 @@ import numpy as np
 import pytest
 import torch
 
+import mahjong_bc.metrics as metrics_module
+from mahjong_bc import BatchTransferConfig
 from mahjong_bc.config import ModelConfig
 from mahjong_bc.constants import (
     ACTION_KIND_COUNT,
@@ -22,9 +24,14 @@ from mahjong_bc.data import (
     collate_decisions,
     iter_batches,
 )
-from mahjong_bc.errors import DataError
+from mahjong_bc.errors import ConfigurationError, DataError
 from mahjong_bc.metrics import MetricAccumulator, evaluate_dataset
-from mahjong_bc.policy import build_policy, decision_nll, greedy_indices
+from mahjong_bc.policy import (
+    CandidatePolicy,
+    build_policy,
+    decision_nll,
+    greedy_indices,
+)
 
 from .helpers import (
     DelegatingDataset,
@@ -1211,3 +1218,207 @@ def test_evaluate_dataset_supports_deterministic_algorithms(device):
     finally:
         torch.use_deterministic_algorithms(previous[0], warn_only=previous[1])
     assert_reports_equal(first, second, tolerance=0.0)
+
+
+# ---- optional batch transfer ---------------------------------------------
+
+CUDA = pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="CUDA is not available"
+)
+_MIB = 2**20
+_STAGED_ARRAY_NAMES = (
+    "states",
+    "candidate_features",
+    "offsets",
+    "targets",
+    "stages",
+    "target_kinds",
+)
+
+
+def _freeze(dataset: PackedDecisionDataset) -> PackedDecisionDataset:
+    """Make a fixture's consumed inputs read-only, like a loaded split."""
+
+    for name in _STAGED_ARRAY_NAMES:
+        array = getattr(dataset, name)
+        if array is not None:
+            array.setflags(write=False)
+    return dataset
+
+
+def _prefetch(pinned_mib: int = 8) -> BatchTransferConfig:
+    return BatchTransferConfig(
+        mode="cuda-prefetch", pinned_limit_bytes=pinned_mib * _MIB
+    )
+
+
+def _evaluation_model(seed: int) -> CandidatePolicy:
+    return build_policy(ModelConfig(state_hidden=(8,), scorer_hidden=(8,)), seed=seed)
+
+
+def test_evaluate_dataset_sync_transfer_matches_the_default_exactly():
+    dataset = make_dataset(split="validation", counts=[2, 1, 3, 2], seed=71)
+    model = _evaluation_model(21)
+    default = evaluate_dataset(model, dataset, batch_size=3, device="cpu")
+    explicit = evaluate_dataset(
+        model,
+        dataset,
+        batch_size=3,
+        device="cpu",
+        batch_transfer=BatchTransferConfig(),
+    )
+    assert_reports_equal(default, explicit)
+    assert explicit.decisions == len(dataset)
+
+
+def test_evaluate_dataset_rejects_a_non_config_transfer():
+    dataset = make_dataset(split="validation", counts=[2, 2], seed=79)
+    model = _evaluation_model(29)
+    with pytest.raises(ConfigurationError, match="BatchTransferConfig"):
+        evaluate_dataset(
+            model,
+            dataset,
+            batch_size=2,
+            device="cpu",
+            batch_transfer="sync",  # type: ignore[arg-type]
+        )
+
+
+@CUDA
+def test_evaluate_dataset_prefetch_matches_sync_and_keeps_forced_metadata():
+    dataset = _freeze(
+        make_dataset(split="validation", counts=[2, 1, 3, 2, 1, 2, 3, 1], seed=72)
+    )
+    model = _evaluation_model(22).to("cuda")
+    sync = evaluate_dataset(model, dataset, batch_size=3, device="cuda")
+    prefetch = evaluate_dataset(
+        model, dataset, batch_size=3, device="cuda", batch_transfer=_prefetch()
+    )
+    assert prefetch == sync
+    assert (prefetch.decisions, prefetch.eligible, prefetch.forced) == (
+        len(dataset),
+        dataset.eligible_count,
+        dataset.forced_count,
+    )
+    # The metadata forced-count path is unchanged by staging.
+    assert tuple(metric.forced for metric in prefetch.stages) == (
+        dataset.forced_by_stage()
+    )
+
+
+@CUDA
+def test_evaluate_dataset_prefetch_accepts_a_sharded_split():
+    left = _freeze(make_dataset(split="validation", counts=[2, 1], seed=73))
+    right = _freeze(make_dataset(split="validation", counts=[3, 2], seed=74))
+    dataset = ShardedDecisionDataset(
+        (left, right),
+        identity(
+            split="validation",
+            decisions=len(left) + len(right),
+            eligible=left.eligible_count + right.eligible_count,
+        ),
+    )
+    model = _evaluation_model(23).to("cuda")
+    sync = evaluate_dataset(model, dataset, batch_size=2, device="cuda")
+    prefetch = evaluate_dataset(
+        model, dataset, batch_size=2, device="cuda", batch_transfer=_prefetch()
+    )
+    assert prefetch == sync
+    assert prefetch.forced == dataset.forced_count
+
+
+@CUDA
+def test_evaluate_dataset_all_forced_prefetch_uses_metadata_only():
+    dataset = _freeze(make_dataset(split="validation", counts=[1, 1, 1], seed=75))
+    model = _evaluation_model(24).to("cuda")
+    sync = evaluate_dataset(model, dataset, batch_size=2, device="cuda")
+    prefetch = evaluate_dataset(
+        model, dataset, batch_size=2, device="cuda", batch_transfer=_prefetch()
+    )
+    assert prefetch == sync
+    assert (prefetch.decisions, prefetch.eligible, prefetch.forced) == (3, 0, 3)
+    assert prefetch.nll is None and prefetch.top1 is None
+
+
+@CUDA
+def test_evaluate_dataset_rejects_unsupported_prefetch_requests(monkeypatch):
+    def forbid(*args, **kwargs):
+        raise AssertionError("a rejected prefetch request must not score rows")
+
+    monkeypatch.setattr(metrics_module, "_batch_logits", forbid)
+    model = _evaluation_model(25).to("cuda")
+
+    # A changed offsets layout keeps the full traversal, which cannot stage.
+    changed = make_dataset(split="validation", counts=[3, 2], seed=76)
+    changed.offsets[1] = 1
+    _freeze(changed)
+    with pytest.raises(ConfigurationError, match="eligible-only traversal"):
+        evaluate_dataset(
+            model,
+            changed,
+            batch_size=2,
+            device="cuda",
+            batch_transfer=_prefetch(),
+        )
+
+    # Third-party dataset types also keep the full traversal.
+    with pytest.raises(ConfigurationError, match="eligible-only traversal"):
+        evaluate_dataset(
+            model,
+            DelegatingDataset(_freeze(make_dataset(split="validation", counts=[2, 1], seed=77))),
+            batch_size=2,
+            device="cuda",
+            batch_transfer=_prefetch(),
+        )
+
+    # Writable inputs could change while the producer is running.
+    with pytest.raises(ConfigurationError, match="read-only input arrays"):
+        evaluate_dataset(
+            model,
+            make_dataset(split="validation", counts=[2, 1], seed=78),
+            batch_size=2,
+            device="cuda",
+            batch_transfer=_prefetch(),
+        )
+
+    # Target-kind metadata is staged for evaluation reports.
+    source = make_dataset(split="validation", counts=[2, 1], seed=80)
+    without_kinds = PackedDecisionDataset(
+        states=source.states,
+        candidate_features=source.candidate_features,
+        offsets=source.offsets,
+        targets=source.targets,
+        stages=source.stages,
+        identity=source.identity,
+    )
+    with pytest.raises(ConfigurationError, match="target_kinds"):
+        evaluate_dataset(
+            model,
+            _freeze(without_kinds),
+            batch_size=2,
+            device="cuda",
+            batch_transfer=_prefetch(),
+        )
+
+    # Worker processes and non-built-in policies cannot fill the slots.
+    frozen = _freeze(make_dataset(split="validation", counts=[2, 1], seed=81))
+    with pytest.raises(ConfigurationError, match="num_workers=0"):
+        evaluate_dataset(
+            model,
+            frozen,
+            batch_size=2,
+            device="cuda",
+            num_workers=1,
+            batch_transfer=_prefetch(),
+        )
+    # A custom policy wrapper keeps padded scoring, which cannot be staged.
+    recording = _RecordingPolicy(model)
+    with pytest.raises(ConfigurationError, match="flat candidates"):
+        evaluate_dataset(
+            recording,
+            frozen,
+            batch_size=2,
+            device="cuda",
+            batch_transfer=_prefetch(),
+        )
+    assert recording.rows == []
