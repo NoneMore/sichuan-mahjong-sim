@@ -11,6 +11,7 @@ import pytest
 import torch
 
 import mahjong_bc
+from mahjong_bc import BatchTransferConfig
 import mahjong_bc.metrics as metrics_module
 import mahjong_bc.train as train_module
 from mahjong_bc.checkpoint import (
@@ -828,6 +829,10 @@ def test_run_record_contains_configuration_identity_provenance_and_history(tmp_p
     assert record["model_config"] == _small_model().to_dict()
     assert record["training_config"] == config.to_dict()
     assert record["dependencies"] == dependencies.to_dict()
+    assert record["batch_transfer"] == {
+        "mode": "sync",
+        "pinned_limit_bytes": None,
+    }
     assert record["dataset"]["train_dataset_identity"] == train.identity.to_dict()
     assert (
         record["dataset"]["validation_dataset_identity"]
@@ -843,6 +848,7 @@ def test_run_record_contains_configuration_identity_provenance_and_history(tmp_p
         "training_config",
         "dependencies",
         "device_type",
+        "batch_transfer",
         "seed",
         "dataset",
         "best_checkpoint",
@@ -1715,3 +1721,339 @@ def test_training_missing_target_kinds_keeps_public_batch_fallback(
     assert summary.completed_epochs == 1
     assert summary.samples_seen == 4
     assert public_batches and all(public_batches)
+
+
+# ---- optional batch transfer ---------------------------------------------
+
+CUDA = pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="CUDA is not available"
+)
+_MIB = 2**20
+_STAGED_ARRAY_NAMES = (
+    "states",
+    "candidate_features",
+    "offsets",
+    "targets",
+    "stages",
+    "target_kinds",
+)
+
+
+def _freeze(dataset: PackedDecisionDataset) -> PackedDecisionDataset:
+    """Make a fixture's consumed inputs read-only, like a loaded split."""
+
+    for name in _STAGED_ARRAY_NAMES:
+        array = getattr(dataset, name)
+        if array is not None:
+            array.setflags(write=False)
+    return dataset
+
+
+def _prefetch(pinned_mib: int = 8) -> BatchTransferConfig:
+    return BatchTransferConfig(
+        mode="cuda-prefetch", pinned_limit_bytes=pinned_mib * _MIB
+    )
+
+
+def _trainer(
+    tmp_path: Path,
+    train: PackedDecisionDataset,
+    validation: PackedDecisionDataset,
+    *,
+    name: str,
+    config: TrainingConfig | None = None,
+    device: str = "cpu",
+    batch_transfer: BatchTransferConfig | None = None,
+) -> Trainer:
+    return Trainer(
+        train_dataset=train,
+        validation_dataset=validation,
+        model_config=_small_model(),
+        training_config=_config(epochs=2, batch_size=3, learning_rate=0.01)
+        if config is None
+        else config,
+        output_dir=tmp_path / name,
+        device=device,
+        batch_transfer=batch_transfer,
+    )
+
+
+def _saved_state(trainer: Trainer) -> dict[str, torch.Tensor]:
+    assert trainer.model is not None
+    return {
+        name: tensor.detach().clone()
+        for name, tensor in trainer.model.state_dict().items()
+    }
+
+
+def test_sync_transfer_config_matches_the_default_exactly(tmp_path):
+    train, validation = learnable_pair(cache_id="sync-equality")
+    summaries = []
+    states = []
+    for name, transfer in (("default", None), ("sync", BatchTransferConfig())):
+        trainer = _trainer(
+            tmp_path, train, validation, name=name, batch_transfer=transfer
+        )
+        summaries.append(trainer.train())
+        states.append(_saved_state(trainer))
+    assert summaries[0].to_dict() == summaries[1].to_dict()
+    _assert_state_dict_equal(states[0], states[1])
+    for name in ("default", "sync"):
+        record = json.loads(
+            (tmp_path / name / "run.json").read_text(encoding="utf-8")
+        )
+        assert record["batch_transfer"] == {
+            "mode": "sync",
+            "pinned_limit_bytes": None,
+        }
+        # Supply choices never enter the training identity.
+        assert set(record["training_config"]) == set(
+            TrainingConfig(
+                seed=1, epochs=1, batch_size=1, learning_rate=0.01
+            ).to_dict()
+        )
+
+
+def test_prefetch_requires_cuda_before_any_update(tmp_path):
+    train, validation = learnable_pair(cache_id="prefetch-cpu")
+    trainer = _trainer(
+        tmp_path,
+        _freeze(train),
+        _freeze(validation),
+        name="cpu-prefetch",
+        device="cpu",
+        batch_transfer=_prefetch(),
+    )
+    with pytest.raises(ConfigurationError, match="CUDA device"):
+        trainer.train()
+    assert trainer.optimizer is not None and not trainer.optimizer.state
+    for name in TRAIN_OUTPUT_NAMES:
+        assert not (tmp_path / "cpu-prefetch" / name).exists()
+
+
+@CUDA
+def test_prefetch_rejects_unsupported_inputs_before_any_update(tmp_path):
+    train_source, validation_source = learnable_pair(cache_id="prefetch-guard")
+    train = _freeze(train_source)
+    validation = _freeze(validation_source)
+    cases = [
+        (
+            "workers",
+            train,
+            validation,
+            _config(num_workers=2),
+            "num_workers=0",
+        ),
+        (
+            "writable",
+            learnable_pair(cache_id="prefetch-guard")[0],
+            validation,
+            _config(),
+            "read-only input arrays",
+        ),
+        (
+            "custom-dataset",
+            _record(train),
+            validation,
+            _config(),
+            "requires the built-in",
+        ),
+        (
+            # A subclass validation split keeps the full traversal, so it
+            # cannot provide the metadata this staging path requires.
+            "custom-validation",
+            train,
+            _record(validation),
+            _config(),
+            "eligible-only traversal",
+        ),
+    ]
+    for name, train_dataset, validation_dataset, config, message in cases:
+        trainer = _trainer(
+            tmp_path,
+            train_dataset,
+            validation_dataset,
+            name=name,
+            config=config,
+            device="cuda",
+            batch_transfer=_prefetch(),
+        )
+        with pytest.raises(ConfigurationError, match=message):
+            trainer.train()
+        assert trainer.optimizer is not None and not trainer.optimizer.state
+        for output in TRAIN_OUTPUT_NAMES:
+            assert not (tmp_path / name / output).exists(), (name, output)
+
+
+def test_trainer_rejects_a_non_config_transfer(tmp_path):
+    train, validation = learnable_pair(cache_id="transfer-type")
+    with pytest.raises(ConfigurationError, match="BatchTransferConfig"):
+        _trainer(
+            tmp_path,
+            train,
+            validation,
+            name="bad-transfer",
+            batch_transfer="sync",  # type: ignore[arg-type]
+        )
+
+
+@CUDA
+def test_prefetch_training_matches_sync_exactly(tmp_path):
+    train, validation = learnable_pair(cache_id="prefetch-equality")
+    _freeze(train)
+    _freeze(validation)
+    config = _config(epochs=2, batch_size=3, learning_rate=0.01)
+    summaries = {}
+    states = {}
+    last_states = {}
+    for mode, transfer in (
+        ("sync", BatchTransferConfig()),
+        ("cuda-prefetch", _prefetch()),
+    ):
+        trainer = _trainer(
+            tmp_path,
+            train,
+            validation,
+            name=mode,
+            config=config,
+            device="cuda",
+            batch_transfer=transfer,
+        )
+        summaries[mode] = trainer.train()
+        states[mode] = _saved_state(trainer)
+        last = load_checkpoint(
+            tmp_path / mode / "last.pt", require_training=True
+        )
+        last_states[mode] = last.model.state_dict()
+        record = json.loads(
+            (tmp_path / mode / "run.json").read_text(encoding="utf-8")
+        )
+        assert record["batch_transfer"] == transfer.to_dict()
+    assert summaries["sync"].to_dict() == summaries["cuda-prefetch"].to_dict()
+    _assert_state_dict_equal(states["sync"], states["cuda-prefetch"])
+    _assert_state_dict_equal(last_states["sync"], last_states["cuda-prefetch"])
+
+
+@CUDA
+def test_prefetch_interruption_and_resume_replay_exactly(tmp_path, monkeypatch):
+    train, validation = learnable_pair(
+        train_decisions=12, validation_decisions=6, cache_id="prefetch-recovery"
+    )
+    _freeze(train)
+    _freeze(validation)
+    config = _config(epochs=3, batch_size=2, learning_rate=0.01)
+    transfer = _prefetch()
+
+    continuous = _trainer(
+        tmp_path,
+        train,
+        validation,
+        name="continuous",
+        config=config,
+        device="cuda",
+        batch_transfer=transfer,
+    )
+    continuous_summary = continuous.train()
+    continuous_state = _saved_state(continuous)
+    assert continuous.optimizer is not None
+    continuous_optimizer = continuous.optimizer.state_dict()
+
+    # Interrupt the same run after the first step of the second epoch: the
+    # first epoch is committed, the failed epoch must not publish.
+    real_add = train_module._EpochLossTotals.add
+    calls = {"count": 0}
+
+    def failing_add(self, loss, decisions):
+        calls["count"] += 1
+        if calls["count"] == 7:
+            raise RuntimeError("injected mid-epoch stop")
+        return real_add(self, loss, decisions)
+
+    interrupted = _trainer(
+        tmp_path,
+        train,
+        validation,
+        name="resumed",
+        config=config,
+        device="cuda",
+        batch_transfer=transfer,
+    )
+    with monkeypatch.context() as patch:
+        patch.setattr(train_module._EpochLossTotals, "add", failing_add)
+        with pytest.raises(RuntimeError, match="injected mid-epoch stop"):
+            interrupted.train()
+    committed = load_checkpoint(
+        tmp_path / "resumed" / "last.pt", require_training=True
+    )
+    assert committed.training.completed_epochs == 1
+    record = json.loads(
+        (tmp_path / "resumed" / "run.json").read_text(encoding="utf-8")
+    )
+    assert record["summary"]["completed_epochs"] == 1
+    assert record["batch_transfer"] == transfer.to_dict()
+
+    resumed = _trainer(
+        tmp_path,
+        train,
+        validation,
+        name="resumed",
+        config=config,
+        device="cuda",
+        batch_transfer=transfer,
+    )
+    resumed_summary = resumed.train(resume_from=tmp_path / "resumed" / "last.pt")
+    assert resumed_summary.to_dict() == continuous_summary.to_dict()
+    _assert_state_dict_equal(_saved_state(resumed), continuous_state)
+    assert resumed.optimizer is not None
+    _assert_state_tree_exact(
+        resumed.optimizer.state_dict(), continuous_optimizer
+    )
+    final_record = json.loads(
+        (tmp_path / "resumed" / "run.json").read_text(encoding="utf-8")
+    )
+    assert final_record["summary"] == json.loads(
+        (tmp_path / "continuous" / "run.json").read_text(encoding="utf-8")
+    )["summary"]
+
+
+@CUDA
+def test_evaluate_checkpoint_accepts_a_prefetch_request(tmp_path):
+    train, validation = learnable_pair(cache_id="eval-transfer")
+    _freeze(train)
+    _freeze(validation)
+    trainer = _trainer(
+        tmp_path,
+        train,
+        validation,
+        name="frozen",
+        config=_config(epochs=1, batch_size=2, learning_rate=0.01),
+        device="cuda",
+    )
+    trainer.train()
+    best = tmp_path / "frozen" / "best.pt"
+    test = _freeze(
+        make_dataset(
+            split="test", counts=[2, 1, 3, 2, 2, 1], seed=91, cache_id="eval-transfer"
+        )
+    )
+    sync_report = evaluate_checkpoint(
+        best, test, batch_size=2, device="cuda"
+    )
+    prefetch_report = evaluate_checkpoint(
+        best,
+        test,
+        batch_size=2,
+        device="cuda",
+        batch_transfer=_prefetch(),
+    )
+    assert prefetch_report == sync_report
+    assert prefetch_report.decisions == len(test)
+    assert prefetch_report.forced == test.forced_count
+    with pytest.raises(ConfigurationError, match="CUDA device"):
+        evaluate_checkpoint(
+            best,
+            test,
+            batch_size=2,
+            device="cpu",
+            batch_transfer=_prefetch(),
+        )

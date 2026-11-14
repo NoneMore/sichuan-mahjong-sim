@@ -5,6 +5,10 @@ manifest format, complete file inventory, checksums, array headers, structural
 counts, episode metadata, and target alignment before exposing memory-mapped
 split datasets. ``cache_id`` is compared as an opaque identity; this module
 deliberately does not reimplement its serialization.
+
+``PreparedCache.open_splits`` materializes several splits as one owned loading
+context, either retaining the manifest shard layout or packing each split into
+contiguous RAM under a combined byte budget.
 """
 
 from __future__ import annotations
@@ -12,8 +16,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
+from math import prod
 from pathlib import Path
+from types import TracebackType
 from typing import Any, Mapping
 
 import numpy as np
@@ -43,8 +50,8 @@ from .constants import (
     STAGE_COUNT,
     STATE_WIDTH,
 )
-from .data import PackedDecisionDataset, ShardedDecisionDataset
-from .errors import CacheContractError
+from .data import DecisionDataset, PackedDecisionDataset, ShardedDecisionDataset
+from .errors import CacheContractError, ConfigurationError
 
 _COUNT_KEYS = {
     "episodes",
@@ -87,6 +94,20 @@ _CORPUS_KEYS = {
     "shards",
 }
 _CORPUS_SHARD_KEYS = {"first_seed", "games", "decisions", "sha256"}
+_MMAP_STORAGE = "mmap"
+_RAM_STORAGE = "ram"
+_STORAGE_MODES = frozenset({_MMAP_STORAGE, _RAM_STORAGE})
+_SHARDED_REPRESENTATION = "sharded"
+_PACKED_REPRESENTATION = "packed"
+#: Decision metadata arrays copied verbatim by contiguous RAM packing.
+_DECISION_METADATA_ARRAYS = (
+    "targets",
+    "episode_seeds",
+    "decision_indices",
+    "actor_seats",
+    "stages",
+    "target_kinds",
+)
 
 
 def _require_mapping(value: Any, name: str) -> Mapping[str, Any]:
@@ -514,20 +535,7 @@ class PreparedCache:
         identity = self.split_identity(split)
         shards: list[PackedDecisionDataset] = []
         for shard in entry.shards:
-            arrays: dict[str, np.ndarray] = {}
-            for name in ARRAY_NAMES:
-                descriptor = shard.arrays[name]
-                path = self.root / descriptor.file
-                try:
-                    arrays[name] = np.load(
-                        path,
-                        mmap_mode="r" if mmap else None,
-                        allow_pickle=False,
-                    )
-                except Exception as exc:
-                    raise CacheContractError(
-                        f"failed to load {descriptor.file}: {exc}"
-                    ) from exc
+            arrays = _load_shard_arrays(self.root, shard, mmap=mmap)
             shards.append(
                 PackedDecisionDataset(
                     states=arrays["states"],
@@ -543,6 +551,386 @@ class PreparedCache:
                 )
             )
         return ShardedDecisionDataset(tuple(shards), identity)
+
+    def open_splits(
+        self,
+        names: Iterable[str],
+        *,
+        storage: str,
+        ram_limit_bytes: int | None = None,
+    ) -> SplitInputs:
+        """Materialize requested splits as one owned, read-only loading context.
+
+        ``storage="mmap"`` keeps each split's manifest shard layout and accepts
+        no RAM budget. ``storage="ram"`` builds one contiguous
+        :class:`~mahjong_bc.data.PackedDecisionDataset` per split and requires a
+        positive ``ram_limit_bytes``. Before allocating any feature array, the
+        combined destination and derived-layout bytes of every requested split
+        are derived from manifest shapes and dtypes and checked against the
+        budget.
+
+        The returned :class:`SplitInputs` exposes ``.datasets`` and a
+        ``.loading_record`` describing this invocation only. Exiting its
+        ``with`` block closes the datasets it owns. This is the only loading
+        entry point that produces a loading record; ``load_split`` keeps its
+        previous mutable, unmetered behavior.
+        """
+
+        selected, budget = _plan_split_loading(
+            self, names, storage=storage, ram_limit_bytes=ram_limit_bytes
+        )
+        return _open_split_inputs(self, selected, storage=storage, budget=budget)
+
+
+class SplitInputs:
+    """Read-only datasets opened by :meth:`PreparedCache.open_splits`.
+
+    ``datasets`` maps every requested split name to its materialized dataset in
+    request order. ``loading_record`` is a plain JSON-ready mapping for the
+    current invocation::
+
+        {"storage": "ram" | "mmap",
+         "ram_limit_bytes": int | None,
+         "ram_bytes": int | None,
+         "splits": {name: {"representation": "packed" | "sharded",
+                           "ram_bytes": int | None}}}
+
+    ``ram_bytes`` is the actual held destination/derived bytes of the RAM
+    representation, never mapped file sizes or RSS. Exiting the context closes
+    every owned dataset; a cleanup error never masks an exception that is
+    already propagating.
+    """
+
+    def __init__(
+        self,
+        datasets: Mapping[str, DecisionDataset],
+        loading_record: Mapping[str, Any],
+    ) -> None:
+        self.datasets: dict[str, DecisionDataset] = dict(datasets)
+        self.loading_record: dict[str, Any] = dict(loading_record)
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def __enter__(self) -> SplitInputs:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool:
+        if exc_type is None:
+            self.close()
+        else:
+            try:
+                self.close()
+            except Exception:
+                pass
+        return False
+
+    def close(self) -> None:
+        """Close every owned dataset once; report the first cleanup error."""
+
+        if self._closed:
+            return
+        self._closed = True
+        first_error: Exception | None = None
+        for dataset in self.datasets.values():
+            try:
+                dataset.close()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+
+
+def _load_shard_arrays(
+    root: Path, shard: CacheShard, *, mmap: bool
+) -> dict[str, np.ndarray]:
+    """Load one validated shard's wire arrays, mapped read-only when asked."""
+
+    arrays: dict[str, np.ndarray] = {}
+    for name in ARRAY_NAMES:
+        descriptor = shard.arrays[name]
+        path = root / descriptor.file
+        try:
+            arrays[name] = np.load(
+                path,
+                mmap_mode="r" if mmap else None,
+                allow_pickle=False,
+            )
+        except Exception as exc:
+            raise CacheContractError(
+                f"failed to load {descriptor.file}: {exc}"
+            ) from exc
+    return arrays
+
+
+def _split_ram_preflight_bytes(entry: CacheSplit) -> int:
+    """Conservative RAM bytes for one packed split, from manifest structure.
+
+    Counts the destination arrays implied by the split's decision/candidate
+    totals plus the derived layout arrays: one candidate count and one
+    eligibility mask entry per decision, and a full-length eligible-index
+    capacity. The bound therefore never depends on which decisions are
+    eligible; the exact eligible count is recorded after construction.
+    """
+
+    decisions = entry.counts.decisions
+    candidates = entry.counts.candidates
+    shapes = expected_shapes(decisions, candidates)
+    total = sum(
+        prod(shapes[name]) * np.dtype(dtype).itemsize
+        for name, dtype in _ARRAY_DTYPES.items()
+    )
+    total += decisions * np.dtype(np.int64).itemsize  # candidate_counts
+    total += decisions * np.dtype(np.bool_).itemsize  # eligibility mask
+    total += decisions * np.dtype(np.int64).itemsize  # eligible_indices bound
+    return int(total)
+
+
+def _require_storage(value: object) -> str:
+    if not isinstance(value, str) or value not in _STORAGE_MODES:
+        raise ConfigurationError(
+            f"storage must be one of {sorted(_STORAGE_MODES)}, got {value!r}"
+        )
+    return value
+
+
+def _require_ram_limit(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigurationError(
+            f"ram_limit_bytes must be a positive integer, got {value!r}"
+        )
+    return value
+
+
+def _requested_splits(cache: PreparedCache, names: object) -> tuple[str, ...]:
+    if isinstance(names, (str, bytes)) or not isinstance(names, Iterable):
+        raise ConfigurationError("names must be an iterable of split names")
+    selected: list[str] = []
+    for name in names:
+        if not isinstance(name, str):
+            raise ConfigurationError(f"split name must be a string, got {name!r}")
+        if name not in cache.splits:
+            raise ConfigurationError(f"unknown split {name!r}")
+        if name in selected:
+            raise ConfigurationError(f"duplicate split {name!r}")
+        selected.append(name)
+    return tuple(selected)
+
+
+def _plan_split_loading(
+    cache: PreparedCache,
+    names: object,
+    *,
+    storage: object,
+    ram_limit_bytes: object,
+) -> tuple[tuple[str, ...], int | None]:
+    """Validate one ``open_splits`` request and preflight its RAM budget."""
+
+    mode = _require_storage(storage)
+    if mode == _MMAP_STORAGE:
+        if ram_limit_bytes is not None:
+            raise ConfigurationError(
+                "storage 'mmap' does not accept ram_limit_bytes"
+            )
+        return _requested_splits(cache, names), None
+    budget = _require_ram_limit(ram_limit_bytes)
+    selected = _requested_splits(cache, names)
+    required = sum(
+        _split_ram_preflight_bytes(cache.splits[name]) for name in selected
+    )
+    if required > budget:
+        raise ConfigurationError(
+            f"ram_limit_bytes {budget} cannot hold the requested splits "
+            f"{list(selected)}; contiguous RAM requires {required} bytes"
+        )
+    return selected, budget
+
+
+def _open_split_inputs(
+    cache: PreparedCache,
+    selected: tuple[str, ...],
+    *,
+    storage: str,
+    budget: int | None,
+) -> SplitInputs:
+    """Materialize selected splits, releasing partial results on failure."""
+
+    datasets: dict[str, DecisionDataset] = {}
+    split_records: dict[str, dict[str, Any]] = {}
+    held_total = 0
+    try:
+        for name in selected:
+            dataset, held = _materialize_split(cache, name, storage=storage)
+            datasets[name] = dataset
+            split_records[name] = {
+                "representation": (
+                    _SHARDED_REPRESENTATION
+                    if held is None
+                    else _PACKED_REPRESENTATION
+                ),
+                "ram_bytes": held,
+            }
+            if held is not None:
+                held_total += held
+    except BaseException:
+        _close_quietly(datasets.values())
+        raise
+    record = {
+        "storage": storage,
+        "ram_limit_bytes": budget,
+        "ram_bytes": held_total if storage == _RAM_STORAGE else None,
+        "splits": split_records,
+    }
+    return SplitInputs(datasets, record)
+
+
+def _close_quietly(datasets: Iterable[DecisionDataset]) -> None:
+    """Close partially built datasets without masking the active failure."""
+
+    for dataset in datasets:
+        try:
+            dataset.close()
+        except Exception:
+            pass
+
+
+def _materialize_split(
+    cache: PreparedCache, split: str, *, storage: str
+) -> tuple[DecisionDataset, int | None]:
+    """Load one split; RAM storage also reports the bytes it now holds."""
+
+    if storage == _MMAP_STORAGE:
+        return cache.load_split(split, mmap=True), None
+    return _pack_split_in_ram(cache, split)
+
+
+def _pack_split_in_ram(
+    cache: PreparedCache, split: str
+) -> tuple[PackedDecisionDataset, int]:
+    """Copy one split's shards, in manifest order, into contiguous arrays."""
+
+    entry = cache.splits[split]
+    decisions = entry.counts.decisions
+    candidates = entry.counts.candidates
+    shapes = expected_shapes(decisions, candidates)
+    arrays: dict[str, np.ndarray] = {}
+    try:
+        for name in ARRAY_NAMES:
+            arrays[name] = np.empty(shapes[name], dtype=np.dtype(_ARRAY_DTYPES[name]))
+        # An empty split still carries the legal single zero offset boundary.
+        arrays["candidate_offsets"][0] = 0
+        decision_offset = 0
+        candidate_offset = 0
+        for shard in entry.shards:
+            source = _load_shard_arrays(cache.root, shard, mmap=True)
+            shard_shapes = expected_shapes(
+                shard.counts.decisions, shard.counts.candidates
+            )
+            for name in ARRAY_NAMES:
+                if source[name].shape != shard_shapes[name]:
+                    raise CacheContractError(
+                        f"{shard.arrays[name].file} has shape "
+                        f"{source[name].shape}; manifest structure requires "
+                        f"{shard_shapes[name]}"
+                    )
+            next_decision = decision_offset + shard.counts.decisions
+            next_candidate = candidate_offset + shard.counts.candidates
+            if next_decision > decisions or next_candidate > candidates:
+                raise CacheContractError(
+                    f"splits.{split} shards exceed the manifest decision or "
+                    f"candidate totals"
+                )
+            arrays["states"][decision_offset:next_decision] = source["states"]
+            arrays["candidate_features"][candidate_offset:next_candidate] = source[
+                "candidate_features"
+            ]
+            # Shard offsets are shard-local and start at zero, so shifting them
+            # by the candidates already copied also de-duplicates the boundary.
+            np.add(
+                source["candidate_offsets"],
+                candidate_offset,
+                out=arrays["candidate_offsets"][
+                    decision_offset : next_decision + 1
+                ],
+            )
+            for name in _DECISION_METADATA_ARRAYS:
+                arrays[name][decision_offset:next_decision] = source[name]
+            decision_offset = next_decision
+            candidate_offset = next_candidate
+        if decision_offset != decisions or candidate_offset != candidates:
+            raise CacheContractError(
+                f"splits.{split} shards do not cover the manifest decision and "
+                f"candidate totals"
+            )
+        if int(arrays["candidate_offsets"][-1]) != candidates:
+            raise CacheContractError(
+                f"splits.{split} merged candidate offsets end at "
+                f"{int(arrays['candidate_offsets'][-1])}, expected {candidates}"
+            )
+        dataset = PackedDecisionDataset(
+            states=arrays["states"],
+            candidate_features=arrays["candidate_features"],
+            offsets=arrays["candidate_offsets"],
+            targets=arrays["targets"],
+            stages=arrays["stages"],
+            identity=cache.split_identity(split),
+            actor_seats=arrays["actor_seats"],
+            decision_indices=arrays["decision_indices"],
+            episode_ids=arrays["episode_seeds"],
+            target_kinds=arrays["target_kinds"],
+        )
+    except BaseException:
+        arrays.clear()
+        raise
+    _freeze_packed_arrays(dataset)
+    return dataset, _packed_held_bytes(dataset)
+
+
+def _packed_array_values(
+    dataset: PackedDecisionDataset,
+) -> tuple[object, ...]:
+    """Every array a packed split holds, including derived layout arrays."""
+
+    return (
+        dataset.states,
+        dataset.candidate_features,
+        dataset.offsets,
+        dataset.targets,
+        dataset.stages,
+        dataset.actor_seats,
+        dataset.decision_indices,
+        dataset.episode_ids,
+        dataset.target_kinds,
+        dataset.candidate_counts(),
+        dataset.eligible_mask(),
+        dataset.eligible_indices(),
+    )
+
+
+def _freeze_packed_arrays(dataset: PackedDecisionDataset) -> None:
+    """Make every RAM-resident array read-only for asynchronous consumers."""
+
+    for value in _packed_array_values(dataset):
+        if isinstance(value, np.ndarray):
+            value.setflags(write=False)
+
+
+def _packed_held_bytes(dataset: PackedDecisionDataset) -> int:
+    """Actual bytes held by a packed split's destination and derived arrays."""
+
+    return sum(
+        int(value.nbytes)
+        for value in _packed_array_values(dataset)
+        if isinstance(value, np.ndarray)
+    )
 
 
 def _read_json_no_duplicates(path: Path) -> Mapping[str, Any]:

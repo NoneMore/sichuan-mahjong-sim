@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence
 
 import numpy as np
 import torch
@@ -15,7 +15,13 @@ from .constants import (
     STAGE_COUNT,
     STAGE_NAMES,
 )
+from ._input_pipeline import (
+    BatchTransferConfig,
+    device_batches,
+    validate_batch_transfer,
+)
 from .data import (
+    DecisionBatch,
     DecisionDataset,
     PackedDecisionDataset,
     ShardedDecisionDataset,
@@ -23,7 +29,7 @@ from .data import (
     iter_batches,
     require_dataset_identity,
 )
-from .errors import DataError
+from .errors import ConfigurationError, DataError
 from .policy import (
     CandidatePolicy,
     _batch_logits,
@@ -408,6 +414,27 @@ def _builtin_eligible_layout(
     return dataset.eligible_indices(), dataset.forced_by_stage()
 
 
+def _full_traversal_batches(
+    dataset: DecisionDataset,
+    indices: Sequence[int] | np.ndarray,
+    *,
+    batch_size: int,
+    num_workers: int = 0,
+    training: bool,
+    packed_candidates: bool = False,
+) -> Iterator[DecisionBatch]:
+    """Gather complete public batches for a full-traversal evaluation.
+
+    Forced counts then come from the samples actually scored, so the public
+    padded batch is retained. ``training`` and ``packed_candidates`` are part
+    of the batch-iterator contract but do not apply to a full traversal.
+    """
+
+    return iter_batches(
+        dataset, indices, batch_size=batch_size, num_workers=num_workers
+    )
+
+
 def evaluate_dataset(
     model: CandidatePolicy,
     dataset: DecisionDataset,
@@ -415,6 +442,7 @@ def evaluate_dataset(
     batch_size: int,
     device: torch.device | str,
     num_workers: int = 0,
+    batch_transfer: BatchTransferConfig | None = None,
 ) -> MetricsReport:
     """Evaluate every decision in one split, aggregating by decision.
 
@@ -426,22 +454,41 @@ def evaluate_dataset(
     every decision so forced counts are derived from the samples actually
     scored. The model is not modified and its previous train/eval mode is
     restored.
+
+    ``batch_transfer`` selects how host batches reach the device. The default
+    synchronous transfer keeps the documented fallbacks; an explicit
+    ``cuda-prefetch`` request is validated before any producer starts and is
+    rejected, not downgraded, when this split or model cannot support it.
     """
 
     require_dataset_identity(dataset, "evaluation dataset")
     if batch_size < 1:
         raise DataError("batch_size must be positive")
+    if batch_transfer is not None and not isinstance(
+        batch_transfer, BatchTransferConfig
+    ):
+        raise ConfigurationError(
+            "batch_transfer must be a BatchTransferConfig or None"
+        )
     target_device = torch.device(device)
-    accumulator = MetricAccumulator()
+    transfer = BatchTransferConfig() if batch_transfer is None else batch_transfer
+    packed_candidates = _supports_packed_candidate_scoring(model)
     builtin_layout = _builtin_eligible_layout(dataset)
+    eligible_only = builtin_layout is not None
+    validate_batch_transfer(
+        dataset,
+        model=model,
+        device=target_device,
+        num_workers=num_workers,
+        config=transfer,
+        training=False,
+        packed_candidates=packed_candidates,
+        eligible_only=eligible_only,
+    )
+    accumulator = MetricAccumulator()
     if builtin_layout is None:
         indices = np.arange(len(dataset), dtype=np.int64)
-        batches = iter_batches(
-            dataset,
-            indices,
-            batch_size=batch_size,
-            num_workers=num_workers,
-        )
+        batch_iterator = _full_traversal_batches
     else:
         indices, forced_by_stage = builtin_layout
         accumulator._add_forced_split(
@@ -449,28 +496,33 @@ def evaluate_dataset(
             eligible=int(indices.size),
             forced_by_stage=forced_by_stage,
         )
-        batches = _iter_model_batches(
-            dataset,
-            indices,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            training=False,
-            packed_candidates=_supports_packed_candidate_scoring(model),
-        )
+        batch_iterator = _iter_model_batches
     was_training = model.training
     model.eval()
     try:
         with torch.no_grad():
-            for batch in batches:
-                moved = batch.to(target_device)
-                logits = _batch_logits(model, moved)
-                accumulator.add(
-                    logits,
-                    moved.mask,
-                    moved.targets,
-                    moved.stages,
-                    moved.target_kinds,
-                )
+            with device_batches(
+                dataset,
+                indices,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                training=False,
+                packed_candidates=packed_candidates,
+                model=model,
+                device=target_device,
+                batch_transfer=transfer,
+                eligible_only=eligible_only,
+                batch_iterator=batch_iterator,
+            ) as batches:
+                for moved in batches:
+                    logits = _batch_logits(model, moved)
+                    accumulator.add(
+                        logits,
+                        moved.mask,
+                        moved.targets,
+                        moved.stages,
+                        moved.target_kinds,
+                    )
     finally:
         model.train(was_training)
     return accumulator.report()
