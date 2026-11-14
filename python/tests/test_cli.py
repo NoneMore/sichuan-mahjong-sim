@@ -965,73 +965,47 @@ def test_cli_records_cuda_prefetch_with_mmap_loading(shared_cache, tmp_path, cap
 
 
 @CUDA
-def test_cli_four_supply_combinations_match_exactly(shared_cache, tmp_path, capsys):
-    """mmap or RAM storage and sync or prefetch transfer stay numerically equal."""
+def test_cli_wires_ram_prefetch_training_and_evaluation(shared_cache, tmp_path, capsys):
+    """CLI owns option wiring and records; lower layers own numeric parity."""
 
-    combinations = (
-        ("mmap", "sync"),
-        ("ram", "sync"),
-        ("mmap", "cuda-prefetch"),
-        ("ram", "cuda-prefetch"),
+    output = tmp_path / "ram-prefetch"
+    supply_args = _supply_args(
+        storage="ram", ram_mib=8, transfer="cuda-prefetch", pinned_mib=8
     )
-    results = {}
-    for storage, transfer in combinations:
-        output = tmp_path / f"{storage}-{transfer}"
-        rc = main(
-            _run_args(shared_cache.root, output, epochs=2)
-            + ["--device", "cuda"]
-            + _supply_args(
-                storage=storage,
-                ram_mib=8 if storage == "ram" else None,
-                transfer=transfer,
-                pinned_mib=8 if transfer != "sync" else None,
-            )
-        )
-        assert rc == 0
-        result = _parse(capsys)
-        assert result["device_type"] == "cuda"
-        assert result["input_loading"]["storage"] == storage
-        assert result["batch_transfer"]["mode"] == transfer
-        assert result["summary"]["completed_epochs"] == 2
-        results[(storage, transfer)] = result
+    assert main(
+        _run_args(shared_cache.root, output) + ["--device", "cuda"] + supply_args
+    ) == 0
+    result = _parse(capsys)
+    assert result["device_type"] == "cuda"
+    assert result["summary"]["completed_epochs"] == 1
+    assert result["input_loading"]["storage"] == "ram"
+    assert result["input_loading"]["ram_limit_bytes"] == 8 * _MIB
+    assert result["input_loading"]["ram_bytes"] > 0
+    assert set(result["input_loading"]["splits"]) == {"train", "validation"}
+    assert result["batch_transfer"] == {
+        "mode": "cuda-prefetch", "pinned_limit_bytes": 8 * _MIB,
+    }
+    record = json.loads((output / "run.json").read_text(encoding="utf-8"))
+    assert record["dataset"]["provenance"]["input_loading"] == result["input_loading"]
+    assert record["batch_transfer"] == result["batch_transfer"]
 
-    reference = results[("mmap", "sync")]
-    reference_model = load_policy_checkpoint(tmp_path / "mmap-sync" / "best.pt").model
-    reference_state = reference_model.state_dict()
-    for key, result in results.items():
-        assert result["summary"] == reference["summary"]
-        assert result["model_config"] == reference["model_config"]
-        assert result["training_config"] == reference["training_config"]
-        model = load_policy_checkpoint(
-            tmp_path / f"{key[0]}-{key[1]}" / "best.pt"
-        ).model
-        state = model.state_dict()
-        assert set(state) == set(reference_state)
-        for name, tensor in reference_state.items():
-            assert torch.equal(state[name], tensor), (key, name)
-
-    # Evaluation keeps the same guarantees for each loading/transfer request.
-    reports = {}
-    for storage, transfer in combinations:
-        checkpoint = tmp_path / f"{storage}-{transfer}" / "best.pt"
-        rc = main(
-            _evaluate_args(shared_cache.root, checkpoint)
-            + ["--device", "cuda"]
-            + _supply_args(
-                storage=storage,
-                ram_mib=8 if storage == "ram" else None,
-                transfer=transfer,
-                pinned_mib=8 if transfer != "sync" else None,
-            )
-        )
-        assert rc == 0
-        evaluation = _parse(capsys)
-        assert evaluation["input_loading"]["storage"] == storage
-        assert evaluation["batch_transfer"]["mode"] == transfer
-        reports[(storage, transfer)] = evaluation["metrics"]
-    assert reports[("ram", "sync")] == reports[("mmap", "sync")]
-    assert reports[("mmap", "cuda-prefetch")] == reports[("mmap", "sync")]
-    assert reports[("ram", "cuda-prefetch")] == reports[("mmap", "sync")]
+    checkpoint = output / "best.pt"
+    before = checkpoint.read_bytes()
+    assert main(
+        _evaluate_args(shared_cache.root, checkpoint)
+        + ["--device", "cuda"] + supply_args
+    ) == 0
+    evaluation = _parse(capsys)
+    assert evaluation["input_loading"]["storage"] == "ram"
+    assert evaluation["input_loading"]["ram_limit_bytes"] == 8 * _MIB
+    assert evaluation["input_loading"]["ram_bytes"] > 0
+    assert set(evaluation["input_loading"]["splits"]) == {evaluation["split"]}
+    assert evaluation["batch_transfer"] == result["batch_transfer"]
+    assert (
+        evaluation["dataset_identity"]["cache_id"]
+        == result["train_dataset_identity"]["cache_id"]
+    )
+    assert checkpoint.read_bytes() == before
 
 
 def test_cli_supply_options_reject_inapplicable_requests(

@@ -24,5 +24,8 @@ packages = ["mahjong_bc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra"
+addopts = "-ra -m 'not cuda_diagnostic'"
+markers = [
+    "cuda_diagnostic: opt-in, hardware-dependent CUDA scheduling diagnostics",
+]
 filterwarnings = ["error::DeprecationWarning:mahjong_bc.*"]

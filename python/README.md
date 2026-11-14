@@ -217,9 +217,18 @@ After installation, in the activated environment:
 
 ```text
 python -m pytest python/tests
+# Optional, device-dependent CUDA scheduling diagnostic:
+python -m pytest python/tests -m cuda_diagnostic
 python python/tools/verify_rust_handoff.py --corpus ../bc-data --cache ../bc-cache
 python python/tools/verify_recovery.py --dataset ../bc-cache --output ../bc-recovery
 ```
+
+The default pytest selection excludes `cuda_diagnostic`: its synthetic delays
+and overlap threshold depend on device scheduling, not functional correctness
+or end-to-end throughput. The normal CUDA suite retains event/slot reuse,
+non-default streams, pending-compute allocator lifetime, error/exit cleanup and
+exact recovery checks. The diagnostic command above overrides the default
+marker filter and requires CUDA.
 
 The [CPU workflow](../.github/workflows/python-ci.yml) runs loader, batching,
 policy, metrics, checkpoint, training and CLI tests. The handoff probe compares a

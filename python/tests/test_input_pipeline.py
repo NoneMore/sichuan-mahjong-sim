@@ -1,8 +1,9 @@
 """Tests for the shared device-batch pipeline and CUDA prefetch.
 
 Prefetch tests run on real CUDA: they cover staging capacity, batch equality
-with the synchronous path, producer/consumer lifecycle, error ordering and
-copy/compute overlap. Validation-only tests also run without a device.
+with the synchronous path, producer/consumer lifecycle and error ordering.
+Device-dependent overlap timing is an opt-in ``cuda_diagnostic`` test.
+Validation-only tests also run without a device.
 """
 
 from __future__ import annotations
@@ -1280,8 +1281,9 @@ def test_freed_batches_stay_valid_for_pending_compute_kernels(model):
 
 
 @CUDA
+@pytest.mark.cuda_diagnostic
 def test_next_batch_copy_overlaps_the_current_batch_compute(model, monkeypatch):
-    """Timeline evidence: batch n+1's copy is hidden behind batch n's compute."""
+    """Synthetic scheduling diagnostic, not a throughput or correctness gate."""
 
     counts = [2, 3, 4, 3] * 512
     dataset = freeze(make_dataset(split="train", counts=counts, seed=60))
