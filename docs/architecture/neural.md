@@ -78,8 +78,10 @@ consistent packed layout and rejects unsupported inputs before production.
 Storage and transfer are independent execution options; their configuration
 and budget contracts belong to the [Python guide](../../python/README.md#loading-and-batching).
 
-One host producer gathers into ordinary batches and stages consumed fields in
-two fixed-capacity pinned slots. The main thread submits ready batches on a
+One host producer stages consumed fields in two fixed-capacity pinned slots.
+With contiguous RAM training data, it reserves a slot before gathering and
+writes state rows directly into it. Other fields stage from ordinary host
+batches. The main thread submits ready batches on a
 separate copy stream, records completion events and makes the caller's compute
 stream wait only for its own batch. Tensor stream recording protects device
 lifetimes; H2D completion gates host-slot reuse. A ready next batch can copy

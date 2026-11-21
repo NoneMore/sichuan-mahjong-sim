@@ -511,6 +511,14 @@ class _PrefetchPipeline:
         self._training = training
         self._device = device
         self._factory = factory
+        self._direct_states = (
+            training
+            and factory is _iter_model_batches
+            and type(dataset) is PackedDecisionDataset
+            and type(dataset.states) is np.ndarray
+            and dataset.states.flags.c_contiguous
+            and not dataset.is_memory_mapped
+        )
         self._cond = threading.Condition()
         self._ready: deque[_Staged | _Failure | _End] = deque()
         self._cancelled = False
@@ -583,6 +591,7 @@ class _PrefetchPipeline:
 
     def _produce(self) -> None:
         index = 0
+        options = {"reserve_states": self._reserve_states} if self._direct_states else {}
         try:
             for host_batch in self._factory(
                 self._dataset,
@@ -591,8 +600,14 @@ class _PrefetchPipeline:
                 num_workers=0,
                 training=self._training,
                 packed_candidates=True,
+                **options,
             ):
-                slot = self._acquire(index % _SLOT_COUNT)
+                slot_index = index % _SLOT_COUNT
+                slot = (
+                    self._slots[slot_index]
+                    if self._direct_states
+                    else self._acquire(slot_index)
+                )
                 if slot is None:
                     return
                 self._stage(slot, host_batch, index)
@@ -605,6 +620,10 @@ class _PrefetchPipeline:
             with self._cond:
                 self._producer_done = True
                 self._cond.notify_all()
+
+    def _reserve_states(self, index: int, rows: int) -> Tensor | None:
+        slot = self._acquire(index % _SLOT_COUNT)
+        return None if slot is None else slot.states[:rows]
 
     def _publish(self, item: _Staged | _Failure | _End) -> None:
         with self._cond:
@@ -665,7 +684,8 @@ class _PrefetchPipeline:
                 "flat candidate positions do not match the flat candidate rows: "
                 f"{int(positions.numel())} positions for {flat} rows"
             )
-        slot.states[:rows].copy_(states)
+        if not self._direct_states:
+            slot.states[:rows].copy_(states)
         slot.targets[:rows].copy_(host_batch.targets)
         slot.candidates[:flat].copy_(candidates)
         slot.positions[:flat].copy_(positions)
