@@ -51,10 +51,20 @@ warning-denied rustdoc. The separate MSRV job checks all workspace targets with
 Rust 1.75.0, the minimum declared by both packages. Builds and tests use the
 committed root lockfile.
 
-[The Linux prebuilt workflow](../.github/workflows/linux-prebuilt.yml) runs on
-pushes to `main` and manual dispatch, publishing clean-provenance Linux x86_64
-`bc-collect`/`bc-prepare` binaries and `mahjong_bc`/`mahjong_eval` (`cp312-abi3`)
-wheels to the `prebuilt-latest` (or manually specified) GitHub Release.
+[The Linux prebuilt workflow](../.github/workflows/linux-prebuilt.yml) builds
+and smoke-tests Linux x86_64 `bc-collect`/`bc-prepare` binaries and
+`mahjong_bc`/`mahjong_eval` (`cp312-abi3`) wheels using a read-only token.
+A separate publish job obtains write permission only after the verified bundle
+is uploaded. Pushes to `main` and manual dispatch from `main` update the
+**mutable** `prebuilt-latest` prerelease. Pushing a `vMAJOR.MINOR.PATCH` tag
+creates a versioned Release without replacing an existing Release or tag.
+Each bundle includes a commit manifest and SHA-256 checksum.
+
+[Secret History Scan](../.github/workflows/secret-scan.yml) runs on PRs,
+`main` pushes, weekly, and on demand. It fetches Git history and uses a pinned
+Gitleaks binary to scan all reachable refs with secret values redacted. The
+scan supplements, but does not replace, manual review of old branches, Actions
+logs and release assets. See the [security guide](../SECURITY.md).
 
 Run the relevant checks locally before submitting changes. A successful CI run
 verifies that specific source revision; it does not establish a performance

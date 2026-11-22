@@ -3,23 +3,19 @@ name: Linux Prebuilt Bundle
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag to create or update (default: prebuilt-latest)"
-        required: false
-        default: "prebuilt-latest"
 
+# Build and test never receive release-write credentials.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: linux-prebuilt-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
-  build-and-publish:
-    name: Build and publish Linux x86_64 prebuilt bundle
+  build:
+    name: Build and verify Linux x86_64 prebuilt bundle
     runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
@@ -158,43 +154,95 @@ jobs:
           ls -lh /tmp/dist
           cat /tmp/dist/manifest.json
 
+      - name: Upload verified build bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-prebuilt-${{ github.sha }}
+          path: /tmp/dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+  publish:
+    name: Publish prebuilt release
+    needs: build
+    # Manual publishing must use main; versioned publishing uses the pushed tag.
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: linux-prebuilt-${{ github.sha }}
+          path: /tmp/dist
+      - name: Validate artifact checksum and provenance
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd /tmp/dist
+          sha256sum --check mahjong-prebuilt-linux-x86_64.tar.gz.sha256
+          tar -xOf mahjong-prebuilt-linux-x86_64.tar.gz manifest.json | cmp - manifest.json
+          python3 -c 'import json, os; assert json.load(open("manifest.json", encoding="utf-8"))["commit"] == os.environ["BUILD_COMMIT"]'
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag || 'prebuilt-latest' }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'prebuilt-latest' }}
           BUILD_COMMIT: ${{ github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
+          set -euo pipefail
           short_sha="${BUILD_COMMIT:0:7}"
           title="Linux x86_64 Prebuilt (${RELEASE_TAG} @ ${short_sha})"
           cat > /tmp/dist/release-notes.md <<EOF
-          Prebuilt Linux x86_64 binaries (\`bc-collect\`, \`bc-prepare\`) and Python wheels (\`mahjong_bc\`, \`mahjong_eval\` \`cp312-abi3\`) for commit \`${BUILD_COMMIT}\`.
+          Prebuilt Linux x86_64 binaries (bc-collect, bc-prepare) and Python wheels (mahjong_bc, mahjong_eval cp312-abi3) for commit ${BUILD_COMMIT}.
 
-          Built on \`ubuntu-22.04\` from a clean checkout with verified compile-time provenance.
+          Built on ubuntu-22.04 from a clean checkout with verified compile-time provenance.
 
-          \`\`\`text
+          SHA-256:
           $(cat /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256)
-          \`\`\`
           EOF
-
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" \
-              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
-              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
-              /tmp/dist/manifest.json \
-              --clobber
-            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" \
-              -f sha="${BUILD_COMMIT}" \
-              -F force=true >/dev/null
-            gh release edit "$RELEASE_TAG" \
-              --title "$title" \
-              --notes-file /tmp/dist/release-notes.md
-          else
+          if [ "$REF_TYPE" = "tag" ]; then
+            if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo 'Release tags must look like v1.2.3 or v1.2.3-rc.1' >&2
+              exit 1
+            fi
+            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+              echo "Versioned release $RELEASE_TAG already exists; refusing to overwrite it" >&2
+              exit 1
+            fi
+            echo 'Versioned release: assets and tag are not overwritten by this workflow.' >> /tmp/dist/release-notes.md
             gh release create "$RELEASE_TAG" \
-              --prerelease \
-              --target "$BUILD_COMMIT" \
+              --verify-tag \
               --title "$title" \
               --notes-file /tmp/dist/release-notes.md \
               /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
               /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
               /tmp/dist/manifest.json
+          else
+            # The rolling preview tag is intentionally mutable, unlike v* releases.
+            echo 'Rolling preview: the prebuilt-latest tag and its assets change with main.' >> /tmp/dist/release-notes.md
+            if gh release view prebuilt-latest >/dev/null 2>&1; then
+              gh release upload prebuilt-latest \
+                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
+                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
+                /tmp/dist/manifest.json \
+                --clobber
+              gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/prebuilt-latest" \
+                -f sha="$BUILD_COMMIT" \
+                -F force=true >/dev/null
+              gh release edit prebuilt-latest \
+                --title "$title" \
+                --notes-file /tmp/dist/release-notes.md
+            else
+              gh release create prebuilt-latest \
+                --prerelease \
+                --target "$BUILD_COMMIT" \
+                --title "$title" \
+                --notes-file /tmp/dist/release-notes.md \
+                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
+                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
+                /tmp/dist/manifest.json
+            fi
           fi

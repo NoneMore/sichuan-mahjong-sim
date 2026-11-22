@@ -40,3 +40,5 @@ Requires Rust 1.75+.
 [BC pipeline](docs/guides/bc-pipeline.md) ·
 [Online evaluation](online/README.md) ·
 [All documentation](docs/README.md)
+
+For security concerns and reporting guidance, see [Security](SECURITY.md).

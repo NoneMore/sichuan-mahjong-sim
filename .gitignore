@@ -11,3 +11,23 @@ __pycache__/
 *.egg-info/
 /python/build/
 /python/dist/
+# Local credentials and identity files (does not erase existing Git history).
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated training datasets, checkpoints, and experiment results.
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.npy
+*.npz
+/bc-data/
+/bc-cache/
+/runs/
+/checkpoints/
