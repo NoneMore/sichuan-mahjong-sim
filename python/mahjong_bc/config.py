@@ -9,15 +9,18 @@ from typing import Any, Mapping
 from .constants import (
     CANDIDATE_WIDTH,
     ENCODING_VERSION,
+    MODEL_FORMAT_VERSION,
     PREPARATION_VERSION,
     SPLIT_NAMES,
     STATE_WIDTH,
+    SUIT_RANK_RESNET_MODEL_FORMAT_VERSION,
 )
 from .errors import ConfigurationError
 
 #: Activation names accepted by :class:`ModelConfig`; the policy factory maps
 #: each name to its ``nn.Module`` implementation.
 ACTIVATION_NAMES = ("relu", "gelu", "tanh")
+MODEL_ARCHITECTURES = ("mlp", "suit-rank-resnet")
 
 
 def _require_mapping(value: Any, name: str) -> Mapping[str, Any]:
@@ -93,6 +96,7 @@ class ModelConfig:
     state_hidden: tuple[int, ...] = (256,)
     scorer_hidden: tuple[int, ...] = (128,)
     activation: str = "relu"
+    architecture: str = "mlp"
 
     def __post_init__(self) -> None:
         if self.encoding_version != ENCODING_VERSION:
@@ -123,28 +127,40 @@ class ModelConfig:
                 f"activation must be one of {list(ACTIVATION_NAMES)}, "
                 f"got {self.activation!r}"
             )
+        if self.architecture not in MODEL_ARCHITECTURES:
+            raise ConfigurationError(
+                f"architecture must be one of {list(MODEL_ARCHITECTURES)}, "
+                f"got {self.architecture!r}"
+            )
+
+    @property
+    def model_format_version(self) -> int:
+        if self.architecture == "suit-rank-resnet":
+            return SUIT_RANK_RESNET_MODEL_FORMAT_VERSION
+        return MODEL_FORMAT_VERSION
 
     def to_dict(self) -> dict[str, Any]:
         value = asdict(self)
         value["state_hidden"] = list(self.state_hidden)
         value["scorer_hidden"] = list(self.scorer_hidden)
+        if self.architecture == "mlp":
+            del value["architecture"]  # Preserve the format 1 model configuration.
         return value
 
     @classmethod
     def from_dict(cls, value: Any) -> ModelConfig:
         value = _require_mapping(value, "model_config")
-        _require_exact_keys(
-            value,
-            {
-                "encoding_version",
-                "state_width",
-                "candidate_width",
-                "state_hidden",
-                "scorer_hidden",
-                "activation",
-            },
-            "model_config",
-        )
+        keys = {
+            "encoding_version",
+            "state_width",
+            "candidate_width",
+            "state_hidden",
+            "scorer_hidden",
+            "activation",
+        }
+        if "architecture" in value:
+            keys.add("architecture")
+        _require_exact_keys(value, keys, "model_config")
         return cls(
             encoding_version=value["encoding_version"],
             state_width=value["state_width"],
@@ -152,6 +168,7 @@ class ModelConfig:
             state_hidden=value["state_hidden"],
             scorer_hidden=value["scorer_hidden"],
             activation=value["activation"],
+            architecture=value.get("architecture", "mlp"),
         )
 
 

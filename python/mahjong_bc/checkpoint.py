@@ -41,6 +41,7 @@ from .constants import (
     ROLE_LAST,
     ROLE_POLICY,
     ROLES,
+    SUIT_RANK_RESNET_MODEL_FORMAT_VERSION,
 )
 from .errors import CheckpointError, ConfigurationError, ResumeError
 from .policy import CandidatePolicy
@@ -152,7 +153,7 @@ class LoadedCheckpoint:
             "role": self.role,
             "package_version": self.package_version,
             "encoding_version": self.encoding_version,
-            "model_format_version": MODEL_FORMAT_VERSION,
+            "model_format_version": self.model_config.model_format_version,
             "checkpoint_format_version": self.checkpoint_format_version,
             "model_config": self.model_config.to_dict(),
             "has_training_state": self.training is not None,
@@ -284,10 +285,11 @@ def _validate_versioned_payload(payload: Any, path: Path) -> Mapping[str, Any]:
             f"{list(_READABLE_CHECKPOINT_FORMAT_VERSIONS)}"
         )
     model_version = payload["model_format_version"]
-    if model_version != MODEL_FORMAT_VERSION:
+    readable_models = (MODEL_FORMAT_VERSION, SUIT_RANK_RESNET_MODEL_FORMAT_VERSION)
+    if model_version not in readable_models:
         raise CheckpointError(
             f"{path} has model format version {model_version}; "
-            f"supported version is {MODEL_FORMAT_VERSION}"
+            f"supported versions are {list(readable_models)}"
         )
     encoding_version = payload["encoding_version"]
     if encoding_version != ENCODING_VERSION:
@@ -515,7 +517,7 @@ def build_payload(
     return {
         "kind": CHECKPOINT_KIND,
         "checkpoint_format_version": CHECKPOINT_FORMAT_VERSION,
-        "model_format_version": MODEL_FORMAT_VERSION,
+        "model_format_version": model.config.model_format_version,
         "encoding_version": ENCODING_VERSION,
         "package_version": PACKAGE_VERSION,
         "role": role,
@@ -568,6 +570,10 @@ def load_checkpoint(
         model_config = ModelConfig.from_dict(payload["model_config"])
     except ConfigurationError as exc:
         raise CheckpointError(f"invalid model configuration: {exc}") from exc
+    if payload["model_format_version"] != model_config.model_format_version:
+        raise CheckpointError(
+            "checkpoint model format version does not match its architecture"
+        )
     if payload["encoding_version"] != model_config.encoding_version:
         raise CheckpointError(
             "checkpoint encoding version does not match its model configuration"

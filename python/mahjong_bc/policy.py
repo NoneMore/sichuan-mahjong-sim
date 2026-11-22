@@ -43,12 +43,111 @@ def _mlp(
     return nn.Sequential(*layers)
 
 
+_SUITS = 3
+_RANKS = 9
+_TILES = _SUITS * _RANKS
+_SEATS = 4
+_MELD_SLOTS = 4
+_MELD_FIELDS = 1 + _TILES + 4 + 5
+_PLAYER_FIELDS = 7 + _MELD_SLOTS * _MELD_FIELDS
+_DISCARD_PLANES = _SEATS * 3
+_CONTEXT_FIELDS = 9
+_RESPONSE_FIELDS = 1 + _TILES + 5
+_TILE_PLANES = 1 + _DISCARD_PLANES + _SEATS * (4 + 5) + _SEATS + 1
+_GLOBAL_FIELDS = _SEATS * 4 + _CONTEXT_FIELDS + 6
+
+
+def _suit_rank_features(states: Tensor) -> tuple[Tensor, Tensor]:
+    """Rearrange the Rust v1 state into tile planes and global scalars."""
+    hand, players, discards, context, response = states.split(
+        (
+            _TILES,
+            _SEATS * _PLAYER_FIELDS,
+            _DISCARD_PLANES * _TILES,
+            _CONTEXT_FIELDS,
+            _RESPONSE_FIELDS,
+        ),
+        dim=1,
+    )
+    batch = states.shape[0]
+    players = players.reshape(batch, _SEATS, _PLAYER_FIELDS)
+    melds = players[..., 7:].reshape(batch, _SEATS, _MELD_SLOTS, _MELD_FIELDS)
+    _, meld_tiles, meld_attributes = melds.split((1, _TILES, 4 + 5), dim=-1)
+    # Within each owner's melds, a tile kind identifies at most one occupied
+    # slot. This attaches kind and source to the tile without encoding slot order.
+    meld_planes = (meld_tiles.transpose(-2, -1) @ meld_attributes).transpose(-2, -1)
+    missing_suit = players[..., 1:4].unsqueeze(-1).expand(-1, -1, -1, _RANKS)
+    response_present, response_tile, response_context = response.split(
+        (1, _TILES, 5), dim=1
+    )
+    planes = torch.cat(
+        (
+            hand.unsqueeze(1),
+            discards.reshape(batch, _DISCARD_PLANES, _TILES),
+            meld_planes.reshape(batch, _SEATS * (4 + 5), _TILES),
+            missing_suit.reshape(batch, _SEATS, _TILES),
+            response_tile.unsqueeze(1),
+        ),
+        dim=1,
+    )
+    global_features = torch.cat(
+        (
+            players[..., :1].flatten(1),
+            players[..., 4:7].reshape(batch, 3 * _SEATS),
+            context,
+            response_present,
+            response_context,
+        ),
+        dim=1,
+    )
+    return planes.reshape(batch, _TILE_PLANES, _SUITS, _RANKS), global_features
+
+
+class _RankResidualBlock(nn.Module):
+    def __init__(self, channels: int, activation: str) -> None:
+        super().__init__()
+        self.residual = nn.Sequential(
+            nn.Conv2d(channels, channels, (1, 3), padding=(0, 1)),
+            _activation(activation),
+            nn.Conv2d(channels, channels, (1, 3), padding=(0, 1)),
+        )
+        self.activation = _activation(activation)
+
+    def forward(self, tiles: Tensor) -> Tensor:
+        return self.activation(tiles + self.residual(tiles))
+
+
+class _SuitRankEncoder(nn.Module):
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        channels = 32
+        # Kernel height one applies the same rank convolution to every suit.
+        self.ranks = nn.Sequential(
+            nn.Conv2d(_TILE_PLANES, channels, (1, 3), padding=(0, 1)),
+            _activation(config.activation),
+            _RankResidualBlock(channels, config.activation),
+            _RankResidualBlock(channels, config.activation),
+        ).to(memory_format=torch.channels_last)
+        self.fuse = _mlp(
+            (channels * _TILES + _GLOBAL_FIELDS, *config.state_hidden),
+            config.activation,
+        )
+
+    def forward(self, states: Tensor) -> Tensor:
+        planes, global_features = _suit_rank_features(states)
+        local = self.ranks(planes.contiguous(memory_format=torch.channels_last))
+        # Fuse the full rank maps in canonical suit order. The teacher can use
+        # suit identity for ties, while neighboring ranks share the local weights.
+        local = local.permute(0, 2, 3, 1).flatten(1)
+        return self.fuse(torch.cat((local, global_features), dim=1))
+
+
 class CandidatePolicy(nn.Module):
     """Pointwise candidate scorer with one shared state representation.
 
     Architecture::
 
-        state -> state MLP -> h
+        state -> configured state encoder -> h
         concat(h, candidate_features) -> scorer MLP -> single logit
 
     The scorer is shared across all candidates and stages, and has at least one
@@ -63,7 +162,10 @@ class CandidatePolicy(nn.Module):
             self.config.state_width,
             *self.config.state_hidden,
         )
-        self.state_encoder = _mlp(widths, self.config.activation)
+        if self.config.architecture == "suit-rank-resnet":
+            self.state_encoder = _SuitRankEncoder(self.config)
+        else:
+            self.state_encoder = _mlp(widths, self.config.activation)
         state_output = self.config.state_hidden[-1]
         scorer_widths = (
             state_output + self.config.candidate_width,

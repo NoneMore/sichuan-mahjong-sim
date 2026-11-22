@@ -91,7 +91,10 @@ copies before releasing staging or closing input datasets. Host errors arrive
 in batch order; device errors terminate the epoch without retry or fallback.
 
 The policy embeds the state once and scores each legal candidate with a
-shared nonlinear network; candidate position does not enter the model.
+shared nonlinear network. The default state encoder is a flat MLP.
+The suit/rank ResNet arranges the same v1 state into tile planes and global
+features. It shares rank convolution weights across suits and fuses the three
+suit maps in canonical order with the global features before candidate scoring.
 Training visits every eligible decision each seeded epoch, uses
 equal-weight imitation loss and reports forced decisions separately.
 

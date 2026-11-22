@@ -64,8 +64,11 @@ SPLIT_ALGORITHM = "seed-sha256-80-10-10-v1"
 #: resumed.
 CHECKPOINT_FORMAT_VERSION = 3
 
-#: Candidate-scoring model architecture/serialization format.
+#: Flat MLP candidate-scoring serialization format.
 MODEL_FORMAT_VERSION = 1
+
+#: Suit/rank residual candidate-scoring serialization format.
+SUIT_RANK_RESNET_MODEL_FORMAT_VERSION = 2
 
 #: Dataset split names accepted by this package.
 SPLIT_NAMES = ("train", "validation", "test")

@@ -15,6 +15,7 @@ from mahjong_bc.policy import (
     _greedy_indices_validated,
     _masked_cross_entropy_validated,
     _require_finite_valid,
+    _suit_rank_features,
     build_policy,
     decision_nll,
     greedy_indices,
@@ -70,6 +71,70 @@ def test_model_emits_float32_logits_without_dropout_or_normalization():
     assert names["candidate_scorer"][-1].__class__ is nn.Linear
     assert names["state_encoder"][-1].__class__ is nn.ReLU
     assert isinstance(model.candidate_scorer[-2], nn.ReLU)
+
+
+def test_suit_rank_features_preserve_v1_layout():
+    state = torch.zeros(1, 1013)
+    state[0, 9] = 0.75  # Own hand, first Tong.
+    player = 27 + 155  # Next clockwise.
+    state[0, player + 2] = 1  # Missing Tong.
+    state[0, player + 5] = -0.5
+    meld = player + 7
+    state[0, meld] = 1
+    state[0, meld + 1 + 20] = 1  # Tiao 3.
+    state[0, meld + 28 + 1] = 1  # Open kong.
+    state[0, meld + 32 + 3] = 1  # Source is previous clockwise.
+    state[0, 647 + (2 * 3 + 1) * 27 + 8] = 0.25
+    state[0, 971] = 0.5  # Wall.
+    state[0, 980] = 1  # Response present.
+    state[0, 981 + 17] = 1  # Tong 9.
+    state[0, 1008 + 2] = 1  # Response source is opposite.
+    planes, global_features = _suit_rank_features(state)
+
+    expected = torch.zeros(1, 54, 3, 9)
+    expected[0, 0, 1, 0] = 0.75
+    expected[0, 8, 0, 8] = 0.25
+    expected[0, 23, 2, 2] = 1
+    expected[0, 29, 2, 2] = 1
+    expected[0, 50, 1] = 1
+    expected[0, 53, 1, 8] = 1
+    torch.testing.assert_close(planes, expected)
+    expected_global = torch.zeros(1, 31)
+    expected_global[0, 8] = -0.5
+    expected_global[0, 16] = 0.5
+    expected_global[0, 25] = 1
+    expected_global[0, 28] = 1
+    torch.testing.assert_close(global_features, expected_global)
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        "cpu",
+        pytest.param(
+            "cuda",
+            marks=pytest.mark.skipif(
+                not torch.cuda.is_available(), reason="CUDA is not available"
+            ),
+        ),
+    ],
+)
+def test_suit_rank_encoder_shares_suit_weights_and_scores_packed_candidates(device):
+    model = build_policy(ModelConfig(architecture="suit-rank-resnet"), seed=1).to(device)
+    states, features, mask, _ = (value.to(device) for value in inputs())
+    planes, _ = _suit_rank_features(states)
+    order = [2, 0, 1]
+    torch.testing.assert_close(
+        model.state_encoder.ranks(planes[:, :, order]),
+        model.state_encoder.ranks(planes)[:, :, order],
+    )
+    positions = mask.flatten().nonzero().flatten()
+    packed = model(
+        states, features[mask], mask, packed=True, candidate_positions=positions
+    )
+    torch.testing.assert_close(packed[mask], model(states, features, mask)[mask])
+    packed[mask].sum().backward()
+    assert all(parameter.grad is not None for parameter in model.parameters())
 
 
 def _padded_batch_inputs():

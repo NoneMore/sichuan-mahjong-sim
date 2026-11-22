@@ -30,6 +30,7 @@ from mahjong_bc.constants import (
     ROLE_BEST,
     ROLE_LAST,
     ROLE_POLICY,
+    SUIT_RANK_RESNET_MODEL_FORMAT_VERSION,
 )
 from mahjong_bc.errors import CheckpointError, ConfigurationError, ResumeError
 from mahjong_bc.policy import build_policy
@@ -105,9 +106,19 @@ def _legacy_format2_payload(model, role: str = ROLE_BEST) -> dict:
     return payload
 
 
-def test_policy_checkpoint_roundtrip_and_shared_loader(tmp_path):
+@pytest.mark.parametrize(
+    ("architecture", "model_format"),
+    [
+        ("mlp", MODEL_FORMAT_VERSION),
+        ("suit-rank-resnet", SUIT_RANK_RESNET_MODEL_FORMAT_VERSION),
+    ],
+)
+def test_policy_checkpoint_roundtrip_and_shared_loader(tmp_path, architecture, model_format):
     path = tmp_path / "policy.pt"
-    model = _model()
+    model = build_policy(
+        ModelConfig(state_hidden=(8,), scorer_hidden=(8,), architecture=architecture),
+        seed=2,
+    )
     model.eval()
     before = {name: value.clone() for name, value in model.state_dict().items()}
     save_checkpoint(path, model, role=ROLE_POLICY, metrics={"nll": 1.25})
@@ -123,7 +134,8 @@ def test_policy_checkpoint_roundtrip_and_shared_loader(tmp_path):
     assert metadata["has_training_state"] is False
     assert metadata["completed_epochs"] is None
     assert metadata["checkpoint_format_version"] == CHECKPOINT_FORMAT_VERSION
-    assert metadata["model_format_version"] == MODEL_FORMAT_VERSION
+    assert metadata["model_format_version"] == model_format
+    assert ("architecture" in metadata["model_config"]) == (architecture != "mlp")
     with pytest.raises(CheckpointError, match="recoverable training state"):
         load_checkpoint(path, require_training=True)
 
@@ -255,7 +267,7 @@ def test_resume_comparison_rejects_every_identity_dimension(tmp_path):
     [
         ("checkpoint_format_version", 1),
         ("checkpoint_format_version", 4),
-        ("model_format_version", 2),
+        ("model_format_version", 3),
         ("encoding_version", 2),
         ("role", "unknown"),
         ("kind", "other-checkpoint"),
@@ -270,6 +282,15 @@ def test_loader_rejects_unsupported_versions_roles_and_markers(
     path = tmp_path / "bad.pt"
     atomic_torch_save(payload, path)
     with pytest.raises(CheckpointError):
+        load_checkpoint(path)
+
+
+def test_loader_rejects_model_format_architecture_mismatch(tmp_path):
+    path = tmp_path / "bad.pt"
+    payload = build_payload(_model(), role=ROLE_POLICY)
+    payload["model_format_version"] = SUIT_RANK_RESNET_MODEL_FORMAT_VERSION
+    atomic_torch_save(payload, path)
+    with pytest.raises(CheckpointError, match="version does not match its architecture"):
         load_checkpoint(path)
 
 
