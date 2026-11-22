@@ -72,6 +72,8 @@ access and cache validation details.
 
 ## 4. Train, select, and evaluate a frozen policy
 
+For the 50,000-game configuration, see the [BC baseline recipe](bc-baseline.md).
+
 ```sh
 python -m mahjong_bc train --dataset ../bc-cache --output ../bc-run \
   --seed 7 --epochs 2 --batch-size 64 --learning-rate 0.001 --device cpu
