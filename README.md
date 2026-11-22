@@ -41,8 +41,6 @@ Requires Rust 1.75+.
 [Online evaluation](online/README.md) ·
 [All documentation](docs/README.md)
 
-For security concerns and reporting guidance, see [Security](SECURITY.md).
-
 ## License
 
 Licensed under the [MIT License](LICENSE).

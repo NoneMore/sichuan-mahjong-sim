@@ -62,10 +62,6 @@ without replacing an existing Release or tag. The old `prebuilt-latest`
 release is legacy and is not updated by this workflow. Each bundle includes
 a commit manifest and SHA-256 checksum.
 
-The [security guide](../SECURITY.md) explains how to manually repeat the
-one-time Git history credential scan used during public-release review.
-No recurring secret-scanning workflow is configured.
-
 Run the relevant checks locally before submitting changes. A successful CI run
 verifies that specific source revision; it does not establish a performance
 guarantee or replay equivalence to earlier revisions. For behavior-changing
