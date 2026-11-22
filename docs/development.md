@@ -51,6 +51,11 @@ warning-denied rustdoc. The separate MSRV job checks all workspace targets with
 Rust 1.75.0, the minimum declared by both packages. Builds and tests use the
 committed root lockfile.
 
+[The Linux prebuilt workflow](../.github/workflows/linux-prebuilt.yml) runs on
+pushes to `main` and manual dispatch, publishing clean-provenance Linux x86_64
+`bc-collect`/`bc-prepare` binaries and `mahjong_bc`/`mahjong_eval` (`cp312-abi3`)
+wheels to the `prebuilt-latest` (or manually specified) GitHub Release.
+
 Run the relevant checks locally before submitting changes. A successful CI run
 verifies that specific source revision; it does not establish a performance
 guarantee or replay equivalence to earlier revisions. For behavior-changing

@@ -1,0 +1,200 @@
+name: Linux Prebuilt Bundle
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create or update (default: prebuilt-latest)"
+        required: false
+        default: "prebuilt-latest"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: linux-prebuilt-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    name: Build and publish Linux x86_64 prebuilt bundle
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust toolchain
+        run: rustup toolchain install stable --profile minimal
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Verify clean checkout before compilation
+        run: |
+          status="$(git status --porcelain --untracked-files=normal)"
+          if [ -n "$status" ]; then
+            echo "Working tree must be clean for provenance:"
+            echo "$status"
+            exit 1
+          fi
+
+      - name: Prepare external build venv
+        run: |
+          python3 -m venv /tmp/build-venv
+          /tmp/build-venv/bin/python -m pip install --upgrade pip
+          /tmp/build-venv/bin/python -m pip install "setuptools>=68" wheel "maturin>=1.16,<2"
+
+      - name: Build Rust collector and preparer binaries
+        env:
+          CARGO_TARGET_DIR: /tmp/cargo-target
+        run: |
+          mkdir -p /tmp/stage/bin /tmp/stage/wheels /tmp/dist
+          cargo +stable build --release --locked \
+            -p sichuan-mahjong-neural \
+            --bin bc-collect \
+            --bin bc-prepare
+          install -m 0755 /tmp/cargo-target/release/bc-collect /tmp/stage/bin/bc-collect
+          install -m 0755 /tmp/cargo-target/release/bc-prepare /tmp/stage/bin/bc-prepare
+
+      - name: Build online PyO3 abi3 wheel
+        working-directory: online
+        env:
+          CARGO_TARGET_DIR: /tmp/cargo-target-python
+        run: |
+          /tmp/build-venv/bin/python -m maturin build \
+            --release --locked \
+            --out /tmp/stage/wheels
+
+      - name: Build offline Python wheel
+        run: |
+          /tmp/build-venv/bin/python -m pip wheel \
+            --no-deps --no-build-isolation \
+            --wheel-dir /tmp/stage/wheels \
+            ./python
+
+      - name: Smoke-test prebuilt binaries and wheels outside checkout
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          /tmp/stage/bin/bc-collect collect \
+            --root /tmp/smoke-corpus \
+            --games 1 \
+            --seed-start 0 \
+            --shard-games 1 \
+            --cache-bytes 0
+          /tmp/stage/bin/bc-collect verify --root /tmp/smoke-corpus
+          /tmp/stage/bin/bc-prepare prepare --corpus /tmp/smoke-corpus --out /tmp/smoke-cache
+          /tmp/stage/bin/bc-prepare verify --cache /tmp/smoke-cache
+
+          python3 -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/python -m pip install -q "numpy>=2"
+          /tmp/smoke-venv/bin/python -m pip install -q torch --index-url https://download.pytorch.org/whl/cpu
+          /tmp/smoke-venv/bin/python -m pip install -q --no-deps /tmp/stage/wheels/*.whl
+
+          cd /tmp
+          /tmp/smoke-venv/bin/python -m mahjong_bc version
+          /tmp/smoke-venv/bin/python -m mahjong_eval version
+          /tmp/smoke-venv/bin/python - <<'PY'
+          import os
+          import mahjong_bc
+          import mahjong_eval
+
+          expected = os.environ["EXPECTED_COMMIT"]
+          source = mahjong_eval.compiled_source()["extension"]
+          assert source["source_complete"], source
+          assert source["git_available"], source
+          assert not source["git_dirty"], source
+          assert source["git_commit"] == expected, (source["git_commit"], expected)
+          assert mahjong_eval.Env().reset(0).candidate_count > 0
+          print("smoke test passed for commit", expected)
+          PY
+
+      - name: Write manifest and package prebuilt archive
+        env:
+          BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          stage = Path("/tmp/stage")
+          commit = os.environ["BUILD_COMMIT"]
+          rustc = subprocess.check_output(["rustc", "+stable", "--version"], text=True).strip()
+          glibc = subprocess.check_output(["ldd", "--version"], text=True).splitlines()[0].strip()
+
+          files = {}
+          for path in sorted(stage.rglob("*")):
+              if not path.is_file() or path.name == "manifest.json":
+                  continue
+              rel = path.relative_to(stage).as_posix()
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              files[rel] = {"size": path.stat().st_size, "sha256": digest}
+
+          manifest = {
+              "schema_version": 1,
+              "platform": "linux-x86_64",
+              "commit": commit,
+              "short_commit": commit[:7],
+              "built_at_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "rustc": rustc,
+              "glibc": glibc,
+              "files": files,
+          }
+          (stage / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          Path("/tmp/dist/manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+
+          tar -C /tmp/stage -czf /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz bin wheels manifest.json
+          (cd /tmp/dist && sha256sum mahjong-prebuilt-linux-x86_64.tar.gz > mahjong-prebuilt-linux-x86_64.tar.gz.sha256)
+          ls -lh /tmp/dist
+          cat /tmp/dist/manifest.json
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || 'prebuilt-latest' }}
+          BUILD_COMMIT: ${{ github.sha }}
+        run: |
+          short_sha="${BUILD_COMMIT:0:7}"
+          title="Linux x86_64 Prebuilt (${RELEASE_TAG} @ ${short_sha})"
+          cat > /tmp/dist/release-notes.md <<EOF
+          Prebuilt Linux x86_64 binaries (\`bc-collect\`, \`bc-prepare\`) and Python wheels (\`mahjong_bc\`, \`mahjong_eval\` \`cp312-abi3\`) for commit \`${BUILD_COMMIT}\`.
+
+          Built on \`ubuntu-22.04\` from a clean checkout with verified compile-time provenance.
+
+          \`\`\`text
+          $(cat /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256)
+          \`\`\`
+          EOF
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" \
+              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
+              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
+              /tmp/dist/manifest.json \
+              --clobber
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${RELEASE_TAG}" \
+              -f sha="${BUILD_COMMIT}" \
+              -F force=true >/dev/null
+            gh release edit "$RELEASE_TAG" \
+              --title "$title" \
+              --notes-file /tmp/dist/release-notes.md
+          else
+            gh release create "$RELEASE_TAG" \
+              --prerelease \
+              --target "$BUILD_COMMIT" \
+              --title "$title" \
+              --notes-file /tmp/dist/release-notes.md \
+              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
+              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
+              /tmp/dist/manifest.json
+          fi
