@@ -62,11 +62,9 @@ without replacing an existing Release or tag. The old `prebuilt-latest`
 release is legacy and is not updated by this workflow. Each bundle includes
 a commit manifest and SHA-256 checksum.
 
-[Secret History Scan](../.github/workflows/secret-scan.yml) runs on PRs,
-`main` pushes, weekly, and on demand. It fetches Git history and uses a pinned
-Gitleaks binary to scan all reachable refs with secret values redacted. The
-scan supplements, but does not replace, manual review of old branches, Actions
-logs and release assets. See the [security guide](../SECURITY.md).
+The [security guide](../SECURITY.md) explains how to manually repeat the
+one-time Git history credential scan used during public-release review.
+No recurring secret-scanning workflow is configured.
 
 Run the relevant checks locally before submitting changes. A successful CI run
 verifies that specific source revision; it does not establish a performance

@@ -21,9 +21,10 @@ git fetch --all --prune --tags
 gitleaks git --log-opts='--all' --redact .
 ```
 
-The [Secret History Scan](.github/workflows/secret-scan.yml) repeats a Gitleaks
-scan on pull requests, pushes to `main`, weekly, and on demand. A clean scan
-does not establish that no sensitive information has ever been published.
+A one-time Gitleaks history scan was completed during public-release review.
+There is no recurring secret-scanning GitHub Actions workflow. Run the
+commands above when reviewing history again; a clean scan does not establish
+that no sensitive information has ever been published.
 
 If a real credential is found, revoke or rotate it first. Then investigate
 its exposure in all branches, Git history, Actions logs and releases.
