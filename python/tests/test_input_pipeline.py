@@ -533,7 +533,7 @@ def test_prefetch_validation_accepts_a_valid_request(model):
 
 
 @CUDA
-def test_prefetch_training_batches_match_the_sync_path(model):
+def test_prefetch_training_batches_match_the_sync_path(model, monkeypatch):
     dataset = freeze(
         make_dataset(split="train", counts=[2, 3, 1, 4, 2, 5, 2, 3], seed=46)
     )
@@ -544,6 +544,13 @@ def test_prefetch_training_batches_match_the_sync_path(model):
         pinned_limit_bytes=pinned_bytes(dataset, indices, batch_size, training=True),
     )
     expected = reference_batches(dataset, indices, batch_size, training=True)
+    stage = pipeline_module._PrefetchPipeline._stage
+
+    def stage_direct_states(pipeline, slot, host_batch, index):
+        assert host_batch.states.data_ptr() == slot.states.data_ptr()
+        return stage(pipeline, slot, host_batch, index)
+
+    monkeypatch.setattr(pipeline_module._PrefetchPipeline, "_stage", stage_direct_states)
     got = collect(
         dataset,
         indices,

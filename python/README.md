@@ -237,3 +237,25 @@ targets, metadata and padded batches. The recovery probe injects a mid-epoch
 CPU failure, compares replay order/steps and model/optimizer states exactly with
 a continuous run, migrates a completed run and evaluates the frozen best model.
 It uses one CPU thread and requires a new output directory.
+
+## Training profiling
+
+Use [profile_training.py](tools/profile_training.py) with a prepared cache and
+a new output directory. This example profiles training with RAM storage and
+CUDA prefetch.
+
+```text
+python python/tools/profile_training.py --dataset ../bc-cache --output ../bc-profile --storage ram --ram-limit-mib 14336 --batch-transfer cuda-prefetch --pinned-limit-mib 64 --repeats 3
+```
+
+Timing mode warms up with one full epoch by default. Each measured trial starts
+from the same seed and includes a full training epoch, validation and checkpoint
+publication. The report gives split loading time separately, records the source
+hash and run settings, and checks both checkpoints for exact payload equality
+across measured trials. Use `--reference-run ../bc-profile/trial-1` to check
+equality against a specific trial from another run.
+
+Use `--mode host` for inclusive host spans including gathering, staging and
+consumer waits. Use `--mode cuda-trace` for a Chrome trace and GPU activity
+summary over the training window selected by `--trace-wait`, `--trace-warmup`
+and `--trace-steps`. Use uninstrumented timing runs for throughput comparisons.
