@@ -15,7 +15,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from bisect import bisect_right
 from dataclasses import dataclass, replace
-from typing import Iterator, Sequence
+from typing import Callable, Iterator, Sequence
 
 import numpy as np
 import torch
@@ -669,6 +669,7 @@ def _unsigned_metadata_overflows(
 def _gather_base_columns(
     batch_size: int,
     segments: Sequence[tuple[np.ndarray, PackedDecisionDataset, np.ndarray]],
+    states_out: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Gather states and targets with the current offsets' candidate spans.
 
@@ -679,7 +680,11 @@ def _gather_base_columns(
 
     if batch_size < 1:
         raise DataError("cannot collate an empty batch")
-    states = np.empty((batch_size, STATE_WIDTH), dtype=np.float32)
+    states = (
+        np.empty((batch_size, STATE_WIDTH), dtype=np.float32)
+        if states_out is None
+        else states_out
+    )
     counts = np.empty(batch_size, dtype=np.int64)
     starts = np.empty(batch_size, dtype=np.int64)
     targets = np.empty(batch_size, dtype=np.int64)
@@ -689,7 +694,12 @@ def _gather_base_columns(
             np.asarray(shard.offsets[local + 1], dtype=np.int64) - segment_starts
         )
         starts[rows] = segment_starts
-        states[rows] = shard.states[local]
+        if states_out is None:
+            states[rows] = shard.states[local]
+        else:
+            # The single RAM segment spans the batch in order and its indices
+            # are already checked. NumPy buffers out in raise mode.
+            np.take(shard.states, local, axis=0, out=states, mode="clip")
         targets[rows] = shard.targets[local]
     return states, counts, starts, targets
 
@@ -780,6 +790,7 @@ def _gather_pruned_segments(
     *,
     training: bool,
     packed_candidates: bool = False,
+    states_out: Tensor | None = None,
 ) -> _PrunedDecisionBatch | _PackedCandidateBatch:
     """Gather only the tensors selected by an internal consumer.
 
@@ -792,7 +803,9 @@ def _gather_pruned_segments(
     scoring can rebuild the padded layout with fixed-shape indices.
     """
 
-    states, counts, starts, targets = _gather_base_columns(batch_size, segments)
+    states, counts, starts, targets = _gather_base_columns(
+        batch_size, segments, None if states_out is None else states_out.numpy()
+    )
     _require_gathered_targets(targets, counts)
     # Cached traversal indices can become forced after an in-place offsets edit.
     if training and np.any(counts <= FORCED_CANDIDATE_COUNT):
@@ -808,7 +821,7 @@ def _gather_pruned_segments(
     mask_array = np.arange(max_count)[None, :] < counts[:, None]
     if packed_candidates:
         return _PackedCandidateBatch(
-            states=torch.from_numpy(states),
+            states=torch.from_numpy(states) if states_out is None else states_out,
             candidates=torch.from_numpy(
                 _flat_candidate_rows(segments, counts, starts)
             ),
@@ -923,6 +936,7 @@ def _iter_model_batches(
     num_workers: int = 0,
     training: bool,
     packed_candidates: bool = False,
+    reserve_states: Callable[[int, int], Tensor | None] | None = None,
 ) -> Iterator[DecisionBatch | _PrunedDecisionBatch | _PackedCandidateBatch]:
     """Gather training/evaluation fields, retaining full batches on fallback.
 
@@ -931,8 +945,9 @@ def _iter_model_batches(
     public fallback batches retain the consumer's original validation.
     ``packed_candidates`` only applies to built-in packed datasets with target
     kinds and asks for flat valid candidates instead of padded ones; it is
-    opt-in because scoring that layout needs the built-in policy. The default
-    keeps the padded batch every existing consumer expects.
+    opt-in because scoring that layout needs the built-in policy.
+    ``reserve_states`` is used by RAM training prefetch after indices are
+    checked. A callback result of ``None`` ends a cancelled traversal.
     """
 
     packed = _packed_dataset(dataset) if num_workers == 0 else None
@@ -951,6 +966,11 @@ def _iter_model_batches(
             raise DataError("dataset is closed")
         positions = ordered[start : start + batch_size]
         _check_batch_positions(positions, len(packed))
+        states_out = None
+        if reserve_states is not None:
+            states_out = reserve_states(start // batch_size, positions.size)
+            if states_out is None:
+                return
         segments = (
             _shard_segments(packed, positions)
             if type(packed) is ShardedDecisionDataset
@@ -961,6 +981,7 @@ def _iter_model_batches(
             segments,
             training=training,
             packed_candidates=packed_candidates,
+            states_out=states_out,
         )
 
 
