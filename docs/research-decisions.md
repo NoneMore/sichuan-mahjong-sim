@@ -58,7 +58,6 @@ Full/D+U checks a predicted equality of chosen actions, not a score gain.
 
 **Decision.** The candidate missed the combined acceptance rule. Choosing
 whether to redesign the exchange proxy or abandon it remains open.
-[Experiment specification](https://github.com/NoneMore/sichuan-mahjong-sim/blob/d21504988b394072bba6205fa3e6b85e9fc3a1b7/specs/active/heuristic-exchange-structure-proxy/spec.md).
 
 ### Needed-mask DP suffix bound
 
@@ -81,7 +80,6 @@ B/B noise bound, again for both seeds.
 
 **Decision.** Correctness checks passed, but the short and long performance
 gates conflicted. Adoption requires a newly fixed complete performance study.
-[Experiment specification](https://github.com/NoneMore/sichuan-mahjong-sim/blob/5360ab6ce520569142341de8ceb814549c50fc07/specs/active/needed-suffix-bound/spec.md).
 
 ## Decisions against the tested candidates
 
@@ -100,7 +98,6 @@ five B/C pairs, in round order BB, BC, CB, BB, BC, CB, BB, BC.
 **Acceptance / decision.** Require the common paired total-time gate at both
 seeds. The tested C failed and was rolled back; any revised approach needs a
 fresh comparison including reverse-scan and allocation costs.
-[Experiment specification](https://github.com/NoneMore/sichuan-mahjong-sim/blob/cc1a32e30919d6775d952733328ca875080b5b86/specs/archive/batch-needed-sensitivity/spec.md).
 
 ### Suit-local masked DP u16
 
@@ -116,7 +113,6 @@ three B/B plus five alternating B/C pairs.
 **Acceptance / decision.** Apply the paired gate independently to **both
 total and policy time**, for each seed. The candidate failed; retain the u32
 layout unless a new candidate meets a new preregistered gate.
-[Experiment specification](https://github.com/NoneMore/sichuan-mahjong-sim/blob/01b25dac1f975d60da5c78eb3f0a51cef1654297/specs/archive/masked-dp-u16/spec.md).
 
 ### Shared needed/surplus suit DP
 
@@ -133,4 +129,3 @@ warmup 20, three B/B and five alternating B/C pairs.
 **Acceptance / decision.** Require the common paired total-time gate at both
 seeds. The tested shared cache failed and was rolled back; a new design must
 measure both saved builds and the cost of sharing.
-[Experiment specification](https://github.com/NoneMore/sichuan-mahjong-sim/blob/85e44a9570b0486ee724e5aa8af881cb07c7759a/specs/archive/dual-mask-suit-dp/spec.md).
