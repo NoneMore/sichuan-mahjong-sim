@@ -189,12 +189,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'prebuilt-latest' }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           BUILD_COMMIT: ${{ github.sha }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
           set -euo pipefail
-          short_sha="${BUILD_COMMIT:0:7}"
+          short_sha="${BUILD_COMMIT:0:12}"
+          if [ "$REF_TYPE" != "tag" ]; then
+            RELEASE_TAG="prebuilt-${short_sha}"
+          fi
           title="Linux x86_64 Prebuilt (${RELEASE_TAG} @ ${short_sha})"
           cat > /tmp/dist/release-notes.md <<EOF
           Prebuilt Linux x86_64 binaries (bc-collect, bc-prepare) and Python wheels (mahjong_bc, mahjong_eval cp312-abi3) for commit ${BUILD_COMMIT}.
@@ -222,28 +225,18 @@ jobs:
               /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
               /tmp/dist/manifest.json
           else
-            # The rolling preview tag is intentionally mutable, unlike v* releases.
-            echo 'Rolling preview: the prebuilt-latest tag and its assets change with main.' >> /tmp/dist/release-notes.md
-            if gh release view prebuilt-latest >/dev/null 2>&1; then
-              gh release upload prebuilt-latest \
-                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
-                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
-                /tmp/dist/manifest.json \
-                --clobber
-              gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/prebuilt-latest" \
-                -f sha="$BUILD_COMMIT" \
-                -F force=true >/dev/null
-              gh release edit prebuilt-latest \
-                --title "$title" \
-                --notes-file /tmp/dist/release-notes.md
-            else
-              gh release create prebuilt-latest \
-                --prerelease \
-                --target "$BUILD_COMMIT" \
-                --title "$title" \
-                --notes-file /tmp/dist/release-notes.md \
-                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
-                /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
-                /tmp/dist/manifest.json
+            # Preview releases are commit-addressed and never move Git refs.
+            echo 'Commit-specific preview: this tag and its assets are never overwritten.' >> /tmp/dist/release-notes.md
+            if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+              echo "Preview $RELEASE_TAG already exists; leaving it unchanged"
+              exit 0
             fi
+            gh release create "$RELEASE_TAG" \
+              --prerelease \
+              --target "$BUILD_COMMIT" \
+              --title "$title" \
+              --notes-file /tmp/dist/release-notes.md \
+              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz \
+              /tmp/dist/mahjong-prebuilt-linux-x86_64.tar.gz.sha256 \
+              /tmp/dist/manifest.json
           fi

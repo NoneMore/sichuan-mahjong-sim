@@ -55,10 +55,12 @@ committed root lockfile.
 and smoke-tests Linux x86_64 `bc-collect`/`bc-prepare` binaries and
 `mahjong_bc`/`mahjong_eval` (`cp312-abi3`) wheels using a read-only token.
 A separate publish job obtains write permission only after the verified bundle
-is uploaded. Pushes to `main` and manual dispatch from `main` update the
-**mutable** `prebuilt-latest` prerelease. Pushing a `vMAJOR.MINOR.PATCH` tag
-creates a versioned Release without replacing an existing Release or tag.
-Each bundle includes a commit manifest and SHA-256 checksum.
+is uploaded. Pushes to `main` and manual dispatch from `main` create
+**commit-specific**, non-overwritten `prebuilt-<12-character-commit-SHA>`
+prereleases. Pushing a `vMAJOR.MINOR.PATCH` tag creates a versioned Release
+without replacing an existing Release or tag. The old `prebuilt-latest`
+release is legacy and is not updated by this workflow. Each bundle includes
+a commit manifest and SHA-256 checksum.
 
 [Secret History Scan](../.github/workflows/secret-scan.yml) runs on PRs,
 `main` pushes, weekly, and on demand. It fetches Git history and uses a pinned
