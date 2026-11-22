@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   cleanup:
-    if: startsWith(github.event.head_commit.message, 'chore: adopt MIT and prune legacy branches')
+    if: "${{ startsWith(github.event.head_commit.message, 'chore: prune reviewed legacy refs') }}"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
