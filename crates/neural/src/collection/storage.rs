@@ -16,12 +16,11 @@ use super::seed::Seed;
 
 /// Exclusive corpus writer lock.
 ///
-/// Acquisition is nonblocking. The operating system releases the lock when the
-/// handle is closed, including process exit. The lock file is intentionally
-/// never unlinked: removing it would let two writers lock different inodes.
+/// Acquisition is nonblocking and dropping the guard explicitly unlocks it.
+/// The lock file stays in place so all writers lock the same inode.
 #[derive(Debug)]
 pub struct CorpusLock {
-    _file: File,
+    file: File,
 }
 
 impl CorpusLock {
@@ -43,12 +42,20 @@ impl CorpusLock {
                 source,
             })?;
         match FileExt::try_lock(&file) {
-            Ok(()) => Ok(Self { _file: file }),
+            Ok(()) => Ok(Self { file }),
             Err(fs4::TryLockError::WouldBlock) => Err(CollectionError::CorpusBusy {
                 root: root.to_owned(),
             }),
             Err(fs4::TryLockError::Error(source)) => Err(CollectionError::Lock { path, source }),
         }
+    }
+}
+
+impl Drop for CorpusLock {
+    fn drop(&mut self) {
+        // A forked child can keep the open file description alive until exec.
+        // Unlock before close so that inherited descriptors cannot retain it.
+        let _ = FileExt::unlock(&self.file);
     }
 }
 
@@ -186,4 +193,22 @@ pub(super) fn write_manifest_atomic(root: &Path, manifest: &Manifest) -> Result<
     temp.persist(&path)
         .map_err(|error| io(&path, error.error))?;
     Ok(())
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::CorpusLock;
+
+    #[test]
+    fn dropping_the_guard_unlocks_with_a_duplicated_descriptor_still_open() {
+        let root = tempfile::tempdir().unwrap();
+        let guard = CorpusLock::try_acquire(root.path()).unwrap();
+        // A duplicated descriptor shares the open file description, as a fork does.
+        let inherited = guard.file.try_clone().unwrap();
+        drop(guard);
+
+        let next = CorpusLock::try_acquire(root.path()).unwrap();
+        drop(inherited);
+        drop(next);
+    }
 }
