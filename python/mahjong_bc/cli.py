@@ -19,6 +19,7 @@ from .checkpoint import (
 )
 from .config import (
     ACTIVATION_NAMES,
+    MODEL_ARCHITECTURES,
     ModelConfig,
     TrainingConfig,
     collect_dependency_versions,
@@ -34,7 +35,7 @@ from .train import (
 
 _REQUIRED_RUN_OPTIONS = ("seed", "epochs", "batch_size", "learning_rate")
 _TRAINING_OPTION_NAMES = ("weight_decay", "beta1", "beta2", "num_workers")
-_MODEL_OPTION_NAMES = ("state_hidden", "scorer_hidden", "activation")
+_MODEL_OPTION_NAMES = ("state_hidden", "scorer_hidden", "activation", "architecture")
 _RESUME_FORBIDDEN_OPTIONS = (
     *_REQUIRED_RUN_OPTIONS,
     *_TRAINING_OPTION_NAMES,
@@ -191,6 +192,9 @@ def build_parser() -> argparse.ArgumentParser:
     train.add_argument("--beta1", type=float)
     train.add_argument("--beta2", type=float)
     train.add_argument("--num-workers", type=int)
+    train.add_argument(
+        "--architecture", choices=MODEL_ARCHITECTURES, help="new-run state encoder"
+    )
     train.add_argument("--state-hidden", type=_parse_widths, help="e.g. 256,128")
     train.add_argument("--scorer-hidden", type=_parse_widths, help="e.g. 128")
     train.add_argument(

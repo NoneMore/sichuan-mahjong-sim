@@ -52,6 +52,10 @@ Both `train` and `evaluate` accept independent input options:
 Budgets are positive integers in MiB (`2**20` bytes); supplying a budget for
 an inactive mode is an error. RAM and CUDA prefetch require `--num-workers 0`.
 
+Fresh training accepts `--architecture mlp|suit-rank-resnet`. The default MLP
+uses model format 1. The suit/rank ResNet uses model format 2 and reads the
+same v1 prepared cache. Checkpoint loading selects the saved architecture.
+
 Fresh training requires `best.pt`, `last.pt` and `run.json` to be absent.
 Resume accepts only a `last` checkpoint, loads its configuration without flag
 overrides and replays any interrupted epoch. Dataset identities, model/training
