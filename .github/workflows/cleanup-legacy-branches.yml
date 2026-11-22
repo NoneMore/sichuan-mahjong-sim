@@ -1,0 +1,52 @@
+name: One-time Legacy Branch Cleanup
+
+on:
+  push:
+    branches: [main]
+
+# This workflow is removed in the follow-up commit after the cleanup run.
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    if: startsWith(github.event.head_commit.message, 'chore: adopt MIT and prune legacy branches')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact legacy branch tips before any deletion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/legacy-branches.txt <<'BRANCHES'
+          archive/2026-11-08/change/batch-needed-sensitivity cc1a32e30919d6775d952733328ca875080b5b86
+          archive/2026-11-08/change/heuristic-exchange-structure-proxy d21504988b394072bba6205fa3e6b85e9fc3a1b7
+          archive/2026-11-08/experiment/heuristic-space-time 955b1785a44791c6444f4a51e41fb7d329976fc6
+          archive/2026-11-08/experiment/masked-dp-u16 01b25dac1f975d60da5c78eb3f0a51cef1654297
+          archive/2026-11-08/feat/heuristic-profiling a358fbf2d4a92653bdeb3e6895f92041d258f63d
+          archive/2026-11-08/feat/reproducible-policy-ab 4d7aaccab9174cb72ae949c770af3f8a90397461
+          archive/2026-11-08/pre-retirement-main f57e48fdd39a9571371194b46d61bfba2b20d795
+          archive/2026-11-08/research/needed-suffix-bound-v2 5360ab6ce520569142341de8ceb814549c50fc07
+          archive/2026-11-08/spec/dual-mask-suit-dp 85e44a9570b0486ee724e5aa8af881cb07c7759a
+          bc-offline-training 298bbeeb13b3da76bee263a4a68ac33891cff07e
+          perf/bc-direct-pinned-states 58b00e7341fe70e5cf01813558993c2c8ce28f3e
+          research/bc-suit-rank-resnet 601fa4601c4b98d3eb2d9c21ef34f575c60583c4
+          BRANCHES
+          while read -r branch expected_sha; do
+            if [[ "$branch" == main || "$branch" == rl/* || "$branch" == RL/* ]]; then
+              echo "Refusing to delete protected target: $branch" >&2
+              exit 1
+            fi
+            actual_sha="$(gh api "repos/${GH_REPO}/git/ref/heads/${branch}" --jq '.object.sha')"
+            if [[ "$actual_sha" != "$expected_sha" ]]; then
+              echo "Refusing to delete $branch: branch tip changed" >&2
+              exit 1
+            fi
+            echo "Verified $branch @ ${actual_sha:0:12}"
+          done < /tmp/legacy-branches.txt
+          while read -r branch expected_sha; do
+            gh api -X DELETE "repos/${GH_REPO}/git/refs/heads/${branch}"
+            echo "Deleted $branch"
+          done < /tmp/legacy-branches.txt

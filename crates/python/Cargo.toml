@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 description = "Python environment binding for the Sichuan mahjong simulator and decision encoder"
+license = "MIT"
 publish = false
 
 [lib]
