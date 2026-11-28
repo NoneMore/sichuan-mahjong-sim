@@ -1,39 +1,23 @@
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
+import mahjong_bc
 import pytest
 import torch
-
-import mahjong_bc
-from mahjong_bc._source import collect_source_record, hash_source_directory
-from mahjong_bc.constants import ROLE_BEST, ROLE_POLICY
-
 from _checkpoint_fixtures import (
     build_checkpoint,
     build_model,
     build_training_state,
 )
-
-# Load this checkout's module directly. An installed ``mahjong_eval`` regular
-# package would otherwise shadow this checkout's namespace package, and its
-# package initializer imports the native extension; the records tests must stay
-# independent of that extension.
-_RECORDS_PATH = Path(__file__).resolve().parents[1] / "mahjong_eval" / "records.py"
-_RECORDS_SPEC = importlib.util.spec_from_file_location(
-    "mahjong_eval_worktree_records", _RECORDS_PATH
-)
-assert _RECORDS_SPEC is not None and _RECORDS_SPEC.loader is not None
-records = importlib.util.module_from_spec(_RECORDS_SPEC)
-sys.modules[_RECORDS_SPEC.name] = records
-_RECORDS_SPEC.loader.exec_module(records)
+from mahjong_bc._source import collect_source_record, hash_source_directory
+from mahjong_bc.constants import ROLE_BEST, ROLE_POLICY
+from mahjong_eval import records
 
 _FAKE_PYTHON_SOURCE = {
     "online_evaluator": {

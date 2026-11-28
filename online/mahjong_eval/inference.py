@@ -10,13 +10,11 @@ native extension, training data, or run directory is required.
 from __future__ import annotations
 
 import copy
+from collections.abc import Iterable, Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Iterable
 
 import torch
-from torch import Tensor
-
 from mahjong_bc.checkpoint import LoadedCheckpoint, load_policy_checkpoint
 from mahjong_bc.config import ModelConfig
 from mahjong_bc.constants import (
@@ -26,14 +24,15 @@ from mahjong_bc.constants import (
 )
 from mahjong_bc.data import DecisionInputs, pad_decision_inputs
 from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError
-from mahjong_bc.policy import greedy_indices
+from mahjong_bc.policy import greedy_indices, sample_indices
 from mahjong_bc.train import resolve_device
+from torch import Tensor
 
-#: Frozen inference accepts selected-best and plain frozen policy artifacts.
-#: ``last`` remains a training-recovery artifact and is deliberately rejected.
+from .execution import DecisionRequest
+
 _SUPPORTED_ROLES = (ROLE_BEST, ROLE_POLICY)
 
-__all__ = ["FrozenPolicy"]
+__all__ = ["FrozenPolicy", "SamplingSelector"]
 
 
 class FrozenPolicy:
@@ -85,9 +84,8 @@ class FrozenPolicy:
     ) -> None:
         if loaded.role not in _SUPPORTED_ROLES:
             raise CheckpointError(
-                f"{loaded.path} has checkpoint role {loaded.role!r}; frozen "
-                "inference accepts selected 'best' (or 'policy') checkpoints, "
-                "not 'last'"
+                f"{loaded.path} has checkpoint role {loaded.role!r}. Frozen "
+                "inference requires a 'best' or 'policy' checkpoint."
             )
         model = copy.deepcopy(loaded.model) if clone_model else loaded.model
         model.to(target)
@@ -153,6 +151,16 @@ class FrozenPolicy:
         alignment.
         """
 
+        return self._select_indices(decisions, generator=None)
+
+    def select(self, requests: Sequence[DecisionRequest]) -> list[int]:
+        """Select greedily for an execution batch."""
+
+        return self.select_indices(request.decision for request in requests)
+
+    def _select_indices(
+        self, decisions: Iterable[object], *, generator: torch.Generator | None
+    ) -> list[int]:
         try:
             items = list(decisions)
         except TypeError as exc:
@@ -177,7 +185,7 @@ class FrozenPolicy:
             candidates=inputs.candidates.index_select(0, rows),
             mask=inputs.mask.index_select(0, rows),
         )
-        for row, index in zip(active, self._select(active_inputs)):
+        for row, index in zip(active, self._select(active_inputs, generator=generator)):
             selected[row] = index
         return selected
 
@@ -187,8 +195,37 @@ class FrozenPolicy:
         with torch.no_grad():
             return self._model(inputs.states, inputs.candidates, inputs.mask)
 
-    def _select(self, inputs: DecisionInputs) -> list[int]:
+    def _select(
+        self, inputs: DecisionInputs, *, generator: torch.Generator | None
+    ) -> list[int]:
         moved = inputs.to(self._device)
         logits = self._score(moved)
-        indices = greedy_indices(logits, moved.mask)
+        if generator is None:
+            indices = greedy_indices(logits, moved.mask)
+        else:
+            indices = sample_indices(logits, moved.mask, generator=generator)
         return [int(value) for value in indices.tolist()]
+
+
+class SamplingSelector:
+    """Sample legal candidates at T=1 with a caller-owned generator."""
+
+    def __init__(self, policy: FrozenPolicy, *, generator: torch.Generator) -> None:
+        if not isinstance(policy, FrozenPolicy):
+            raise ConfigurationError("policy must be a FrozenPolicy")
+        if not isinstance(generator, torch.Generator):
+            raise ConfigurationError("sampling requires an explicit torch.Generator")
+        if generator.device != policy.device:
+            raise ConfigurationError(
+                f"generator device {generator.device} does not match policy device "
+                f"{policy.device}"
+            )
+        self._policy = policy
+        self._generator = generator
+
+    def select(self, requests: Sequence[DecisionRequest]) -> list[int]:
+        """Sample one local canonical index per request."""
+
+        return self._policy._select_indices(
+            (request.decision for request in requests), generator=self._generator
+        )

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
-
+from _checkpoint_fixtures import build_checkpoint, build_model, copy_checkpoint
 from mahjong_bc.checkpoint import (
     atomic_torch_save,
     build_payload,
@@ -25,9 +25,8 @@ from mahjong_bc.constants import (
 from mahjong_bc.data import pad_decision_inputs
 from mahjong_bc.errors import CheckpointError, ConfigurationError, DataError
 from mahjong_bc.policy import greedy_indices
-
-from _checkpoint_fixtures import build_checkpoint, build_model, copy_checkpoint
-from mahjong_eval.inference import FrozenPolicy
+from mahjong_eval.execution import DecisionRequest
+from mahjong_eval.inference import FrozenPolicy, SamplingSelector
 
 
 def _assert_frozen(policy: FrozenPolicy, *, label: str = "policy") -> None:
@@ -261,7 +260,7 @@ def test_checkpoint_roles_are_limited_to_frozen_policies(checkpoints):
     assert loaded.role == ROLE_BEST
     assert loaded.device == torch.device("cpu")
     assert FrozenPolicy(checkpoints[ROLE_POLICY]).role == ROLE_POLICY
-    with pytest.raises(CheckpointError, match="not 'last'"):
+    with pytest.raises(CheckpointError, match="checkpoint role 'last'"):
         FrozenPolicy(checkpoints[ROLE_LAST])
 
 
@@ -324,7 +323,7 @@ def test_from_loaded_reuses_role_validation_without_file_access(
     last_path = copy_checkpoint(checkpoints[ROLE_LAST], tmp_path / "last.pt")
     loaded = load_policy_checkpoint(last_path)
     last_path.unlink()
-    with pytest.raises(CheckpointError, match="not 'last'"):
+    with pytest.raises(CheckpointError, match="checkpoint role 'last'"):
         FrozenPolicy.from_loaded(loaded)
     with pytest.raises(ConfigurationError):
         FrozenPolicy.from_loaded(object())  # type: ignore[arg-type]
@@ -445,3 +444,27 @@ def test_inference_uses_only_the_checkpoint_not_training_artifacts(
     assert selected[1] == 0
     assert selected[0] in (0, 1)
     assert not (elsewhere / "run.json").exists()
+
+
+def test_sampling_masks_padding_and_checks_valid_logits(best_checkpoint):
+    policy = FrozenPolicy(best_checkpoint)
+    rng = np.random.default_rng(13)
+    requests = [
+        DecisionRequest(str(row), 0, "sampled", _decision(rng, candidates))
+        for row, candidates in enumerate((2, 3))
+    ]
+    generator = torch.Generator().manual_seed(3)
+    sampler = SamplingSelector(policy, generator=generator)
+    policy._model = _RecordingPolicy([[0.0, 0.0, float("nan")], [0.0, 0.0, 0.0]])
+    indices = sampler.select(requests)
+    assert 0 <= indices[0] < 2 and 0 <= indices[1] < 3
+    assert policy._model.calls[0]["grad_enabled"] is False
+
+    policy._model = _RecordingPolicy([[float("inf"), 0.0, 0.0], [0.0, 0.0, 0.0]])
+    state = generator.get_state()
+    with pytest.raises(DataError):
+        sampler.select(requests)
+    assert torch.equal(generator.get_state(), state)
+
+    with pytest.raises(ConfigurationError, match="explicit torch.Generator"):
+        SamplingSelector(policy, generator=None)

@@ -83,9 +83,8 @@ python -m mahjong_bc evaluate --dataset ../bc-cache \
 ```
 
 Training uses eligible decisions with more than one candidate and selects
-`best.pt` solely by validation mean NLL. `last.pt` is for training recovery;
-it is not the checkpoint selected for formal online comparisons. A small
-corpus is useful for a smoke run, not for claims about policy strength.
+`best.pt` by validation mean NLL. `last.pt` supports training recovery. Use
+a small corpus for a smoke run.
 Training requires the dataset to contain usable training and validation
 examples; collect more games if a split has insufficient support.
 
@@ -106,10 +105,9 @@ mahjong-eval compare --checkpoint ../bc-run/best.pt --split validation \
 The online package builds its PyO3 extension outside the root Rust workspace.
 Its comparison command runs fresh seeded games with balanced seat placements
 and records a plan, terminal records, timings, and a recomputed summary.
-Use seeds belonging to the requested split; `2,10` are the validation-seed
-example documented by the online package. Online scores do not select or
-rewrite the offline checkpoint. A complete comparison requires the offline
-`best.pt` role, not `last.pt`.
+Use seeds belonging to the requested split. This example uses validation
+seeds `2,10` and the `best.pt` selected during training. Compare also accepts
+compatible `policy` exports. The caller chooses the checkpoint for each run.
 
 See [online install and run](../../online/README.md#install-and-run)
 and [records and provenance](../../online/README.md#records-and-provenance)

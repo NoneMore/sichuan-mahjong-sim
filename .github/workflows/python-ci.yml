@@ -70,7 +70,7 @@ jobs:
         run: |
           cargo +stable run --release --locked -p sichuan-mahjong-neural --bin bc-collect -- collect \
             --root target/online-corpus --games 1 --seed-start 0 --shard-games 1 --cache-bytes 0
-      - name: Run environment, inference, records and comparison tests
+      - name: Run online tests
         env:
           OMP_NUM_THREADS: "1"
           MKL_NUM_THREADS: "1"

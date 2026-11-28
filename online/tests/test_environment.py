@@ -607,6 +607,8 @@ class BlockNative:
 sys.meta_path.insert(0, BlockNative())
 import mahjong_eval
 assert mahjong_eval.__version__ == "0.1.0"
+from mahjong_eval import execution, records  # noqa: F401
+assert "torch" not in sys.modules
 from mahjong_eval.inference import FrozenPolicy  # noqa: F401
 assert "mahjong_eval._native" not in sys.modules
 """

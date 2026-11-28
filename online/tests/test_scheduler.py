@@ -200,7 +200,6 @@ def assert_counts_recompute(result):
 
 
 def test_mixed_games_group_by_policy_and_route_indices_across_handles():
-    seeds = (1, 2)
     pairs = [
         (2, PLACEMENT),
         (1, PLACEMENT),
@@ -543,7 +542,6 @@ def test_plan_order_results_with_teacher_trace_and_shared_native_cache():
     assert sum(game.scores) == 0
     assert game.decisions == len(game.trace)
     assert all(entry["index"] < entry["candidate_count"] for entry in game.trace)
-    assert game.to_record() == game.to_record()
     assert_counts_recompute(result)
     assert result.counts["teacher"]["cache"]["budget_bytes"] == 0
     assert result.timings["calls"]["teacher_queries"] == result.counts["teacher"][
@@ -560,12 +558,16 @@ def test_real_environment_decision_limit_failure_has_context():
             decision_limit=3,
         )
     message = str(raised.value)
-    assert "DecisionLimitError" in message
+    assert "decision limit 3 reached after 3 accepted decisions" in message
     assert "seed 0" in message and "placement [0, 1]" in message
 
 
 def test_invalid_specs_and_options_are_rejected_before_play():
     cache = object()
+
+    async def observe(game):
+        pytest.fail("an asynchronous observer must not be called")
+
     with pytest.raises(SchedulingError):
         scheduler.run_games([], neural=RecordingPolicy())
     with pytest.raises(SchedulingError):
@@ -580,11 +582,18 @@ def test_invalid_specs_and_options_are_rejected_before_play():
         {"concurrent_games": 0},
         {"decision_limit": 0},
         {"on_terminal": 5},
+        {"on_terminal": observe},
         {"neural": object()},
     ):
-        arguments = {"neural": RecordingPolicy(), "teacher_cache": cache}
+        log = EnvLog()
+        arguments = {
+            "neural": RecordingPolicy(),
+            "teacher_cache": cache,
+            "env_factory": make_env_factory(log, []),
+        }
         arguments.update(kwargs)
         with pytest.raises(SchedulingError):
             scheduler.run_games(
                 [GameSpec(seed=1, neural_seats=PLACEMENT)], **arguments
             )
+        assert log.envs == 0
