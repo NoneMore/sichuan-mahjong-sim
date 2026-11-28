@@ -1,58 +1,33 @@
-"""Synchronous multi-game scheduling for mixed neural/teacher evaluation.
-
-One :class:`~mahjong_eval.Env` handle owns each game. The scheduler advances
-every active game one pending decision at a time:
-
-1. pending neural decisions are grouped by assigned policy and scored in
-   ``batch_size`` chunks, and indices are routed back by chunk position;
-2. teacher seats query the original Rust decision through one explicit,
-   shared teacher cache;
-3. a forced single-candidate decision is committed as index zero without
-   inference or a teacher query;
-4. every chosen index is committed through the originating handle's cached
-   canonical actions.
-
-Games start in plan order up to ``concurrent_games`` and are refilled as soon
-as one finishes, so handles naturally sit at different stages and decision
-counts. A terminal result is reported to ``on_terminal`` before the next game
-starts; a callback or output failure stops scheduling instead of substituting
-an action. A win for one seat never stops a game early: only the environment's
-terminal result ends it.
-
-The module does not import the native extension or PyTorch at import time, so
-its result structure stays inspectable without a built wheel. The engine and
-teacher cache are resolved lazily when a run starts.
-"""
+"""2N2T compatibility adapter for the synchronous execution kernel."""
 
 from __future__ import annotations
 
-import operator
-import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any
 
-from .records import RecordError, TerminalRecord
+from . import execution
+from ._terminal import SEAT_COUNT, U64_MAX, is_int
+from .execution import (
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_CONCURRENT_GAMES,
+    FORCED_CANDIDATE_COUNT,
+)
+from .records import TerminalRecord
 
 POLICY_NEURAL = "neural"
 POLICY_TEACHER = "heuristic"
 POLICIES = (POLICY_NEURAL, POLICY_TEACHER)
 
-FORCED_CANDIDATE_COUNT = 1
-DEFAULT_BATCH_SIZE = 64
-DEFAULT_CONCURRENT_GAMES = 6
-
-_SEAT_COUNT = 4
-_U64_MAX = 2**64 - 1
-
 __all__ = [
     "DEFAULT_BATCH_SIZE",
     "DEFAULT_CONCURRENT_GAMES",
     "FORCED_CANDIDATE_COUNT",
-    "GameResult",
-    "GameSpec",
     "POLICIES",
     "POLICY_NEURAL",
     "POLICY_TEACHER",
+    "GameResult",
+    "GameSpec",
     "SchedulingError",
     "SchedulingResult",
     "run_games",
@@ -78,9 +53,9 @@ class GameSpec:
 
     def __post_init__(self) -> None:
         seed = self.seed
-        if not isinstance(seed, int) or isinstance(seed, bool):
+        if not is_int(seed):
             raise SchedulingError("game seed must be an integer")
-        if seed < 0 or seed > _U64_MAX:
+        if seed < 0 or seed > U64_MAX:
             raise SchedulingError(f"game seed {seed} must fit in an unsigned u64")
         try:
             seats = tuple(self.neural_seats)
@@ -89,11 +64,11 @@ class GameSpec:
         if len(seats) != 2:
             raise SchedulingError("neural_seats must contain exactly two seats")
         for seat in seats:
-            if not isinstance(seat, int) or isinstance(seat, bool):
+            if not is_int(seat):
                 raise SchedulingError("neural seats must be integers")
-            if seat < 0 or seat >= _SEAT_COUNT:
+            if seat < 0 or seat >= SEAT_COUNT:
                 raise SchedulingError(
-                    f"neural seat {seat} must be in [0, {_SEAT_COUNT})"
+                    f"neural seat {seat} must be in [0, {SEAT_COUNT})"
                 )
         if seats[0] == seats[1]:
             raise SchedulingError("neural seats must be distinct")
@@ -166,72 +141,6 @@ class SchedulingResult:
         return tuple(game.to_record() for game in self.games)
 
 
-class _Timings:
-    def __init__(self) -> None:
-        self.seconds = {
-            "env_reset": 0.0,
-            "env_step": 0.0,
-            "teacher": 0.0,
-            "inference": 0.0,
-        }
-        self.calls = {
-            "env_resets": 0,
-            "env_steps": 0,
-            "teacher_queries": 0,
-            "inference_batches": 0,
-            "inference_rows": 0,
-        }
-
-    def add(self, name: str, call: str, seconds: float) -> None:
-        self.seconds[name] += seconds
-        self.calls[call] += 1
-
-    def document(self, total: float, device: Any) -> dict[str, Any]:
-        measured = sum(self.seconds.values())
-        device_text = "unknown" if device is None else str(device)
-        cuda = getattr(device, "type", None) == "cuda"
-        return {
-            "instrument": "time.perf_counter",
-            "device": device_text,
-            "cuda_synchronized_inference": cuda,
-            "boundary": (
-                "CUDA is synchronized before and after each inference batch, "
-                "so inference seconds include queued GPU work and the other "
-                "timers exclude it. Environment and teacher timers cover the "
-                "single-threaded Rust/CPU call only."
-            ),
-            "seconds": {
-                "env_reset": self.seconds["env_reset"],
-                "env_step": self.seconds["env_step"],
-                "teacher": self.seconds["teacher"],
-                "inference": self.seconds["inference"],
-                "unaccounted": max(0.0, total - measured),
-                "total": total,
-            },
-            "calls": dict(self.calls),
-        }
-
-
-class _RunningGame:
-    def __init__(self, spec: GameSpec, env: Any, pending: Any, trace: bool) -> None:
-        self.spec = spec
-        self.env = env
-        self.pending = pending
-        self.decisions = 0
-        self.neural_decisions = 0
-        self.neural_forced_decisions = 0
-        self.forced_decisions = 0
-        self.inference_rows = 0
-        self.trace: list[dict[str, Any]] | None = [] if trace else None
-        self.chosen: int | None = None
-
-    @property
-    def policy(self) -> str:
-        if int(self.pending.actor_seat) in self.spec.neural_seats:
-            return POLICY_NEURAL
-        return POLICY_TEACHER
-
-
 def run_games(
     specs: Iterable[GameSpec],
     *,
@@ -244,140 +153,160 @@ def run_games(
     trace: bool = False,
     env_factory: Callable[..., Any] | None = None,
 ) -> SchedulingResult:
-    """Play every planned game to its terminal result.
+    """Play a mixed 2N2T plan using the shared execution kernel.
 
-    ``neural`` must expose ``select_indices(decisions)`` and, optionally,
-    ``device``. ``teacher_cache`` is one explicit cache shared by every
-    teacher query; ``None`` creates a disabled cache instead of falling back to
-    per-handle implicit state. ``on_terminal`` is called with each completed
-    game before the next game starts. Any failure raises
-    :class:`SchedulingError` with game/decision context and stops the run;
-    games already delivered to ``on_terminal`` remain the caller's
-    responsibility.
+    The greedy comparison policy exposes ``select_indices(decisions)``. Every
+    completed game is delivered to ``on_terminal`` before refill. A failure
+    raises :class:`SchedulingError` and leaves earlier callback effects intact.
     """
 
     games = _normalize_specs(specs)
-    if not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size < 1:
-        raise SchedulingError(
-            f"batch_size must be a positive integer, got {batch_size!r}"
+    select_indices = getattr(neural, "select_indices", None)
+    try:
+        execution._require_synchronous(
+            select_indices, "neural policy select_indices", allow_generator=True
         )
-    if concurrent_games is None:
-        limit = len(games)
-    else:
-        if (
-            not isinstance(concurrent_games, int)
-            or isinstance(concurrent_games, bool)
-            or concurrent_games < 1
-        ):
-            raise SchedulingError(
-                "concurrent_games must be a positive integer, "
-                f"got {concurrent_games!r}"
-            )
-        limit = min(concurrent_games, len(games))
-    if decision_limit is None:
-        decision_limit = _default_decision_limit()
-    elif (
-        not isinstance(decision_limit, int)
-        or isinstance(decision_limit, bool)
-        or decision_limit < 1
-    ):
-        raise SchedulingError(
-            f"decision_limit must be a positive integer, got {decision_limit!r}"
+        if on_terminal is not None:
+            execution._require_synchronous(on_terminal, "on_terminal")
+    except execution.ExecutionError as exc:
+        raise SchedulingError(str(exc)) from exc
+    by_id = {str(index): spec for index, spec in enumerate(games)}
+    plan = [
+        execution.GameSpec(
+            game_id,
+            spec.seed,
+            tuple(
+                POLICY_NEURAL if seat in spec.neural_seats else POLICY_TEACHER
+                for seat in range(SEAT_COUNT)
+            ),
         )
-    if on_terminal is not None and not callable(on_terminal):
-        raise SchedulingError("on_terminal must be callable")
-    if not callable(getattr(neural, "select_indices", None)):
-        raise SchedulingError("neural policy must expose select_indices(decisions)")
-
-    engine = env_factory if env_factory is not None else _default_env()
-    cache = teacher_cache if teacher_cache is not None else _default_cache()
+        for game_id, spec in by_id.items()
+    ]
     device = getattr(neural, "device", None)
-    timings = _Timings()
-    running: list[_RunningGame] = []
-    next_spec = 0
-    results: dict[tuple[int, tuple[int, int]], GameResult] = {}
-    started = time.perf_counter()
+    cache = teacher_cache if teacher_cache is not None else execution._disabled_cache()
+    completed: dict[str, GameResult] = {}
 
-    while next_spec < len(games) or running:
-        while next_spec < len(games) and len(running) < limit:
-            spec = games[next_spec]
-            env = engine(decision_limit=decision_limit)
-            begin = time.perf_counter()
-            try:
-                pending = env.reset(spec.seed)
-            except Exception as exc:
-                raise _context_error(
-                    spec, None, "environment reset failed", exc
-                ) from exc
-            timings.add("env_reset", "env_resets", time.perf_counter() - begin)
-            running.append(_RunningGame(spec, env, pending, trace))
-            next_spec += 1
+    def select(requests: Sequence[execution.DecisionRequest]) -> Sequence[int]:
+        return select_indices([request.decision for request in requests])
 
-        teacher_games = [game for game in running if game.policy == POLICY_TEACHER]
-        neural_games = [game for game in running if game.policy == POLICY_NEURAL]
+    def notify(game: execution.GameResult) -> None:
+        projected = _project_game(game, by_id[game.game_id])
+        completed[game.game_id] = projected
+        return on_terminal(projected)
 
-        for game in teacher_games:
-            game.chosen = _teacher_choice(game, cache, timings)
-        for offset in range(0, len(neural_games), batch_size):
-            _neural_choices(
-                neural_games[offset : offset + batch_size], neural, timings
-            )
+    try:
+        result = execution.execute_games(
+            plan,
+            policies={
+                POLICY_NEURAL: execution._SynchronizedSelector(
+                    select, lambda: _synchronize(device)
+                ),
+                POLICY_TEACHER: execution.NativeTeacher(),
+            },
+            teacher_cache=cache,
+            batch_size=batch_size,
+            concurrent_games=len(plan)
+            if concurrent_games is None
+            else concurrent_games,
+            decision_limit=decision_limit,
+            on_terminal=notify if on_terminal is not None else None,
+            trace=trace,
+            diagnostics=True,
+            env_factory=env_factory,
+        )
+    except execution.ExecutionError as exc:
+        message = str(exc)
+        prefix = f"selector {POLICY_NEURAL!r}"
+        if message.startswith(prefix):
+            message = "neural inference" + message[len(prefix) :]
+        if exc.game_id is not None:
+            message += f" (placement {by_id[exc.game_id].placement_text()})"
+        raise SchedulingError(message) from exc
 
-        finished: list[_RunningGame] = []
-        for game in running:
-            if game.chosen is None:
-                raise SchedulingError(
-                    f"internal error: no chosen index for seed {game.spec.seed} "
-                    f"placement {game.spec.placement_text()}"
-                )
-            begin = time.perf_counter()
-            try:
-                outcome = game.env.step(game.pending.decision_id, game.chosen)
-            except Exception as exc:
-                raise _context_error(
-                    game.spec,
-                    game.pending,
-                    f"environment step failed for candidate index {game.chosen}",
-                    exc,
-                ) from exc
-            timings.add("env_step", "env_steps", time.perf_counter() - begin)
-            _record_choice(game, game.chosen)
-            game.chosen = None
-            if _is_terminal(outcome):
-                finished.append(game)
-                game.pending = None
-                result = _finish_game(game, outcome)
-                try:
-                    result.to_record()
-                except RecordError as exc:
-                    raise _context_error(
-                        game.spec, None, "terminal result is invalid", exc
-                    ) from exc
-                results[result.key] = result
-                if on_terminal is not None:
-                    try:
-                        on_terminal(result)
-                    except Exception as exc:
-                        raise _context_error(
-                            game.spec, None, "terminal callback failed", exc
-                        ) from exc
-            else:
-                game.pending = outcome
-
-        if finished:
-            done = {id(game) for game in finished}
-            running = [game for game in running if id(game) not in done]
-
-    total = time.perf_counter() - started
-    ordered = tuple(results[spec.key] for spec in games)
-    counts = summarize_games(ordered, timings.calls)
-    counts["teacher"]["cache"] = _cache_status(cache)
-    _validate_counts(ordered, counts)
-    return SchedulingResult(
-        games=ordered,
-        counts=counts,
-        timings=timings.document(total, device),
+    ordered = tuple(
+        completed[game.game_id]
+        if on_terminal is not None
+        else _project_game(game, by_id[game.game_id])
+        for game in result.games
     )
+    assert result.diagnostics is not None
+    timings = _legacy_timings(result.diagnostics, device)
+    counts = summarize_games(ordered, timings["calls"])
+    counts["teacher"]["cache"] = _cache_status(cache)
+    _validate_counts(counts)
+    return SchedulingResult(games=ordered, counts=counts, timings=timings)
+
+
+def _project_game(game: execution.GameResult, spec: GameSpec) -> GameResult:
+    neural = sum(game.decisions_by_seat[seat] for seat in spec.neural_seats)
+    neural_forced = sum(game.forced_by_seat[seat] for seat in spec.neural_seats)
+    trace = (
+        None
+        if game.trace is None
+        else tuple(
+            {
+                "decision": entry.decision,
+                "decision_id": entry.decision_id,
+                "actor_seat": entry.actor_seat,
+                "stage": entry.stage,
+                "candidate_count": entry.candidate_count,
+                "policy": entry.policy_id,
+                "forced": entry.forced,
+                "index": entry.index,
+            }
+            for entry in game.trace
+        )
+    )
+    return GameResult(
+        seed=game.seed,
+        neural_seats=spec.neural_seats,
+        scores=game.scores,
+        winners=game.winners,
+        end_reason=game.end_reason,
+        decisions=game.decisions,
+        neural_decisions=neural,
+        neural_forced_decisions=neural_forced,
+        forced_decisions=game.forced_decisions,
+        inference_rows=neural - neural_forced,
+        trace=trace,
+    )
+
+
+def _legacy_timings(
+    stats: execution.ExecutionDiagnostics, device: Any
+) -> dict[str, Any]:
+    neural = stats.policies[POLICY_NEURAL]
+    teacher = stats.policies[POLICY_TEACHER]
+    seconds = {
+        "env_reset": stats.env_reset_seconds,
+        "env_step": stats.env_step_seconds,
+        "teacher": teacher.selection_seconds,
+        "inference": neural.selection_seconds,
+    }
+    unaccounted = max(0.0, stats.total_seconds - sum(seconds.values()))
+    return {
+        "instrument": "time.perf_counter",
+        "device": "unknown" if device is None else str(device),
+        "cuda_synchronized_inference": getattr(device, "type", None) == "cuda",
+        "boundary": (
+            "CUDA is synchronized before and after each inference batch, "
+            "so inference seconds include queued GPU work and the other "
+            "timers exclude it. Environment and teacher timers cover the "
+            "single-threaded Rust/CPU call only."
+        ),
+        "seconds": {
+            **seconds,
+            "unaccounted": unaccounted,
+            "total": stats.total_seconds,
+        },
+        "calls": {
+            "env_resets": stats.env_resets,
+            "env_steps": stats.env_steps,
+            "teacher_queries": teacher.teacher_queries,
+            "inference_batches": neural.selector_batches,
+            "inference_rows": neural.selector_rows,
+        },
+    }
 
 
 def _normalize_specs(specs: Iterable[GameSpec]) -> list[GameSpec]:
@@ -406,120 +335,6 @@ def _normalize_specs(specs: Iterable[GameSpec]) -> list[GameSpec]:
     return normalized
 
 
-def _default_env() -> Any:
-    import mahjong_eval
-
-    return mahjong_eval.Env
-
-
-def _default_decision_limit() -> int:
-    import mahjong_eval
-
-    return int(mahjong_eval.DEFAULT_DECISION_LIMIT)
-
-
-def _default_cache() -> Any:
-    import mahjong_eval
-
-    return mahjong_eval.TeacherCache(budget_bytes=0)
-
-
-def _is_terminal(outcome: Any) -> bool:
-    return hasattr(outcome, "end_reason") and hasattr(outcome, "scores")
-
-
-def _candidate_count(pending: Any) -> int:
-    return int(pending.candidate_count)
-
-
-def _teacher_choice(game: _RunningGame, cache: Any, timings: _Timings) -> int:
-    if _candidate_count(game.pending) <= FORCED_CANDIDATE_COUNT:
-        return 0
-    begin = time.perf_counter()
-    try:
-        index = game.env.teacher_index(cache=cache)
-    except Exception as exc:
-        raise _context_error(
-            game.spec, game.pending, "teacher query failed", exc
-        ) from exc
-    timings.add("teacher", "teacher_queries", time.perf_counter() - begin)
-    return _require_index(game, index, "teacher")
-
-
-def _neural_choices(
-    chunk: Sequence[_RunningGame], neural: Any, timings: _Timings
-) -> None:
-    active: list[_RunningGame] = []
-    for game in chunk:
-        if _candidate_count(game.pending) <= FORCED_CANDIDATE_COUNT:
-            game.chosen = 0
-        else:
-            active.append(game)
-    if not active:
-        return
-    device = getattr(neural, "device", None)
-    _synchronize(device)
-    begin = time.perf_counter()
-    try:
-        indices = neural.select_indices([game.pending for game in active])
-    except Exception as exc:
-        raise _context_error(
-            active[0].spec,
-            active[0].pending,
-            f"neural inference failed for a batch of {len(active)} decision(s)",
-            exc,
-        ) from exc
-    _synchronize(device)
-    timings.add("inference", "inference_batches", time.perf_counter() - begin)
-    try:
-        values = list(indices)
-    except TypeError as exc:
-        raise _context_error(
-            active[0].spec,
-            active[0].pending,
-            "neural inference did not return an index sequence",
-            exc,
-        ) from exc
-    if len(values) != len(active):
-        raise _context_error(
-            active[0].spec,
-            active[0].pending,
-            f"neural inference returned {len(values)} indices for "
-            f"{len(active)} decisions",
-        )
-    for game, value in zip(active, values):
-        game.chosen = _require_index(game, value, "neural")
-        game.inference_rows += 1
-    timings.calls["inference_rows"] += len(active)
-
-
-def _require_index(game: _RunningGame, index: Any, source: str) -> int:
-    count = _candidate_count(game.pending)
-    if isinstance(index, bool) or isinstance(index, (float, str, bytes)):
-        raise _context_error(
-            game.spec,
-            game.pending,
-            f"{source} returned a non-integer candidate index {index!r}",
-        )
-    try:
-        value = int(operator.index(index))
-    except TypeError as exc:
-        raise _context_error(
-            game.spec,
-            game.pending,
-            f"{source} returned a non-integer candidate index {index!r}",
-            exc,
-        ) from exc
-    if value < 0 or value >= count:
-        raise _context_error(
-            game.spec,
-            game.pending,
-            f"{source} returned candidate index {value} outside "
-            f"{count} candidates",
-        )
-    return value
-
-
 def _synchronize(device: Any) -> None:
     """Make CUDA inference timing include queued GPU work."""
 
@@ -528,57 +343,6 @@ def _synchronize(device: Any) -> None:
     import torch
 
     torch.cuda.synchronize(device)
-
-
-def _record_choice(game: _RunningGame, index: int) -> None:
-    pending = game.pending
-    forced = _candidate_count(pending) <= FORCED_CANDIDATE_COUNT
-    game.decisions += 1
-    if forced:
-        game.forced_decisions += 1
-    if game.policy == POLICY_NEURAL:
-        game.neural_decisions += 1
-        if forced:
-            game.neural_forced_decisions += 1
-    if game.trace is not None:
-        game.trace.append(
-            {
-                "decision": game.decisions,
-                "decision_id": int(pending.decision_id),
-                "actor_seat": int(pending.actor_seat),
-                "stage": int(pending.stage),
-                "candidate_count": _candidate_count(pending),
-                "policy": game.policy,
-                "forced": forced,
-                "index": index,
-            }
-        )
-
-
-def _finish_game(game: _RunningGame, terminal: Any) -> GameResult:
-    decisions = int(terminal.decisions)
-    if decisions != game.decisions:
-        raise _context_error(
-            game.spec,
-            None,
-            f"environment terminal decision count {decisions} does not match "
-            f"scheduler decision count {game.decisions}",
-        )
-    return GameResult(
-        seed=game.spec.seed,
-        neural_seats=game.spec.neural_seats,
-        scores=tuple(int(score) for score in terminal.scores),
-        winners=tuple(
-            seat for seat, won in enumerate(tuple(terminal.winners)) if won
-        ),
-        end_reason=str(terminal.end_reason),
-        decisions=decisions,
-        neural_decisions=game.neural_decisions,
-        neural_forced_decisions=game.neural_forced_decisions,
-        forced_decisions=game.forced_decisions,
-        inference_rows=game.inference_rows,
-        trace=None if game.trace is None else tuple(game.trace),
-    )
 
 
 def _cache_status(cache: Any) -> Any:
@@ -591,26 +355,6 @@ def _cache_status(cache: Any) -> Any:
         raise SchedulingError(
             f"teacher cache status failed: {type(exc).__name__}: {exc}"
         ) from exc
-
-
-def _context_error(
-    spec: GameSpec,
-    pending: Any,
-    message: str,
-    cause: BaseException | None = None,
-) -> SchedulingError:
-    parts = [f"seed {spec.seed}", f"placement {spec.placement_text()}"]
-    if pending is not None:
-        parts.extend(
-            [
-                f"decision {int(pending.decision_id)}",
-                f"seat {int(pending.actor_seat)}",
-                f"stage {int(pending.stage)}",
-                f"candidates {int(pending.candidate_count)}",
-            ]
-        )
-    suffix = "" if cause is None else f": {type(cause).__name__}: {cause}"
-    return SchedulingError(f"{message} ({', '.join(parts)}){suffix}")
 
 
 def summarize_games(
@@ -652,29 +396,17 @@ def summarize_games(
     }
 
 
-def _validate_counts(games: Sequence[GameResult], counts: Mapping[str, Any]) -> None:
+def _validate_counts(counts: Mapping[str, Any]) -> None:
     decisions = counts["decisions"]
-    if decisions["forced"] > decisions["total"]:
-        raise SchedulingError(
-            "internal error: forced decision count exceeds the total"
-        )
     if counts["inference"]["rows"] != counts["inference"]["observed_rows"]:
         raise SchedulingError(
             "internal error: inference row count cannot be recomputed from games"
         )
-    if counts["teacher"]["queries"] != decisions["teacher"] - decisions["teacher_forced"]:
+    if (
+        counts["teacher"]["queries"]
+        != decisions["teacher"] - decisions["teacher_forced"]
+    ):
         raise SchedulingError(
             "internal error: teacher query count does not match teacher decisions "
             "with more than one candidate"
         )
-    for game in games:
-        if game.inference_rows != game.neural_decisions - game.neural_forced_decisions:
-            raise SchedulingError(
-                "internal error: inference rows do not match non-forced neural "
-                f"decisions for seed {game.seed} placement {game.neural_seats}"
-            )
-        if game.neural_forced_decisions > game.forced_decisions:
-            raise SchedulingError(
-                "internal error: neural forced decisions exceed the forced total "
-                f"for seed {game.seed} placement {game.neural_seats}"
-            )

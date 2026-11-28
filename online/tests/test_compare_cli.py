@@ -9,15 +9,18 @@ import sys
 import sysconfig
 from pathlib import Path
 
-import pytest
-
 import mahjong_eval
-import mahjong_eval.inference as inference
-from mahjong_bc.constants import ROLE_BEST, ROLE_LAST, ROLE_POLICY
-from mahjong_bc.errors import DataError
-
+import pytest
 from _checkpoint_fixtures import build_checkpoint, copy_checkpoint
-from mahjong_eval import cli, records, scheduler
+from mahjong_bc.checkpoint import load_policy_checkpoint, save_checkpoint
+from mahjong_bc.constants import (
+    CHECKPOINT_FORMAT_VERSION,
+    ROLE_BEST,
+    ROLE_LAST,
+    ROLE_POLICY,
+)
+from mahjong_bc.errors import DataError
+from mahjong_eval import cli, inference, records
 
 # Frozen comparison protocol: do not derive the oracle from production placements.
 GAMES_PER_SEED = 6
@@ -35,7 +38,7 @@ def checkpoints(tmp_path_factory) -> dict[str, Path]:
             cache_id="compare-fixture",
             metrics={"nll": 0.25},
         ).path
-        for role in (ROLE_BEST, ROLE_LAST, ROLE_POLICY)
+        for role in (ROLE_BEST, ROLE_LAST)
     }
 
 
@@ -252,15 +255,51 @@ def test_seed_split_mismatch_is_rejected_before_output(checkpoints, validation_s
     assert not other.exists()
 
 
-@pytest.mark.parametrize("role", [ROLE_LAST, ROLE_POLICY])
-def test_non_best_checkpoints_are_rejected(checkpoints, role, validation_seed, tmp_path, capsys):
+def test_last_checkpoint_is_rejected_before_publication(
+    checkpoints, validation_seed, tmp_path, capsys
+):
     out = tmp_path / "run"
     code = _run_compare(
-        checkpoints[role], out, split="validation", seeds=[validation_seed]
+        checkpoints[ROLE_LAST], out, split="validation", seeds=[validation_seed]
     )
     assert code == 2
     message = capsys.readouterr().err
-    assert ROLE_BEST in message
+    assert ROLE_LAST in message and ROLE_BEST in message and ROLE_POLICY in message
+    assert not out.exists()
+
+
+def test_policy_export_completes_the_same_six_placements(
+    checkpoints, validation_seed, tmp_path, capsys
+):
+    selected = load_policy_checkpoint(checkpoints[ROLE_BEST])
+    export = tmp_path / "export.pt"
+    save_checkpoint(export, selected.model, role=ROLE_POLICY)
+    best_out = tmp_path / "best"
+    policy_out = tmp_path / "policy"
+    assert _run_validation(checkpoints, validation_seed, best_out) == 0
+    assert _run_compare(
+        export, policy_out, split="validation", seeds=[validation_seed]
+    ) == 0, capsys.readouterr().err
+
+    paths = records.run_paths(policy_out)
+    plan = records.read_plan(paths.plan)
+    identity = plan.metadata["checkpoint"]
+    assert identity["role"] == ROLE_POLICY
+    assert identity["checkpoint_format_version"] == CHECKPOINT_FORMAT_VERSION
+    assert identity["sha256"] == hashlib.sha256(export.read_bytes()).hexdigest()
+    assert identity["has_training_state"] is False
+    assert plan.metadata["training_provenance"] is None
+    assert plan.metadata["selection"]["mode"] == "greedy"
+    persisted = records.read_records(paths.records, plan, require_complete=True)
+    assert len(persisted) == GAMES_PER_SEED
+    assert records.summarize_run(policy_out) == records.summarize_run(best_out)
+
+
+def test_corrupt_checkpoint_is_rejected_before_publication(validation_seed, tmp_path):
+    damaged = tmp_path / "damaged.pt"
+    damaged.write_bytes(b"invalid checkpoint")
+    out = tmp_path / "run"
+    assert _run_compare(damaged, out, split="validation", seeds=[validation_seed]) == 2
     assert not out.exists()
 
 
@@ -337,6 +376,7 @@ def test_game_failure_after_a_completed_game_keeps_records_and_blocks_summary(
 ):
     out = tmp_path / "run"
     state = {"envs": 0, "fail": False}
+    native_env = mahjong_eval.Env
 
     class FlakyEnv:
         def __init__(self, inner):
@@ -357,9 +397,9 @@ def test_game_failure_after_a_completed_game_keeps_records_and_blocks_summary(
         state["envs"] += 1
         if state["envs"] > 1:
             state["fail"] = True
-        return FlakyEnv(mahjong_eval.Env(decision_limit=decision_limit))
+        return FlakyEnv(native_env(decision_limit=decision_limit))
 
-    monkeypatch.setattr(scheduler, "_default_env", lambda: factory)
+    monkeypatch.setattr(mahjong_eval, "Env", factory)
     code = _run_validation(
         checkpoints,
         validation_seed,

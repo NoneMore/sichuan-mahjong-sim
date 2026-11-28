@@ -119,13 +119,12 @@ canonical actions and generation-aware decision IDs reject stale choices.
 Teacher projection uses the original Rust Decision and submits semantic
 actions through Game.
 
-The [online Python package](../../online/README.md) batches frozen inference
-across games while keeping each decision associated with its originating
-environment handle. Forced choices and post-Hu continuation use the same
-decision protocol. A comparison publishes its summary only after all
-terminal records and costs have been persisted successfully. Training
-checkpoint identity, executing Python source and compiled Rust provenance
-are recorded separately.
+The [synchronous execution API](../../online/README.md#execution-api) owns the
+active handles and batches player-visible requests by the policy assigned to
+each seat. Only the kernel queries the teacher on the originating handle.
+
+The 2N2T adapter projects kernel results into comparison accounting and terminal
+records. The CLI owns checkpoint identity, run persistence and summary publication.
 
 ## Contract tests
 
@@ -135,4 +134,4 @@ Rust [encoding](../../crates/neural/tests/encoding_contract.rs),
 legality, isolation, versioned handoffs, immutable publication and recovery.
 The [Python tests](../../python/tests/) and
 [online tests](../../online/tests/) cover loading, checkpoints, binding,
-replay, and comparison records.
+neutral execution, replay, and comparison records.

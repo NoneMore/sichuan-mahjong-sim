@@ -1,11 +1,10 @@
 """Command line interface for formal online policy comparisons.
 
-``mahjong-eval compare`` loads one frozen ``best`` checkpoint, validates that
-every requested seed belongs to the frozen Rust seed split, publishes a plan
-before play, streams one record per completed game, writes measured costs, and
-publishes a summary only from the persisted files. Validation runs are
-diagnostics; test runs are the frozen comparison. Neither uses the online score
-to select a checkpoint.
+``mahjong-eval compare`` loads a caller-supplied ``best`` or ``policy`` checkpoint
+and validates the frozen Rust seed split. It publishes a plan before play,
+streams terminal records, writes measured costs, and summarizes the persisted
+files. Validation runs support diagnostics and test runs support the frozen
+comparison.
 """
 
 from __future__ import annotations
@@ -13,8 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from . import records, scheduler
 
@@ -73,12 +73,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     compare = subparsers.add_parser(
         "compare",
-        help="compare a frozen best checkpoint over six placements per seed",
+        help="compare a frozen checkpoint over six placements per seed",
     )
     compare.add_argument(
         "--checkpoint",
         required=True,
-        help="selected 'best' policy checkpoint; 'last' and 'policy' are rejected",
+        help="compatible 'best' or 'policy' checkpoint; 'last' is reserved for recovery",
     )
     compare.add_argument(
         "--split",
@@ -290,9 +290,9 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     _require_offline_evaluation()
     buckets = _validate_split_seeds(seeds, args.split)
 
+    from mahjong_bc.constants import SPLIT_ALGORITHM
+
     import mahjong_eval
-    from mahjong_bc.constants import ROLE_BEST, SPLIT_ALGORITHM
-    from mahjong_bc.errors import MahjongBCError
 
     from .inference import FrozenPolicy
 
@@ -310,12 +310,6 @@ def _cmd_compare(args: argparse.Namespace) -> int:
     loaded, identity = records.load_checkpoint_with_identity(
         args.checkpoint, device=args.device
     )
-    if loaded.role != ROLE_BEST:
-        raise CompareError(
-            f"{args.checkpoint} has checkpoint role {loaded.role!r}; a formal "
-            "comparison requires the selected 'best' checkpoint, not 'last' or "
-            "a plain policy export"
-        )
     policy = FrozenPolicy.from_loaded(loaded, device=args.device)
     device = str(policy.device)
     compiled = _compiled_source()
@@ -377,7 +371,7 @@ def _cmd_compare(args: argparse.Namespace) -> int:
             persisted = records.read_records(
                 writer.paths.records, plan, require_complete=True
             )
-            _verify_persisted(persisted, result, plan)
+            _verify_persisted(persisted, result)
             write_costs(
                 costs_path,
                 _costs_document(
@@ -389,16 +383,6 @@ def _cmd_compare(args: argparse.Namespace) -> int:
                 ),
             )
         summary = records.finalize_run(writer.paths.directory)
-    except CompareError as exc:
-        raise CompareError(
-            f"comparison stopped; completed records are retained in "
-            f"{writer.paths.directory}: {exc}"
-        ) from exc
-    except MahjongBCError as exc:
-        raise CompareError(
-            f"comparison stopped; completed records are retained in "
-            f"{writer.paths.directory}: {exc}"
-        ) from exc
     except Exception as exc:
         raise CompareError(
             f"comparison stopped; completed records are retained in "
@@ -424,30 +408,11 @@ def _cmd_compare(args: argparse.Namespace) -> int:
 def _verify_persisted(
     persisted: Sequence[records.TerminalRecord],
     result: scheduler.SchedulingResult,
-    plan: records.EvaluationPlan,
 ) -> None:
-    """Cross-check persisted terminal records against the scheduler accounting."""
-
-    expected = {
-        (seed, placement) for seed in plan.seeds for placement in plan.placements
-    }
-    actual = {(record.seed, record.neural_seats) for record in persisted}
-    if actual != expected:
-        raise CompareError(
-            "persisted terminal records do not match the planned games"
-        )
-    total = sum(record.decisions for record in persisted)
-    if total != result.counts["decisions"]["total"]:
-        raise CompareError(
-            "persisted decision count does not match the scheduler accounting"
-        )
-    if len(persisted) != len(result.games):
-        raise CompareError(
-            "persisted game count does not match the scheduler accounting"
-        )
-    played = {
-        (game.seed, game.neural_seats): game.to_record() for game in result.games
-    }
+    # read_records already established plan coverage and unique record keys.
+    played = {game.key: game.to_record() for game in result.games}
+    if len(persisted) != len(played):
+        raise CompareError("persisted game count does not match the played games")
     for record in persisted:
         if record != played.get((record.seed, record.neural_seats)):
             raise CompareError(

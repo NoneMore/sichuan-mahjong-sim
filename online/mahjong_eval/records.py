@@ -26,9 +26,9 @@ the run while leaving every completed record in place.
 The comparison is a free-for-all over the six neural-seat pairs
 ``[0,1] [0,2] [0,3] [1,2] [1,3] [2,3]``; the other two seats use the heuristic
 policy. The primary strength observation is ``neural_mean``, the mean terminal
-net score per neural seat. ``delta`` (neural mean minus heuristic mean) and both
-seed-block standard errors are reported for context, not for checkpoint
-selection.
+net score per neural seat. The summary also reports ``delta`` (neural mean
+minus heuristic mean) and both seed-block standard errors. The caller chooses
+the checkpoint.
 
 This module deliberately does not import a native extension. Checkpoint
 loading and Python source hashing reuse the offline ``mahjong_bc`` contract; a
@@ -46,9 +46,13 @@ import re
 import statistics
 import subprocess
 import tempfile
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
+
+from ._terminal import END_REASONS, SEAT_COUNT, validate_settlement
+from ._terminal import U64_MAX as _U64_MAX
 
 #: Neural-seat pairs, in the order games are played within each seed block.
 PLACEMENTS: tuple[tuple[int, int], ...] = (
@@ -60,9 +64,7 @@ PLACEMENTS: tuple[tuple[int, int], ...] = (
     (2, 3),
 )
 
-SEAT_COUNT = 4
 NEURAL_SEATS_PER_GAME = 2
-END_REASONS: tuple[str, ...] = ("three_winners", "wall_exhausted")
 
 PLAN_FORMAT = "mahjong-python-eval-plan"
 PLAN_FORMAT_VERSION = 1
@@ -79,9 +81,6 @@ STATE_FORMAT_VERSION = 1
 STATE_INCOMPLETE = "incomplete"
 STATE_COMPLETE = "complete"
 
-_U64_MAX = 2**64 - 1
-_I32_MIN = -(2**31)
-_I32_MAX = 2**31 - 1
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 _STATE_KEYS = frozenset({"format", "format_version", "status"})
@@ -310,39 +309,11 @@ class TerminalRecord:
             neural = (neural[1], neural[0])
             object.__setattr__(self, "neural_seats", neural)
 
-        if len(scores) != SEAT_COUNT:
-            raise RecordError(f"scores must contain {SEAT_COUNT} entries")
-        for score in scores:
-            _require_int(score, "score", minimum=_I32_MIN, maximum=_I32_MAX)
-        score_sum = sum(scores)
-        if score_sum != 0:
-            raise RecordError(f"scores must sum to zero, got {score_sum}")
-
-        seen_winners: set[int] = set()
-        for seat in winners:
-            _require_int(seat, "winner", minimum=0, maximum=SEAT_COUNT - 1)
-            if seat in seen_winners:
-                raise RecordError(f"winner seat {seat} is listed more than once")
-            seen_winners.add(seat)
-        winners = tuple(sorted(seen_winners))
+        try:
+            winners = validate_settlement(scores, winners, self.end_reason)
+        except ValueError as exc:
+            raise RecordError(str(exc)) from exc
         object.__setattr__(self, "winners", winners)
-
-        _require_str(self.end_reason, "end_reason")
-        if self.end_reason not in END_REASONS:
-            raise RecordError(
-                f"unsupported end_reason {self.end_reason!r}; "
-                f"expected one of {list(END_REASONS)}"
-            )
-        if self.end_reason == "three_winners" and len(winners) != 3:
-            raise RecordError(
-                "three_winners requires exactly three winners, "
-                f"got {len(winners)}"
-            )
-        if self.end_reason == "wall_exhausted" and len(winners) >= 3:
-            raise RecordError(
-                "wall_exhausted requires fewer than three winners, "
-                f"got {len(winners)}"
-            )
         _require_int(
             self.decisions, "decisions", minimum=1, maximum=_U64_MAX
         )
